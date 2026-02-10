@@ -1,0 +1,42 @@
+# ============================
+# Home Security Platform
+# SOC Configuration
+# ============================
+
+risk:
+  # Risk score (0–100) at which an incident is opened
+  incident_threshold: 70
+
+  # Risk score at which automatic blocking may occur
+  block_threshold: 85
+
+  # How much risk decays per day of inactivity
+  daily_decay: 5
+
+  # Minimum risk score (won't decay below this)
+  minimum_risk: 0
+
+
+alerts:
+  # Seconds to wait before triggering "new device" alert
+  new_device_grace_period: 300
+
+  # Automatically trust device after this many days
+  auto_trust_days: 7
+
+
+enforcement:
+  # Enable or disable firewall enforcement
+  firewall_enabled: true
+
+  # Require manual approval to unblock a device
+  manual_unblock_required: true
+
+
+logging:
+  # Enable colored output to console
+  color_enabled: true
+
+  # Write SOC summary once per day
+  daily_summary: true
+  

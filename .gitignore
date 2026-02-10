@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+
+# Runtime SOC state
+known_devices.json
+allowed_devices.json
+denied_devices.json
+.correlation_state.json
+.last_lan_ip
+.last_soc_summary
+security.log
+*.log
+
+# OS / IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
