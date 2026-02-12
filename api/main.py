@@ -62,24 +62,41 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         r for r in device_reports if r["agent_id"] == report.agent_id
     ]
 
-    previous_devices = set()
+    previous_devices = {}
     if previous_reports:
         last_report = previous_reports[-1]
         previous_devices = {
-            (d["ip"], d["mac"]) for d in last_report["devices"]
+            d["ip"]: d["mac"] for d in last_report["devices"]
         }
 
     current_devices = {
-        (d["ip"], d["mac"]) for d in report.devices
+        d["ip"]: d["mac"] for d in report.devices
     }
 
-    # Detect changes
-    new_devices = current_devices - previous_devices
-    missing_devices = previous_devices - current_devices
+    new_devices = []
+    missing_devices = []
+    mac_changes = []
+
+    # Detect new + MAC change
+    for ip, mac in current_devices.items():
+        if ip not in previous_devices:
+            new_devices.append((ip, mac))
+        elif previous_devices[ip] != mac:
+            mac_changes.append({
+                "ip": ip,
+                "old_mac": previous_devices[ip],
+                "new_mac": mac
+            })
+
+    # Detect missing
+    for ip, mac in previous_devices.items():
+        if ip not in current_devices:
+            missing_devices.append((ip, mac))
 
     change_summary = {
-        "new_devices": list(new_devices),
-        "missing_devices": list(missing_devices)
+        "new_devices": new_devices,
+        "missing_devices": missing_devices,
+        "mac_changes": mac_changes
     }
 
     device_reports.append({
