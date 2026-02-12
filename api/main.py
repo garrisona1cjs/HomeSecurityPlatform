@@ -239,10 +239,17 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     }
 
 
-@app.get("/alerts")
-def get_alerts():
+@app.get("/alerts/{agent_id}")
+def get_alerts_by_agent(agent_id: str):
     db = SessionLocal()
-    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
+
+    alerts = (
+        db.query(Alert)
+        .filter(Alert.agent_id == agent_id)
+        .order_by(Alert.timestamp.desc())
+        .all()
+    )
+
     db.close()
 
     return [
