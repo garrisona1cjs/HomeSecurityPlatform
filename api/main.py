@@ -102,7 +102,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     verify_agent(db, report.agent_id, x_api_key)
 
-    # Get last report for this agent
+    # Get last report
     last_report = (
         db.query(Report)
         .filter(Report.agent_id == report.agent_id)
@@ -121,7 +121,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     missing_devices = []
     mac_changes = []
 
-    # Detect new devices and MAC changes
+    # Detect new + MAC changes
     for ip, mac in current_devices.items():
         if ip not in previous_devices:
             new_devices.append({"ip": ip, "mac": mac})
@@ -132,12 +132,51 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
                 "new_mac": mac
             })
 
-    # Detect missing devices
+    # Detect missing
     for ip, mac in previous_devices.items():
         if ip not in current_devices:
             missing_devices.append({"ip": ip, "mac": mac})
 
+    # -------------------------
+    # Severity Logic
+    # -------------------------
+
+    severity = "INFO"
+
+    if mac_changes:
+        severity = "CRITICAL"
+
+    elif new_devices:
+        severity = "MEDIUM"
+
+    elif missing_devices:
+        # Count consecutive misses by checking last 3 reports
+        recent_reports = (
+            db.query(Report)
+            .filter(Report.agent_id == report.agent_id)
+            .order_by(Report.timestamp.desc())
+            .limit(3)
+            .all()
+        )
+
+        consecutive_missing = 0
+
+        for past_report in recent_reports:
+            past_devices = {
+                d["ip"]: d["mac"]
+                for d in json.loads(past_report.data)
+            }
+
+            if any(ip not in past_devices for ip, _ in missing_devices):
+                consecutive_missing += 1
+
+        if consecutive_missing >= 2:
+            severity = "HIGH"
+        else:
+            severity = "LOW"
+
     change_summary = {
+        "severity": severity,
         "new_devices": new_devices,
         "missing_devices": missing_devices,
         "mac_changes": mac_changes
