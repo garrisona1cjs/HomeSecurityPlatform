@@ -138,19 +138,23 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
             missing_devices.append({"ip": ip, "mac": mac})
 
     # -------------------------
-    # Severity Logic
+    # Risk Scoring Engine
     # -------------------------
 
-    severity = "INFO"
+    risk_score = 0
 
+    # MAC changes = highest risk
     if mac_changes:
-        severity = "CRITICAL"
+        risk_score += 100
 
-    elif new_devices:
-        severity = "MEDIUM"
+    # New devices
+    risk_score += 40 * len(new_devices)
 
-    elif missing_devices:
-        # Count consecutive misses by checking last 3 reports
+    # Missing devices
+    risk_score += 15 * len(missing_devices)
+
+    # Consecutive missing escalation
+    if missing_devices:
         recent_reports = (
             db.query(Report)
             .filter(Report.agent_id == report.agent_id)
@@ -171,11 +175,22 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
                 consecutive_missing += 1
 
         if consecutive_missing >= 2:
-            severity = "HIGH"
-        else:
-            severity = "LOW"
+            risk_score += 60
+
+    # Determine severity
+    if risk_score == 0:
+        severity = "INFO"
+    elif risk_score < 40:
+        severity = "LOW"
+    elif risk_score < 80:
+        severity = "MEDIUM"
+    elif risk_score < 120:
+        severity = "HIGH"
+    else:
+        severity = "CRITICAL"
 
     change_summary = {
+        "risk_score": risk_score,
         "severity": severity,
         "new_devices": new_devices,
         "missing_devices": missing_devices,
