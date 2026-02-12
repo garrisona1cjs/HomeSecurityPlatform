@@ -261,3 +261,24 @@ def get_alerts_by_agent(agent_id: str):
         }
         for alert in alerts
     ]
+
+@app.get("/alerts/summary")
+def get_alert_summary():
+    db = SessionLocal()
+
+    alerts = db.query(Alert).all()
+    db.close()
+
+    summary = {
+        "INFO": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "HIGH": 0,
+        "CRITICAL": 0
+    }
+
+    for alert in alerts:
+        if alert.severity in summary:
+            summary[alert.severity] += 1
+
+    return summary
