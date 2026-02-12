@@ -57,13 +57,42 @@ def register_agent(agent: AgentRegistration):
 def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     verify_agent(report.agent_id, x_api_key)
 
+    # Get last report for this agent
+    previous_reports = [
+        r for r in device_reports if r["agent_id"] == report.agent_id
+    ]
+
+    previous_devices = set()
+    if previous_reports:
+        last_report = previous_reports[-1]
+        previous_devices = {
+            (d["ip"], d["mac"]) for d in last_report["devices"]
+        }
+
+    current_devices = {
+        (d["ip"], d["mac"]) for d in report.devices
+    }
+
+    # Detect changes
+    new_devices = current_devices - previous_devices
+    missing_devices = previous_devices - current_devices
+
+    change_summary = {
+        "new_devices": list(new_devices),
+        "missing_devices": list(missing_devices)
+    }
+
     device_reports.append({
         "agent_id": report.agent_id,
         "devices": report.devices,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "changes": change_summary
     })
 
-    return {"message": "Report received"}
+    return {
+        "message": "Report received",
+        "changes": change_summary
+    }
 
 
 @app.get("/agents")
