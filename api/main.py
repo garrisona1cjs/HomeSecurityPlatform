@@ -332,6 +332,41 @@ def get_alert_trend(hours: int):
         "summary": summary
     }
 
+@app.get("/alerts/trend/{agent_id}/{hours}")
+def get_agent_alert_trend(agent_id: str, hours: int):
+    db = SessionLocal()
+
+    alerts = (
+        db.query(Alert)
+        .filter(Alert.agent_id == agent_id)
+        .all()
+    )
+
+    db.close()
+
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+
+    summary = {
+        "INFO": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "HIGH": 0,
+        "CRITICAL": 0
+    }
+
+    for alert in alerts:
+        alert_time = datetime.fromisoformat(alert.timestamp)
+
+        if alert_time >= cutoff:
+            if alert.severity in summary:
+                summary[alert.severity] += 1
+
+    return {
+        "agent_id": agent_id,
+        "window_hours": hours,
+        "summary": summary
+    }
+
 
 @app.get("/alerts/{agent_id}")
 def get_alerts_by_agent(agent_id: str):
