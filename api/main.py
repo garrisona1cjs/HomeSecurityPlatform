@@ -259,6 +259,32 @@ def get_alert_summary():
 
     return summary
 
+@app.get("/alerts/summary/{agent_id}")
+def get_alert_summary_by_agent(agent_id: str):
+    db = SessionLocal()
+
+    alerts = (
+        db.query(Alert)
+        .filter(Alert.agent_id == agent_id)
+        .all()
+    )
+
+    db.close()
+
+    summary = {
+        "INFO": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "HIGH": 0,
+        "CRITICAL": 0
+    }
+
+    for alert in alerts:
+        if alert.severity in summary:
+            summary[alert.severity] += 1
+
+    return summary
+
 
 @app.get("/alerts/{agent_id}")
 def get_alerts_by_agent(agent_id: str):
