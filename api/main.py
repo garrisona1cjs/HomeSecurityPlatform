@@ -102,6 +102,47 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     verify_agent(db, report.agent_id, x_api_key)
 
+    # Get last report for this agent
+    last_report = (
+        db.query(Report)
+        .filter(Report.agent_id == report.agent_id)
+        .order_by(Report.timestamp.desc())
+        .first()
+    )
+
+    previous_devices = {}
+    if last_report:
+        previous_data = json.loads(last_report.data)
+        previous_devices = {d["ip"]: d["mac"] for d in previous_data}
+
+    current_devices = {d["ip"]: d["mac"] for d in report.devices}
+
+    new_devices = []
+    missing_devices = []
+    mac_changes = []
+
+    # Detect new devices and MAC changes
+    for ip, mac in current_devices.items():
+        if ip not in previous_devices:
+            new_devices.append({"ip": ip, "mac": mac})
+        elif previous_devices[ip] != mac:
+            mac_changes.append({
+                "ip": ip,
+                "old_mac": previous_devices[ip],
+                "new_mac": mac
+            })
+
+    # Detect missing devices
+    for ip, mac in previous_devices.items():
+        if ip not in current_devices:
+            missing_devices.append({"ip": ip, "mac": mac})
+
+    change_summary = {
+        "new_devices": new_devices,
+        "missing_devices": missing_devices,
+        "mac_changes": mac_changes
+    }
+
     new_report = Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
@@ -113,4 +154,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.commit()
     db.close()
 
-    return {"message": "Report stored successfully"}
+    return {
+        "message": "Report stored successfully",
+        "changes": change_summary
+    }
