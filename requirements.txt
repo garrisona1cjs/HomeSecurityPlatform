@@ -1,3 +1,6 @@
 scapy
 colorama
 pyyaml
+fastapi
+uvicorn
+pydantic

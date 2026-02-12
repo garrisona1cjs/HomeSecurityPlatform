@@ -1,0 +1,20 @@
+Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International
+
+This work is licensed under the Creative Commons
+Attribution-NonCommercial-NoDerivatives 4.0 International License.
+
+You may:
+- View the source code
+- Share the unmodified code with attribution
+
+You may NOT:
+- Modify the code
+- Use the code commercially
+- Distribute derivative works
+- Incorporate this code into other projects
+
+This repository is provided for educational and portfolio demonstration
+purposes only.
+
+Full license text:
+https://creativecommons.org/licenses/by-nc-nd/4.0/

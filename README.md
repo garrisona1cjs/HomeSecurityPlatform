@@ -1,34 +1,18 @@
 # HomeSecurityPlatform
 
-HomeSecurityPlatform is a lightweight, stateful network security monitoring tool designed to detect new or changing devices on a local network while minimizing alert noise.
+## Status: Superseded
 
-This project focuses on **correctness, operational realism, and production-safe behavior**, not just discovery.
+This project represents the original prototype and core research platform
+for a home network security system.
 
----
+Development has moved to **HomeSecurity Program**, which builds on the
+concepts and logic from this platform and adds:
 
-## 🎯 Project Goals
+- Local API layer
+- Desktop GUI
+- Background service
+- Licensing and installer support
 
-- Detect **new or changing devices** on a LAN
-- Avoid alert spam through **state awareness**
-- Reduce noise with **grace-period logic**
-- Support **manual trust decisions**
-- Maintain **structured, audit-ready logs**
-- Behave predictably across restarts
+This repository is retained for reference and portfolio purposes.
 
----
-
-## 🧠 Key Design Principles
-
-- **Stateful detection** (not stateless scanning)
-- **One-time alerts per condition**
-- **UTC-safe time handling**
-- **Human-in-the-loop security controls**
-- **Separation of concerns**
-- **Production hygiene (log rotation, persistence)**
-
-If nothing changes on the network, **nothing alerts**.
-
----
-
-## 🏗 Architecture Overview
 
