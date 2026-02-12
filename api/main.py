@@ -238,6 +238,22 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "changes": change_summary
     }
 
+@app.get("/alerts")
+def get_all_alerts():
+    db = SessionLocal()
+    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
+    db.close()
+
+    return [
+        {
+            "agent_id": alert.agent_id,
+            "risk_score": alert.risk_score,
+            "severity": alert.severity,
+            "timestamp": alert.timestamp
+        }
+        for alert in alerts
+    ]
+
 @app.get("/alerts/summary")
 def get_alert_summary():
     db = SessionLocal()
