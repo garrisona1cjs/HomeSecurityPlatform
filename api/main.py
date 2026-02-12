@@ -10,13 +10,17 @@ import json
 from sqlalchemy import create_engine, Column, String, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+# -----------------------------
+# Database Setup
+# -----------------------------
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="3.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="5.0.0")
 
 # -----------------------------
 # Database Models
@@ -37,6 +41,16 @@ class Report(Base):
     id = Column(String, primary_key=True, index=True)
     agent_id = Column(String)
     data = Column(Text)
+    timestamp = Column(String)
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(String, primary_key=True, index=True)
+    agent_id = Column(String)
+    risk_score = Column(String)
+    severity = Column(String)
     timestamp = Column(String)
 
 
@@ -153,7 +167,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     # Missing devices
     risk_score += 15 * len(missing_devices)
 
-    # Consecutive missing escalation
+    # Escalation for consecutive missing
     if missing_devices:
         recent_reports = (
             db.query(Report)
@@ -197,6 +211,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "mac_changes": mac_changes
     }
 
+    # Store report
     new_report = Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
@@ -204,7 +219,17 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         timestamp=datetime.utcnow().isoformat()
     )
 
+    # Store alert history
+    new_alert = Alert(
+        id=str(uuid.uuid4()),
+        agent_id=report.agent_id,
+        risk_score=str(risk_score),
+        severity=severity,
+        timestamp=datetime.utcnow().isoformat()
+    )
+
     db.add(new_report)
+    db.add(new_alert)
     db.commit()
     db.close()
 
@@ -212,3 +237,20 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "message": "Report stored successfully",
         "changes": change_summary
     }
+
+
+@app.get("/alerts")
+def get_alerts():
+    db = SessionLocal()
+    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
+    db.close()
+
+    return [
+        {
+            "agent_id": alert.agent_id,
+            "risk_score": alert.risk_score,
+            "severity": alert.severity,
+            "timestamp": alert.timestamp
+        }
+        for alert in alerts
+    ]
