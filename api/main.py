@@ -211,13 +211,15 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "mac_changes": mac_changes
     }
 
-    # Store report
-    new_report = Report(
-        id=str(uuid.uuid4()),
-        agent_id=report.agent_id,
-        data=json.dumps(report.devices),
-        timestamp=datetime.utcnow().isoformat()
-    )
+# Store report (ALWAYS)
+new_report = Report(
+    id=str(uuid.uuid4()),
+    agent_id=report.agent_id,
+    data=json.dumps(report.devices),
+    timestamp=datetime.utcnow().isoformat()
+)
+
+db.add(new_report)
 
 # -------------------------
 # Alert Suppression Logic
@@ -256,10 +258,8 @@ if store_alert:
 
     db.add(new_alert)
 
-    db.add(new_report)
-    db.add(new_alert)
-    db.commit()
-    db.close()
+db.commit()
+db.close()
 
     return {
         "message": "Report stored successfully",
