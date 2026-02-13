@@ -386,14 +386,15 @@ def get_alerts_by_agent(agent_id: str):
         for alert in alerts
     ]
 
-# TEMPORARY ADMIN ROUTE — REMOVE AFTER USE
+# TEMPORARY ADMIN ROUTE — SAFE RESET
 @app.get("/admin/reset-alerts")
 def reset_alerts():
-    db = SessionLocal()
-    Alert.__table__.drop(engine)
-    Alert.__table__.create(engine)
-    db.close()
-    return {"message": "Alerts table reset successfully"}
+    try:
+        Alert.__table__.drop(engine, checkfirst=True)
+        Alert.__table__.create(engine, checkfirst=True)
+        return {"message": "Alerts table reset successfully"}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 
