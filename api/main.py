@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 import uuid
 import secrets
@@ -20,7 +20,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="5.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="6.0.0")
 
 # -----------------------------
 # Database Models
@@ -116,7 +116,10 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     verify_agent(db, report.agent_id, x_api_key)
 
-    # Get last report
+    # -------------------------
+    # Get Previous Report
+    # -------------------------
+
     last_report = (
         db.query(Report)
         .filter(Report.agent_id == report.agent_id)
@@ -157,14 +160,14 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     risk_score = 0
 
-    # MAC changes = highest risk
+
     if mac_changes:
         risk_score += 100
 
-    # New devices
+
     risk_score += 40 * len(new_devices)
 
-    # Missing devices
+
     risk_score += 15 * len(missing_devices)
 
     # Escalation for consecutive missing
@@ -185,7 +188,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
                 for d in json.loads(past_report.data)
             }
 
-            if any(ip not in past_devices for ip, _ in missing_devices):
+            if any(ip not in past_devices for ip, _ in [(d["ip"], d["mac"]) for d in missing_devices]):
                 consecutive_missing += 1
 
         if consecutive_missing >= 2:
@@ -211,60 +214,66 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "mac_changes": mac_changes
     }
 
-# Store report (ALWAYS)
-new_report = Report(
-    id=str(uuid.uuid4()),
-    agent_id=report.agent_id,
-    data=json.dumps(report.devices),
-    timestamp=datetime.utcnow().isoformat()
-)
+    # -------------------------
+    # Store Report (ALWAYS)
+    # -------------------------
 
-db.add(new_report)
-
-# -------------------------
-# Alert Suppression Logic
-# -------------------------
-
-SUPPRESSION_MINUTES = 10
-
-latest_alert = (
-    db.query(Alert)
-    .filter(Alert.agent_id == report.agent_id)
-    .order_by(Alert.timestamp.desc())
-    .first()
-)
-
-store_alert = True
-
-if latest_alert:
-    last_time = datetime.fromisoformat(latest_alert.timestamp)
-    now = datetime.utcnow()
-
-    within_window = (now - last_time).total_seconds() < SUPPRESSION_MINUTES * 60
-    same_severity = latest_alert.severity == severity
-    same_score = latest_alert.risk_score == str(risk_score)
-
-    if within_window and same_severity and same_score:
-        store_alert = False
-
-if store_alert:
-    new_alert = Alert(
+    new_report = Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
-        risk_score=str(risk_score),
-        severity=severity,
+        data=json.dumps(report.devices),
         timestamp=datetime.utcnow().isoformat()
     )
 
-    db.add(new_alert)
+    db.add(new_report)
 
-db.commit()
-db.close()
+    # -------------------------
+    # Alert Suppression Logic
+    # -------------------------
+
+    SUPPRESSION_MINUTES = 10
+
+    latest_alert = (
+        db.query(Alert)
+        .filter(Alert.agent_id == report.agent_id)
+        .order_by(Alert.timestamp.desc())
+        .first()
+    )
+
+    store_alert = True
+
+    if latest_alert:
+        last_time = datetime.fromisoformat(latest_alert.timestamp)
+        now = datetime.utcnow()
+
+        within_window = (now - last_time).total_seconds() < SUPPRESSION_MINUTES * 60
+        same_severity = latest_alert.severity == severity
+        same_score = latest_alert.risk_score == str(risk_score)
+
+        if within_window and same_severity and same_score:
+            store_alert = False
+
+    if store_alert:
+        new_alert = Alert(
+            id=str(uuid.uuid4()),
+            agent_id=report.agent_id,
+            risk_score=str(risk_score),
+            severity=severity,
+            timestamp=datetime.utcnow().isoformat()
+        )
+        db.add(new_alert)
+
+    db.commit()
+    db.close()
 
     return {
         "message": "Report stored successfully",
         "changes": change_summary
     }
+
+# -----------------------------
+# Alert Endpoints (Order Matters)
+# -----------------------------
 
 @app.get("/alerts")
 def get_all_alerts():
@@ -282,6 +291,7 @@ def get_all_alerts():
         for alert in alerts
     ]
 
+
 @app.get("/alerts/summary")
 def get_alert_summary():
     db = SessionLocal()
@@ -289,39 +299,22 @@ def get_alert_summary():
     alerts = db.query(Alert).all()
     db.close()
 
-    summary = {
-        "INFO": 0,
-        "LOW": 0,
-        "MEDIUM": 0,
-        "HIGH": 0,
-        "CRITICAL": 0
-    }
+    summary = {"INFO": 0, "LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
 
     for alert in alerts:
         if alert.severity in summary:
             summary[alert.severity] += 1
 
     return summary
+
 
 @app.get("/alerts/summary/{agent_id}")
 def get_alert_summary_by_agent(agent_id: str):
     db = SessionLocal()
-
-    alerts = (
-        db.query(Alert)
-        .filter(Alert.agent_id == agent_id)
-        .all()
-    )
-
+    alerts = db.query(Alert).filter(Alert.agent_id == agent_id).all()
     db.close()
 
-    summary = {
-        "INFO": 0,
-        "LOW": 0,
-        "MEDIUM": 0,
-        "HIGH": 0,
-        "CRITICAL": 0
-    }
+    summary = {"INFO": 0, "LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
 
     for alert in alerts:
         if alert.severity in summary:
@@ -329,43 +322,26 @@ def get_alert_summary_by_agent(agent_id: str):
 
     return summary
 
-from datetime import datetime, timedelta
+
 
 
 @app.get("/alerts/trend/{agent_id}/{hours}")
 def get_agent_alert_trend(agent_id: str, hours: int):
     db = SessionLocal()
-
-    alerts = (
-        db.query(Alert)
-        .filter(Alert.agent_id == agent_id)
-        .all()
-    )
-
+    alerts = db.query(Alert).filter(Alert.agent_id == agent_id).all()
     db.close()
 
     cutoff = datetime.utcnow() - timedelta(hours=hours)
 
-    summary = {
-        "INFO": 0,
-        "LOW": 0,
-        "MEDIUM": 0,
-        "HIGH": 0,
-        "CRITICAL": 0
-    }
+    summary = {"INFO": 0, "LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
 
     for alert in alerts:
         alert_time = datetime.fromisoformat(alert.timestamp)
+        if alert_time >= cutoff and alert.severity in summary:
+            summary[alert.severity] += 1
 
-        if alert_time >= cutoff:
-            if alert.severity in summary:
-                summary[alert.severity] += 1
+    return {"agent_id": agent_id, "window_hours": hours, "summary": summary}
 
-    return {
-        "agent_id": agent_id,
-        "window_hours": hours,
-        "summary": summary
-    }
 
 @app.get("/alerts/trend/{hours}")
 def get_alert_trend(hours: int):
@@ -376,25 +352,14 @@ def get_alert_trend(hours: int):
 
     cutoff = datetime.utcnow() - timedelta(hours=hours)
 
-    summary = {
-        "INFO": 0,
-        "LOW": 0,
-        "MEDIUM": 0,
-        "HIGH": 0,
-        "CRITICAL": 0
-    }
+    summary = {"INFO": 0, "LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
 
     for alert in alerts:
         alert_time = datetime.fromisoformat(alert.timestamp)
+        if alert_time >= cutoff and alert.severity in summary:
+            summary[alert.severity] += 1
 
-        if alert_time >= cutoff:
-            if alert.severity in summary:
-                summary[alert.severity] += 1
-
-    return {
-        "window_hours": hours,
-        "summary": summary
-    }
+    return {"window_hours": hours, "summary": summary}
 
 
 @app.get("/alerts/{agent_id}")
@@ -407,7 +372,7 @@ def get_alerts_by_agent(agent_id: str):
         .order_by(Alert.timestamp.desc())
         .all()
     )
-
+    
     db.close()
 
     return [
@@ -419,6 +384,7 @@ def get_alerts_by_agent(agent_id: str):
         }
         for alert in alerts
     ]
+
 
 
 
