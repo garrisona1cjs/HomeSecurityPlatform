@@ -26,14 +26,15 @@ app = FastAPI(title="HomeSecurity Platform API", version="6.0.0")
 # Database Models
 # -----------------------------
 
-class Agent(Base):
-    __tablename__ = "agents"
+class Alert(Base):
+    __tablename__ = "alerts"
 
-    agent_id = Column(String, primary_key=True, index=True)
-    hostname = Column(String)
-    ip_address = Column(String)
-    api_key = Column(String)
-
+    id = Column(String, primary_key=True, index=True)
+    agent_id = Column(String)
+    risk_score = Column(String)
+    severity = Column(String)
+    fingerprint = Column(String)
+    timestamp = Column(String)
 
 class Report(Base):
     __tablename__ = "reports"
@@ -372,7 +373,7 @@ def get_alerts_by_agent(agent_id: str):
         .order_by(Alert.timestamp.desc())
         .all()
     )
-    
+
     db.close()
 
     return [
@@ -385,6 +386,14 @@ def get_alerts_by_agent(agent_id: str):
         for alert in alerts
     ]
 
+# TEMPORARY ADMIN ROUTE — REMOVE AFTER USE
+@app.get("/admin/reset-alerts")
+def reset_alerts():
+    db = SessionLocal()
+    Alert.__table__.drop(engine)
+    Alert.__table__.create(engine)
+    db.close()
+    return {"message": "Alerts table reset successfully"}
 
 
 
