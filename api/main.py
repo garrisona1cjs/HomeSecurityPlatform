@@ -47,6 +47,7 @@ class Report(Base):
 
 class Alert(Base):
     __tablename__ = "alerts"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(String, primary_key=True, index=True)
     agent_id = Column(String)
@@ -387,7 +388,7 @@ def get_alerts_by_agent(agent_id: str):
     ]
 
 # TEMPORARY ADMIN ROUTE — SAFE RESET
-@app.get("/admin/reset-alerts")
+@app.get
 def reset_alerts():
     try:
         Alert.__table__.drop(engine, checkfirst=True)
