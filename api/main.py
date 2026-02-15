@@ -26,7 +26,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="10.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="11.0.0")
 
 # -----------------------------
 # Vendor Lookup
@@ -50,26 +50,21 @@ def get_vendor(mac):
 
 class Agent(Base):
     __tablename__ = "agents"
-
     agent_id = Column(String, primary_key=True, index=True)
     hostname = Column(String)
     ip_address = Column(String)
     api_key = Column(String)
 
-
 class Alert(Base):
     __tablename__ = "alerts"
-
     id = Column(String, primary_key=True, index=True)
     agent_id = Column(String)
     risk_score = Column(String)
     severity = Column(String)
     timestamp = Column(String)
 
-
 class Report(Base):
     __tablename__ = "reports"
-
     id = Column(String, primary_key=True, index=True)
     agent_id = Column(String)
     data = Column(Text)
@@ -85,7 +80,6 @@ class AgentRegistration(BaseModel):
     hostname: str
     ip_address: str
 
-
 class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
@@ -98,7 +92,6 @@ def verify_agent(db, agent_id: str, api_key: str):
     agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
     if not agent or agent.api_key != api_key:
         raise HTTPException(status_code=401, detail="Invalid agent")
-    return agent
 
 # -----------------------------
 # Register Agent
@@ -121,11 +114,7 @@ def register_agent(agent: AgentRegistration):
     db.commit()
     db.close()
 
-    return {
-        "agent_id": agent_id,
-        "api_key": api_key,
-        "message": "Agent registered successfully"
-    }
+    return {"agent_id": agent_id, "api_key": api_key}
 
 # -----------------------------
 # Report Devices
@@ -134,47 +123,30 @@ def register_agent(agent: AgentRegistration):
 @app.post("/report")
 def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
-
     verify_agent(db, report.agent_id, x_api_key)
 
-    last_report = (
-        db.query(Report)
-        .filter(Report.agent_id == report.agent_id)
-        .order_by(Report.timestamp.desc())
-        .first()
-    )
+    last_report = db.query(Report).filter(
+        Report.agent_id == report.agent_id
+    ).order_by(Report.timestamp.desc()).first()
 
-    previous_devices = {}
+    previous = {}
     if last_report:
         for d in json.loads(last_report.data):
-            previous_devices[d["ip"]] = d
+            previous[d["ip"]] = d
 
-    current_devices = {}
-
+    current = {}
     for d in report.devices:
         vendor = get_vendor(d["mac"])
-        current_devices[d["ip"]] = {
-            "ip": d["ip"],
-            "mac": d["mac"],
-            "vendor": vendor
-        }
+        current[d["ip"]] = {"ip": d["ip"], "mac": d["mac"], "vendor": vendor}
 
-    new_devices = []
-    missing_devices = []
-    mac_changes = []
-    vendor_changes = []
+    new_devices, missing_devices = [], []
 
-    for ip, data in current_devices.items():
-        if ip not in previous_devices:
+    for ip, data in current.items():
+        if ip not in previous:
             new_devices.append(data)
-        else:
-            if previous_devices[ip]["mac"] != data["mac"]:
-                mac_changes.append(ip)
-            if previous_devices[ip]["vendor"] != data["vendor"]:
-                vendor_changes.append(ip)
 
-    for ip in previous_devices:
-        if ip not in current_devices:
+    for ip in previous:
+        if ip not in current:
             missing_devices.append(ip)
 
     SAFE_VENDORS = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
@@ -187,66 +159,28 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         elif not any(v.lower() in vendor.lower() for v in SAFE_VENDORS):
             rogue_devices.append({"ip": d["ip"], "vendor": vendor, "reason": "Unrecognized vendor"})
 
-    risk_score = 0
-    risk_score += 40 * len(new_devices)
-    risk_score += 15 * len(missing_devices)
-
-    if mac_changes:
-        risk_score += 100
-    if vendor_changes:
-        risk_score += 60
+    risk_score = 40*len(new_devices) + 15*len(missing_devices)
     if rogue_devices:
         risk_score += 120
 
-    if risk_score == 0:
-        severity = "INFO"
-    elif risk_score < 40:
-        severity = "LOW"
-    elif risk_score < 80:
-        severity = "MEDIUM"
-    elif risk_score < 120:
-        severity = "HIGH"
-    else:
+    severity = "INFO"
+    if risk_score >= 120:
         severity = "CRITICAL"
-
-    summary = {
-        "risk_score": risk_score,
-        "severity": severity,
-        "new_devices": new_devices,
-        "missing_devices": missing_devices,
-        "mac_changes": mac_changes,
-        "vendor_changes": vendor_changes,
-        "rogue_devices": rogue_devices
-    }
+    elif risk_score >= 80:
+        severity = "HIGH"
+    elif risk_score >= 40:
+        severity = "MEDIUM"
+    elif risk_score > 0:
+        severity = "LOW"
 
     db.add(Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
-        data=json.dumps(list(current_devices.values())),
+        data=json.dumps(list(current.values())),
         timestamp=datetime.utcnow().isoformat()
     ))
 
-    SUPPRESSION_MINUTES = 10
-
-    latest_alert = (
-        db.query(Alert)
-        .filter(Alert.agent_id == report.agent_id)
-        .order_by(Alert.timestamp.desc())
-        .first()
-    )
-
-    store_alert = True
-
-    if latest_alert:
-        last_time = datetime.fromisoformat(latest_alert.timestamp)
-        now = datetime.utcnow()
-
-        if (now - last_time).total_seconds() < SUPPRESSION_MINUTES * 60 \
-           and latest_alert.risk_score == str(risk_score) \
-           and latest_alert.severity == severity:
-            store_alert = False
-
-    if store_alert and risk_score > 0:
+    if risk_score > 0:
         db.add(Alert(
             id=str(uuid.uuid4()),
             agent_id=report.agent_id,
@@ -258,10 +192,10 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.commit()
     db.close()
 
-    return {"message": "Report stored successfully", "changes": summary}
+    return {"risk_score": risk_score, "severity": severity}
 
 # -----------------------------
-# Alerts & Analytics
+# Alerts API
 # -----------------------------
 
 @app.get("/alerts")
@@ -271,39 +205,8 @@ def get_alerts():
     db.close()
     return alerts
 
-
-@app.get("/analytics/summary")
-def analytics_summary():
-    db = SessionLocal()
-    summary = {
-        "total_agents": db.query(Agent).count(),
-        "total_reports": db.query(Report).count(),
-        "total_alerts": db.query(Alert).count()
-    }
-    db.close()
-    return summary
-
-
-@app.get("/analytics/risk-trend/{hours}")
-def risk_trend(hours: int):
-    db = SessionLocal()
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
-    alerts = db.query(Alert).all()
-
-    trend = []
-    for alert in alerts:
-        alert_time = datetime.fromisoformat(alert.timestamp)
-        if alert_time >= cutoff:
-            trend.append({
-                "time": alert.timestamp,
-                "risk_score": int(alert.risk_score)
-            })
-
-    db.close()
-    return trend
-
 # -----------------------------
-# SOC Dashboard
+# Dashboard
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -313,13 +216,28 @@ def dashboard():
 <head>
 <title>HomeSecurity SOC Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-body {font-family: Arial; background:#0f172a; color:white; padding:20px;}
 
-.alert-box {
-    margin:6px 0;
-    padding:8px;
-    border-radius:6px;
+<style>
+body {font-family: Arial; background:#0f172a; color:white; padding:20px; overflow-x:hidden;}
+
+.ticker {
+    width:100%;
+    overflow:hidden;
+    white-space:nowrap;
+    background:#020617;
+    border-bottom:2px solid #ef4444;
+    padding:8px 0;
+}
+
+.ticker span {
+    display:inline-block;
+    padding-left:100%;
+    animation:ticker 20s linear infinite;
+}
+
+@keyframes ticker {
+    0% { transform:translateX(0); }
+    100% { transform:translateX(-100%); }
 }
 
 .critical {
@@ -327,77 +245,58 @@ body {font-family: Arial; background:#0f172a; color:white; padding:20px;}
 }
 
 @keyframes pulse {
-    0% { box-shadow: 0 0 5px red; }
-    50% { box-shadow: 0 0 20px red; }
-    100% { box-shadow: 0 0 5px red; }
+    0% { box-shadow:0 0 5px red; }
+    50% { box-shadow:0 0 20px red; }
+    100% { box-shadow:0 0 5px red; }
 }
 </style>
 </head>
 
 <body>
+
+<div class="ticker">
+<span id="tickerText">Loading alerts...</span>
+</div>
+
 <h1>🛡 HomeSecurity SOC Dashboard</h1>
 
-<h2>System Summary</h2>
-<div id="summary">Loading...</div>
-
 <h2>Recent Alerts</h2>
-<div id="alerts">Loading...</div>
-
-<h2>Risk Trend</h2>
-<canvas id="riskChart" width="600" height="200"></canvas>
+<div id="alerts"></div>
 
 <script>
-function severityColor(severity) {
-    switch(severity) {
-        case "INFO": return "#22c55e";
-        case "LOW": return "#3b82f6";
-        case "MEDIUM": return "#eab308";
-        case "HIGH": return "#f97316";
-        case "CRITICAL": return "#ef4444";
-        default: return "white";
-    }
+function severityColor(severity){
+    if(severity=="CRITICAL") return "#ef4444";
+    if(severity=="HIGH") return "#f97316";
+    if(severity=="MEDIUM") return "#eab308";
+    if(severity=="LOW") return "#3b82f6";
+    return "#22c55e";
 }
 
-async function loadDashboard() {
-    const summary = await fetch('/analytics/summary').then(r=>r.json());
+async function loadAlerts(){
     const alerts = await fetch('/alerts').then(r=>r.json());
-    const trend = await fetch('/analytics/risk-trend/24').then(r=>r.json());
-
-    document.getElementById("summary").innerHTML =
-        "Agents: " + summary.total_agents +
-        "<br>Reports: " + summary.total_reports +
-        "<br>Alerts: " + summary.total_alerts;
 
     document.getElementById("alerts").innerHTML =
-        alerts.slice(0,5).map(a => {
+        alerts.slice(0,5).map(a=>{
             const color = severityColor(a.severity);
-            const criticalClass = a.severity === "CRITICAL" ? "critical" : "";
-
-            return `<div class="alert-box ${criticalClass}" style="
-                background:${color}20;
+            const pulse = a.severity=="CRITICAL" ? "critical" : "";
+            return `<div class="${pulse}" style="
+                margin:6px 0;
+                padding:8px;
                 border-left:6px solid ${color};
-            ">
-            <strong>${a.severity}</strong> — Risk Score: ${a.risk_score}
+                background:${color}20;
+                border-radius:6px;">
+                <strong>${a.severity}</strong> — Risk ${a.risk_score}
             </div>`;
         }).join("");
 
-    const ctx = document.getElementById('riskChart').getContext('2d');
-
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: trend.map(t => new Date(t.time).toLocaleTimeString()),
-            datasets: [{
-                label: 'Risk Score',
-                data: trend.map(t => t.risk_score),
-                tension: 0.3
-            }]
-        }
-    });
+    document.getElementById("tickerText").innerHTML =
+        alerts.slice(0,10).map(a =>
+            `${a.severity} threat (score ${a.risk_score}) detected`
+        ).join("   ⚠   ");
 }
 
-loadDashboard();
-setInterval(loadDashboard, 10000);
+loadAlerts();
+setInterval(loadAlerts, 5000);
 </script>
 </body>
 </html>
