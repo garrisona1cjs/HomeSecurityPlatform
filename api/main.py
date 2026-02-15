@@ -26,7 +26,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="16.0")
+app = FastAPI(title="HomeSecurity Platform API", version="17.0")
 
 # -----------------------------
 # Vendor Lookup
@@ -44,6 +44,8 @@ def get_vendor(mac):
     except:
         return "Unknown"
 
+SAFE_VENDORS = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
+
 # -----------------------------
 # Models
 # -----------------------------
@@ -60,14 +62,6 @@ class Report(Base):
     id = Column(String, primary_key=True)
     agent_id = Column(String)
     data = Column(Text)
-    timestamp = Column(String)
-
-class Alert(Base):
-    __tablename__ = "alerts"
-    id = Column(String, primary_key=True)
-    agent_id = Column(String)
-    risk_score = Column(String)
-    severity = Column(String)
     timestamp = Column(String)
 
 Base.metadata.create_all(bind=engine)
@@ -126,13 +120,21 @@ def report(report: DeviceReport, x_api_key: str = Header(None)):
     verify_agent(db, report.agent_id, x_api_key)
 
     devices = []
-    rogue = False
 
     for d in report.devices:
         vendor = get_vendor(d["mac"])
-        if vendor == "Unknown":
-            rogue = True
-        devices.append({"ip": d["ip"], "mac": d["mac"], "vendor": vendor})
+
+        rogue = (
+            vendor == "Unknown" or
+            not any(v.lower() in vendor.lower() for v in SAFE_VENDORS)
+        )
+
+        devices.append({
+            "ip": d["ip"],
+            "mac": d["mac"],
+            "vendor": vendor,
+            "rogue": rogue
+        })
 
     db.add(Report(
         id=str(uuid.uuid4()),
@@ -141,31 +143,34 @@ def report(report: DeviceReport, x_api_key: str = Header(None)):
         timestamp=datetime.utcnow().isoformat()
     ))
 
-    if rogue:
-        db.add(Alert(
-            id=str(uuid.uuid4()),
-            agent_id=report.agent_id,
-            risk_score="120",
-            severity="CRITICAL",
-            timestamp=datetime.utcnow().isoformat()
-        ))
-
     db.commit()
     db.close()
 
     return {"status": "ok"}
 
 # -----------------------------
-# Agent Status API
+# Network Map Data API
 # -----------------------------
 
-@app.get("/agents/status")
-def agent_status():
+@app.get("/network-data")
+def network_data():
     db = SessionLocal()
+
     agents = db.query(Agent).all()
-    results = []
+
+    nodes = []
+    edges = []
+
+    nodes.append({
+        "id": "core",
+        "label": "HomeSecurity Core",
+        "shape": "box",
+        "color": "#38bdf8"
+    })
 
     for agent in agents:
+
+        # determine status
         last = (
             db.query(Report)
             .filter(Report.agent_id == agent.agent_id)
@@ -174,25 +179,43 @@ def agent_status():
         )
 
         status = "OFFLINE"
-
         if last:
             last_time = datetime.fromisoformat(last.timestamp)
-            minutes = (datetime.utcnow() - last_time).total_seconds() / 60
-
+            minutes = (datetime.utcnow() - last_time).total_seconds()/60
             if minutes < 5:
                 status = "ONLINE"
             elif minutes < 60:
                 status = "IDLE"
 
-        results.append({
+        color = "#22c55e" if status=="ONLINE" else "#facc15" if status=="IDLE" else "#ef4444"
+
+        nodes.append({
             "id": agent.agent_id,
-            "label": agent.hostname,
-            "ip": agent.ip_address,
-            "status": status
+            "label": agent.hostname + "\\n" + agent.ip_address,
+            "color": color
         })
 
+        edges.append({"from": "core", "to": agent.agent_id})
+
+        if last:
+            devices = json.loads(last.data)
+
+            for dev in devices:
+                dev_id = agent.agent_id + "_" + dev["ip"]
+
+                nodes.append({
+                    "id": dev_id,
+                    "label": dev["ip"],
+                    "title": f'{dev["vendor"]}',
+                    "color": "#ef4444" if dev["rogue"] else "#60a5fa",
+                    "shape": "dot",
+                    "size": 12
+                })
+
+                edges.append({"from": agent.agent_id, "to": dev_id})
+
     db.close()
-    return results
+    return {"nodes": nodes, "edges": edges}
 
 # -----------------------------
 # Network Map Dashboard
@@ -207,46 +230,25 @@ def network_map():
 <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 <style>
 body { background:#0f172a; color:white; font-family:Arial; }
-#network { width:100%; height:600px; border:1px solid #1e293b; }
+#network { width:100%; height:650px; border:1px solid #1e293b; }
 </style>
 </head>
 <body>
 
-<h2>🌐 Live Network Map</h2>
+<h2>🌐 Live Network Topology</h2>
 <div id="network"></div>
 
 <script>
 async function draw(){
 
- const data = await fetch('/agents/status').then(r=>r.json());
-
- const nodes = data.map(a => ({
-   id: a.id,
-   label: a.label + "\\n" + a.ip,
-   color:
-     a.status === "ONLINE" ? "#22c55e" :
-     a.status === "IDLE" ? "#facc15" :
-     "#ef4444"
- }));
-
- const edges = data.map(a => ({
-   from: "core",
-   to: a.id
- }));
-
- nodes.push({
-   id: "core",
-   label: "HomeSecurity Core",
-   shape: "box",
-   color: "#38bdf8"
- });
+ const res = await fetch('/network-data');
+ const data = await res.json();
 
  const container = document.getElementById('network');
- const network = new vis.Network(container, {
-   nodes: new vis.DataSet(nodes),
-   edges: new vis.DataSet(edges)
- }, {
-   physics: { stabilization: false }
+
+ new vis.Network(container, data, {
+   physics: { stabilization: false },
+   interaction: { hover: true }
  });
 }
 
