@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List
 import uuid
 import secrets
@@ -20,13 +20,13 @@ from mac_vendor_lookup import MacLookup
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable not set")
+    raise RuntimeError("DATABASE_URL not set")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="15.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="16.0")
 
 # -----------------------------
 # Vendor Lookup
@@ -45,29 +45,29 @@ def get_vendor(mac):
         return "Unknown"
 
 # -----------------------------
-# Database Models
+# Models
 # -----------------------------
 
 class Agent(Base):
     __tablename__ = "agents"
-    agent_id = Column(String, primary_key=True, index=True)
+    agent_id = Column(String, primary_key=True)
     hostname = Column(String)
     ip_address = Column(String)
     api_key = Column(String)
 
+class Report(Base):
+    __tablename__ = "reports"
+    id = Column(String, primary_key=True)
+    agent_id = Column(String)
+    data = Column(Text)
+    timestamp = Column(String)
+
 class Alert(Base):
     __tablename__ = "alerts"
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     agent_id = Column(String)
     risk_score = Column(String)
     severity = Column(String)
-    timestamp = Column(String)
-
-class Report(Base):
-    __tablename__ = "reports"
-    id = Column(String, primary_key=True, index=True)
-    agent_id = Column(String)
-    data = Column(Text)
     timestamp = Column(String)
 
 Base.metadata.create_all(bind=engine)
@@ -98,7 +98,7 @@ def verify_agent(db, agent_id: str, api_key: str):
 # -----------------------------
 
 @app.post("/register")
-def register_agent(agent: AgentRegistration):
+def register(agent: AgentRegistration):
     db = SessionLocal()
 
     agent_id = str(uuid.uuid4())
@@ -121,7 +121,7 @@ def register_agent(agent: AgentRegistration):
 # -----------------------------
 
 @app.post("/report")
-def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
+def report(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
     verify_agent(db, report.agent_id, x_api_key)
 
@@ -134,21 +134,6 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
             rogue = True
         devices.append({"ip": d["ip"], "mac": d["mac"], "vendor": vendor})
 
-    risk_score = 40 * len(devices)
-    if rogue:
-        risk_score += 120
-
-    if risk_score >= 120:
-        severity = "CRITICAL"
-    elif risk_score >= 80:
-        severity = "HIGH"
-    elif risk_score >= 40:
-        severity = "MEDIUM"
-    elif risk_score > 0:
-        severity = "LOW"
-    else:
-        severity = "INFO"
-
     db.add(Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
@@ -156,30 +141,19 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         timestamp=datetime.utcnow().isoformat()
     ))
 
-    if risk_score > 0:
+    if rogue:
         db.add(Alert(
             id=str(uuid.uuid4()),
             agent_id=report.agent_id,
-            risk_score=str(risk_score),
-            severity=severity,
+            risk_score="120",
+            severity="CRITICAL",
             timestamp=datetime.utcnow().isoformat()
         ))
 
     db.commit()
     db.close()
 
-    return {"risk_score": risk_score, "severity": severity}
-
-# -----------------------------
-# Alerts API
-# -----------------------------
-
-@app.get("/alerts")
-def get_alerts():
-    db = SessionLocal()
-    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
-    db.close()
-    return alerts
+    return {"status": "ok"}
 
 # -----------------------------
 # Agent Status API
@@ -192,7 +166,7 @@ def agent_status():
     results = []
 
     for agent in agents:
-        last_report = (
+        last = (
             db.query(Report)
             .filter(Report.agent_id == agent.agent_id)
             .order_by(Report.timestamp.desc())
@@ -200,11 +174,9 @@ def agent_status():
         )
 
         status = "OFFLINE"
-        last_seen = None
 
-        if last_report:
-            last_seen = last_report.timestamp
-            last_time = datetime.fromisoformat(last_seen)
+        if last:
+            last_time = datetime.fromisoformat(last.timestamp)
             minutes = (datetime.utcnow() - last_time).total_seconds() / 60
 
             if minutes < 5:
@@ -213,69 +185,79 @@ def agent_status():
                 status = "IDLE"
 
         results.append({
-            "agent_id": agent.agent_id,
-            "hostname": agent.hostname,
+            "id": agent.agent_id,
+            "label": agent.hostname,
             "ip": agent.ip_address,
-            "status": status,
-            "last_seen": last_seen
+            "status": status
         })
 
     db.close()
     return results
 
 # -----------------------------
-# Dashboard
+# Network Map Dashboard
 # -----------------------------
 
-@app.get("/dashboard", response_class=HTMLResponse)
-def dashboard():
+@app.get("/network-map", response_class=HTMLResponse)
+def network_map():
     return """
 <html>
 <head>
-<title>HomeSecurity SOC Dashboard</title>
+<title>Network Map</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 <style>
-body {font-family: Arial; background:#0f172a; color:white; padding:20px;}
-.card {background:#020617; padding:15px; margin:10px; border-radius:8px;}
-.online {color:#22c55e;}
-.idle {color:#facc15;}
-.offline {color:#ef4444;}
+body { background:#0f172a; color:white; font-family:Arial; }
+#network { width:100%; height:600px; border:1px solid #1e293b; }
 </style>
 </head>
 <body>
 
-<h1>🛡 SOC Dashboard</h1>
-
-<h2>Agent Status</h2>
-<div id="agents"></div>
+<h2>🌐 Live Network Map</h2>
+<div id="network"></div>
 
 <script>
+async function draw(){
 
+ const data = await fetch('/agents/status').then(r=>r.json());
 
+ const nodes = data.map(a => ({
+   id: a.id,
+   label: a.label + "\\n" + a.ip,
+   color:
+     a.status === "ONLINE" ? "#22c55e" :
+     a.status === "IDLE" ? "#facc15" :
+     "#ef4444"
+ }));
 
+ const edges = data.map(a => ({
+   from: "core",
+   to: a.id
+ }));
 
+ nodes.push({
+   id: "core",
+   label: "HomeSecurity Core",
+   shape: "box",
+   color: "#38bdf8"
+ });
 
-async function load(){
- const agents = await fetch('/agents/status').then(r=>r.json());
-
- document.getElementById("agents").innerHTML =
- agents.map(a =>
- `<div class="card">
-   <b>${a.hostname}</b> (${a.ip})<br>
-   Status: <span class="${
-     a.status=="ONLINE"?"online":
-     a.status=="IDLE"?"idle":"offline"
-   }">${a.status}</span><br>
-   Last Seen: ${a.last_seen || "Never"}
- </div>`
- ).join("");
+ const container = document.getElementById('network');
+ const network = new vis.Network(container, {
+   nodes: new vis.DataSet(nodes),
+   edges: new vis.DataSet(edges)
+ }, {
+   physics: { stabilization: false }
+ });
 }
 
-load();
-setInterval(load,5000);
+draw();
+setInterval(draw, 5000);
 </script>
+
 </body>
 </html>
 """
+
 
 
 
