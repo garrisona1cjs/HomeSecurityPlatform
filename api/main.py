@@ -191,35 +191,83 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         if ip not in current_devices:
             missing_devices.append({"ip": ip})
 
-    # Risk scoring
-    risk_score = 0
-    risk_score += 40 * len(new_devices)
-    risk_score += 15 * len(missing_devices)
+   # -----------------------------
+# Rogue Device Detection
+# -----------------------------
 
-    if mac_changes:
-        risk_score += 100
+KNOWN_SAFE_VENDORS = [
+    "Apple",
+    "Samsung",
+    "Intel",
+    "Dell",
+    "HP",
+    "Cisco",
+    "Microsoft",
+    "Google",
+    "Amazon",
+    "Raspberry"
+]
 
-    if vendor_changes:
-        risk_score += 60
+rogue_devices = []
 
-    if risk_score == 0:
-        severity = "INFO"
-    elif risk_score < 40:
-        severity = "LOW"
-    elif risk_score < 80:
-        severity = "MEDIUM"
-    elif risk_score < 120:
-        severity = "HIGH"
-    else:
-        severity = "CRITICAL"
+for device in new_devices:
+    vendor = device["vendor"]
+
+    if vendor == "Unknown":
+        rogue_devices.append({
+            "ip": device["ip"],
+            "reason": "Unknown vendor"
+        })
+
+    elif not any(safe.lower() in vendor.lower() for safe in KNOWN_SAFE_VENDORS):
+        rogue_devices.append({
+            "ip": device["ip"],
+            "vendor": vendor,
+            "reason": "Unrecognized vendor"
+        })
+
+# -----------------------------
+# Risk scoring
+# -----------------------------
+
+risk_score = 0
+
+risk_score += 40 * len(new_devices)
+risk_score += 15 * len(missing_devices)
+
+if mac_changes:
+    risk_score += 100
+
+if vendor_changes:
+    risk_score += 60
+
+# 🚨 Rogue devices increase risk significantly
+if rogue_devices:
+    risk_score += 120
+
+# -----------------------------
+# Severity Levels
+# -----------------------------
+
+if risk_score == 0:
+    severity = "INFO"
+elif risk_score < 40:
+    severity = "LOW"
+elif risk_score < 80:
+    severity = "MEDIUM"
+elif risk_score < 120:
+    severity = "HIGH"
+else:
+    severity = "CRITICAL"
 
     change_summary = {
-        "risk_score": risk_score,
-        "severity": severity,
-        "new_devices": new_devices,
-        "missing_devices": missing_devices,
-        "mac_changes": mac_changes,
-        "vendor_changes": vendor_changes
+    "risk_score": risk_score,
+    "severity": severity,
+    "new_devices": new_devices,
+    "missing_devices": missing_devices,
+    "mac_changes": mac_changes,
+    "vendor_changes": vendor_changes,
+    "rogue_devices": rogue_devices
     }
 
     new_report = Report(
