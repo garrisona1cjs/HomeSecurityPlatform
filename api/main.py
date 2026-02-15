@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List
@@ -49,7 +50,7 @@ def get_vendor(mac):
 
 class Agent(Base):
     __tablename__ = "agents"
-    
+
     agent_id = Column(String, primary_key=True, index=True)
     hostname = Column(String)
     ip_address = Column(String)
@@ -96,7 +97,7 @@ def verify_agent(db, agent_id: str, api_key: str):
     agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
     if not agent or agent.api_key != api_key:
         raise HTTPException(status_code=401, detail="Invalid agent")
-    
+    return agent
 
 # -----------------------------
 # Register Agent
@@ -109,14 +110,14 @@ def register_agent(agent: AgentRegistration):
     agent_id = str(uuid.uuid4())
     api_key = secrets.token_hex(32)
 
-    new_agent = Agent(
+    db.add(Agent(
         agent_id=agent_id,
         hostname=agent.hostname,
         ip_address=agent.ip_address,
         api_key=api_key
-    )
+    ))
 
-    db.add(new_agent)
+
     db.commit()
     db.close()
 
@@ -136,7 +137,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     verify_agent(db, report.agent_id, x_api_key)
 
-    # Get previous report
+
     last_report = (
         db.query(Report)
         .filter(Report.agent_id == report.agent_id)
@@ -181,7 +182,10 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     # Rogue Device Detection
     # -----------------------------
 
-    SAFE_VENDORS = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
+    SAFE_VENDORS = [
+        "Apple","Samsung","Intel","Dell","HP",
+        "Cisco","Microsoft","Google","Amazon","Raspberry"
+    ]
 
     rogue_devices = []
 
@@ -190,7 +194,11 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         if vendor == "Unknown":
             rogue_devices.append({"ip": d["ip"], "reason": "Unknown vendor"})
         elif not any(v.lower() in vendor.lower() for v in SAFE_VENDORS):
-            rogue_devices.append({"ip": d["ip"], "vendor": vendor, "reason": "Unrecognized vendor"})
+            rogue_devices.append({
+                "ip": d["ip"],
+                "vendor": vendor,
+                "reason": "Unrecognized vendor"
+            })
 
     # -----------------------------
     # Risk Scoring
@@ -208,7 +216,6 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     if rogue_devices:
         risk_score += 120
-
 
 
     if risk_score == 0:
@@ -232,22 +239,14 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "rogue_devices": rogue_devices
     }
 
-    # store report
-    new_report = Report(
+    db.add(Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
         data=json.dumps(list(current_devices.values())),
         timestamp=datetime.utcnow().isoformat()
-    )
+    ))
 
-    db.add(new_report)
-
-    # -----------------------------
-    # Alert Suppression
-    # -----------------------------
-
-    SUPPRESSION_MINUTES = 10
-
+    # Alert suppression
     latest_alert = (
         db.query(Alert)
         .filter(Alert.agent_id == report.agent_id)
@@ -261,11 +260,11 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         last_time = datetime.fromisoformat(latest_alert.timestamp)
         now = datetime.utcnow()
 
-        within_window = (now - last_time).total_seconds() < SUPPRESSION_MINUTES * 60
-        same_score = latest_alert.risk_score == str(risk_score)
-        same_severity = latest_alert.severity == severity
-
-        if within_window and same_score and same_severity:
+        if (
+            (now - last_time).total_seconds() < 600 and
+            latest_alert.risk_score == str(risk_score) and
+            latest_alert.severity == severity
+        ):
             store_alert = False
 
     if store_alert and risk_score > 0:
@@ -300,19 +299,93 @@ def get_alerts():
 @app.get("/analytics/summary")
 def analytics_summary():
     db = SessionLocal()
+    
+    return {
+        "total_agents": db.query(Agent).count(),
+        "total_reports": db.query(Report).count(),
+        "total_alerts": db.query(Alert).count()
+    }
 
-    total_agents = db.query(Agent).count()
-    total_alerts = db.query(Alert).count()
-    total_reports = db.query(Report).count()
+@app.get("/analytics/risk-trend/{hours}")
+def risk_trend(hours: int):
+    db = SessionLocal()
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    alerts = db.query(Alert).all()
 
+    trend = []
+    for alert in alerts:
+        t = datetime.fromisoformat(alert.timestamp)
+        if t >= cutoff:
+            trend.append({
+                "time": alert.timestamp,
+                "risk_score": int(alert.risk_score)
+            })
 
     db.close()
+    return trend
 
-    return {
-        "total_agents": total_agents,
-        "total_reports": total_reports,
-        "total_alerts": total_alerts
-    }
+# -----------------------------
+# SOC Dashboard
+# -----------------------------
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    return """
+    <html>
+    <head>
+        <title>HomeSecurity SOC Dashboard</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+    <body style="font-family: Arial; background:#0f172a; color:white; padding:20px;">
+        <h1>🛡 HomeSecurity SOC Dashboard</h1>
+
+        <h2>System Summary</h2>
+        <div id="summary">Loading...</div>
+
+        <h2>Recent Alerts</h2>
+        <div id="alerts">Loading...</div>
+
+        <h2>Risk Trend</h2>
+        <canvas id="riskChart" width="600" height="200"></canvas>
+
+        <script>
+        async function loadDashboard() {
+            const summary = await fetch('/analytics/summary').then(r=>r.json());
+            const alerts = await fetch('/alerts').then(r=>r.json());
+            const trend = await fetch('/analytics/risk-trend/24').then(r=>r.json());
+
+            document.getElementById("summary").innerHTML =
+                "Agents: " + summary.total_agents +
+                "<br>Reports: " + summary.total_reports +
+                "<br>Alerts: " + summary.total_alerts;
+
+            document.getElementById("alerts").innerHTML =
+                alerts.slice(0,5).map(a =>
+                    a.severity + " — Score: " + a.risk_score
+                ).join("<br>");
+
+            const ctx = document.getElementById('riskChart').getContext('2d');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: trend.map(t => new Date(t.time).toLocaleTimeString()),
+                    datasets: [{
+                        label: 'Risk Score',
+                        data: trend.map(t => t.risk_score),
+                        fill: false,
+                        tension: 0.1
+                    }]
+                }
+            });
+        }
+
+        loadDashboard();
+        setInterval(loadDashboard, 10000);
+        </script>
+    </body>
+    </html>
+    """
 
 
 
