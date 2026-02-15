@@ -272,15 +272,41 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     db.add(new_report)
 
-    if risk_score > 0:
-        new_alert = Alert(
-            id=str(uuid.uuid4()),
-            agent_id=report.agent_id,
-            risk_score=str(risk_score),
-            severity=severity,
-            timestamp=datetime.utcnow().isoformat()
-        )
-        db.add(new_alert)
+# -----------------------------
+# Alert Suppression Logic
+# -----------------------------
+
+SUPPRESSION_MINUTES = 10
+
+latest_alert = (
+    db.query(Alert)
+    .filter(Alert.agent_id == report.agent_id)
+    .order_by(Alert.timestamp.desc())
+    .first()
+)
+
+store_alert = True
+
+if latest_alert:
+    last_time = datetime.fromisoformat(latest_alert.timestamp)
+    now = datetime.utcnow()
+
+    within_window = (now - last_time).total_seconds() < SUPPRESSION_MINUTES * 60
+    same_severity = latest_alert.severity == severity
+    same_score = latest_alert.risk_score == str(risk_score)
+
+    if within_window and same_severity and same_score:
+        store_alert = False
+
+if store_alert and risk_score > 0:
+    new_alert = Alert(
+        id=str(uuid.uuid4()),
+        agent_id=report.agent_id,
+        risk_score=str(risk_score),
+        severity=severity,
+        timestamp=datetime.utcnow().isoformat()
+    )
+    db.add(new_alert)
 
     db.commit()
     db.close()
