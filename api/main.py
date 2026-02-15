@@ -26,7 +26,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="9.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="10.0.0")
 
 # -----------------------------
 # Vendor Lookup
@@ -177,7 +177,6 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         if ip not in current_devices:
             missing_devices.append(ip)
 
-    # Rogue Device Detection
     SAFE_VENDORS = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
 
     rogue_devices = []
@@ -188,7 +187,6 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         elif not any(v.lower() in vendor.lower() for v in SAFE_VENDORS):
             rogue_devices.append({"ip": d["ip"], "vendor": vendor, "reason": "Unrecognized vendor"})
 
-    # Risk Scoring
     risk_score = 0
     risk_score += 40 * len(new_devices)
     risk_score += 15 * len(missing_devices)
@@ -228,7 +226,6 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         timestamp=datetime.utcnow().isoformat()
     ))
 
-    # Alert Suppression
     SUPPRESSION_MINUTES = 10
 
     latest_alert = (
@@ -264,7 +261,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     return {"message": "Report stored successfully", "changes": summary}
 
 # -----------------------------
-# Alerts
+# Alerts & Analytics
 # -----------------------------
 
 @app.get("/alerts")
@@ -274,9 +271,6 @@ def get_alerts():
     db.close()
     return alerts
 
-# -----------------------------
-# Analytics
-# -----------------------------
 
 @app.get("/analytics/summary")
 def analytics_summary():
@@ -293,12 +287,10 @@ def analytics_summary():
 @app.get("/analytics/risk-trend/{hours}")
 def risk_trend(hours: int):
     db = SessionLocal()
-
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     alerts = db.query(Alert).all()
 
     trend = []
-
     for alert in alerts:
         alert_time = datetime.fromisoformat(alert.timestamp)
         if alert_time >= cutoff:
@@ -317,80 +309,99 @@ def risk_trend(hours: int):
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     return """
-    <html>
-    <head>
-        <title>HomeSecurity SOC Dashboard</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    </head>
-    <body style="font-family: Arial; background:#0f172a; color:white; padding:20px;">
-        <h1>🛡 HomeSecurity SOC Dashboard</h1>
+<html>
+<head>
+<title>HomeSecurity SOC Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body {font-family: Arial; background:#0f172a; color:white; padding:20px;}
 
-        <h2>System Summary</h2>
-        <div id="summary">Loading...</div>
+.alert-box {
+    margin:6px 0;
+    padding:8px;
+    border-radius:6px;
+}
 
-        <h2>Recent Alerts</h2>
-        <div id="alerts">Loading...</div>
+.critical {
+    animation: pulse 1s infinite;
+}
 
-        <h2>Risk Trend</h2>
-        <canvas id="riskChart" width="600" height="200"></canvas>
+@keyframes pulse {
+    0% { box-shadow: 0 0 5px red; }
+    50% { box-shadow: 0 0 20px red; }
+    100% { box-shadow: 0 0 5px red; }
+}
+</style>
+</head>
 
-        <script>
-        function severityColor(severity) {
-            switch(severity) {
-                case "INFO": return "#22c55e";
-                case "LOW": return "#3b82f6";
-                case "MEDIUM": return "#eab308";
-                case "HIGH": return "#f97316";
-                case "CRITICAL": return "#ef4444";
-                default: return "white";
-            }
+<body>
+<h1>🛡 HomeSecurity SOC Dashboard</h1>
+
+<h2>System Summary</h2>
+<div id="summary">Loading...</div>
+
+<h2>Recent Alerts</h2>
+<div id="alerts">Loading...</div>
+
+<h2>Risk Trend</h2>
+<canvas id="riskChart" width="600" height="200"></canvas>
+
+<script>
+function severityColor(severity) {
+    switch(severity) {
+        case "INFO": return "#22c55e";
+        case "LOW": return "#3b82f6";
+        case "MEDIUM": return "#eab308";
+        case "HIGH": return "#f97316";
+        case "CRITICAL": return "#ef4444";
+        default: return "white";
+    }
+}
+
+async function loadDashboard() {
+    const summary = await fetch('/analytics/summary').then(r=>r.json());
+    const alerts = await fetch('/alerts').then(r=>r.json());
+    const trend = await fetch('/analytics/risk-trend/24').then(r=>r.json());
+
+    document.getElementById("summary").innerHTML =
+        "Agents: " + summary.total_agents +
+        "<br>Reports: " + summary.total_reports +
+        "<br>Alerts: " + summary.total_alerts;
+
+    document.getElementById("alerts").innerHTML =
+        alerts.slice(0,5).map(a => {
+            const color = severityColor(a.severity);
+            const criticalClass = a.severity === "CRITICAL" ? "critical" : "";
+
+            return `<div class="alert-box ${criticalClass}" style="
+                background:${color}20;
+                border-left:6px solid ${color};
+            ">
+            <strong>${a.severity}</strong> — Risk Score: ${a.risk_score}
+            </div>`;
+        }).join("");
+
+    const ctx = document.getElementById('riskChart').getContext('2d');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: trend.map(t => new Date(t.time).toLocaleTimeString()),
+            datasets: [{
+                label: 'Risk Score',
+                data: trend.map(t => t.risk_score),
+                tension: 0.3
+            }]
         }
+    });
+}
 
-        async function loadDashboard() {
-            const summary = await fetch('/analytics/summary').then(r=>r.json());
-            const alerts = await fetch('/alerts').then(r=>r.json());
-            const trend = await fetch('/analytics/risk-trend/24').then(r=>r.json());
-
-            document.getElementById("summary").innerHTML =
-                "Agents: " + summary.total_agents +
-                "<br>Reports: " + summary.total_reports +
-                "<br>Alerts: " + summary.total_alerts;
-
-            document.getElementById("alerts").innerHTML =
-                alerts.slice(0,5).map(a =>
-                    `<div style="
-                        margin:6px 0;
-                        padding:8px;
-                        border-radius:6px;
-                        background:${severityColor(a.severity)}20;
-                        border-left:6px solid ${severityColor(a.severity)};
-                    ">
-                        <strong>${a.severity}</strong>
-                        — Risk Score: ${a.risk_score}
-                    </div>`
-                ).join("");
-
-            const ctx = document.getElementById('riskChart').getContext('2d');
-
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: trend.map(t => new Date(t.time).toLocaleTimeString()),
-                    datasets: [{
-                        label: 'Risk Score',
-                        data: trend.map(t => t.risk_score),
-                        tension: 0.3
-                    }]
-                }
-            });
-        }
-
-        loadDashboard();
-        setInterval(loadDashboard, 10000);
-        </script>
-    </body>
-    </html>
-    """
+loadDashboard();
+setInterval(loadDashboard, 10000);
+</script>
+</body>
+</html>
+"""
 
 
 
