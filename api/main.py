@@ -26,7 +26,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="12.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="13.0.0")
 
 # -----------------------------
 # Vendor Lookup
@@ -125,20 +125,17 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
     verify_agent(db, report.agent_id, x_api_key)
 
-    current = {}
+    devices = []
+    rogue = False
+
     for d in report.devices:
-        current[d["ip"]] = {
-            "ip": d["ip"],
-            "mac": d["mac"],
-            "vendor": get_vendor(d["mac"])
-        }
+        vendor = get_vendor(d["mac"])
+        if vendor == "Unknown":
+            rogue = True
+        devices.append({"ip": d["ip"], "mac": d["mac"], "vendor": vendor})
 
-    new_devices = list(current.values())
-
-    rogue_devices = [d for d in new_devices if d["vendor"] == "Unknown"]
-
-    risk_score = 40 * len(new_devices)
-    if rogue_devices:
+    risk_score = 40 * len(devices)
+    if rogue:
         risk_score += 120
 
     if risk_score >= 120:
@@ -155,7 +152,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.add(Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
-        data=json.dumps(new_devices),
+        data=json.dumps(devices),
         timestamp=datetime.utcnow().isoformat()
     ))
 
@@ -185,7 +182,7 @@ def get_alerts():
     return alerts
 
 # -----------------------------
-# SOC Dashboard
+# SOC Dashboard with Intrusion Popup
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -199,8 +196,42 @@ body {font-family: Arial; background:#0f172a; color:white; padding:20px;}
 .ticker {overflow:hidden; white-space:nowrap; background:#020617; padding:8px;}
 .ticker span {display:inline-block; padding-left:100%; animation:ticker 18s linear infinite;}
 @keyframes ticker {0%{transform:translateX(0);}100%{transform:translateX(-100%);}}
-.critical {animation:pulse 1s infinite;}
-@keyframes pulse {0%{box-shadow:0 0 5px red;}50%{box-shadow:0 0 20px red;}100%{box-shadow:0 0 5px red;}}
+
+.overlay {
+ position:fixed;
+ top:0; left:0;
+ width:100%; height:100%;
+ background:rgba(0,0,0,0.85);
+ display:none;
+ align-items:center;
+ justify-content:center;
+ z-index:9999;
+}
+
+.alert-box {
+ background:#7f1d1d;
+ padding:40px;
+ border-radius:12px;
+ text-align:center;
+ animation:pulse 1s infinite;
+}
+
+@keyframes pulse {
+ 0%{box-shadow:0 0 10px red;}
+ 50%{box-shadow:0 0 40px red;}
+ 100%{box-shadow:0 0 10px red;}
+}
+
+button {
+ margin-top:20px;
+ padding:12px 22px;
+ font-size:16px;
+ background:#ef4444;
+ border:none;
+ color:white;
+ cursor:pointer;
+ border-radius:6px;
+}
 </style>
 </head>
 <body>
@@ -210,40 +241,54 @@ body {font-family: Arial; background:#0f172a; color:white; padding:20px;}
 <h1>🛡 HomeSecurity SOC Dashboard</h1>
 <div id="alerts"></div>
 
-<script>
-let alarmAudio = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-alert-alarm-1005.mp3");
-alarmAudio.loop = true;
+<div id="intrusionOverlay" class="overlay">
+  <div class="alert-box">
+    <h1>🚨 INTRUSION DETECTED 🚨</h1>
+    <p>CRITICAL network threat detected</p>
+    <button onclick="acknowledge()">ACKNOWLEDGE</button>
+  </div>
+</div>
 
-function color(sev){
- if(sev=="CRITICAL") return "#ef4444";
- if(sev=="HIGH") return "#f97316";
- if(sev=="MEDIUM") return "#eab308";
- if(sev=="LOW") return "#3b82f6";
- return "#22c55e";
+<script>
+let alarm = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-alert-alarm-1005.mp3");
+alarm.loop = true;
+let acknowledged = false;
+
+function showOverlay(){
+ document.getElementById("intrusionOverlay").style.display="flex";
+}
+
+function hideOverlay(){
+ document.getElementById("intrusionOverlay").style.display="none";
+}
+
+function acknowledge(){
+ acknowledged = true;
+ hideOverlay();
 }
 
 async function loadAlerts(){
  const alerts = await fetch('/alerts').then(r=>r.json());
- let criticalPresent = false;
+ let critical = false;
 
  document.getElementById("alerts").innerHTML =
  alerts.slice(0,5).map(a=>{
-   if(a.severity==="CRITICAL") criticalPresent = true;
-   const pulse = a.severity==="CRITICAL" ? "critical":"";
-   return `<div class="${pulse}" style="margin:6px;padding:8px;border-left:6px solid ${color(a.severity)};">
+   if(a.severity==="CRITICAL") critical = true;
+   return `<div style="margin:6px;padding:8px;border-left:6px solid red;">
    <b>${a.severity}</b> — Risk ${a.risk_score}</div>`;
  }).join("");
 
  document.getElementById("tickerText").innerHTML =
- alerts.slice(0,10).map(a =>
-   `${a.severity} threat detected`
- ).join(" ⚠ ");
+ alerts.slice(0,10).map(a => `${a.severity} threat detected`).join(" ⚠ ");
 
- if(criticalPresent){
-   alarmAudio.play().catch(()=>{});
+ if(critical){
+   if(!acknowledged) showOverlay();
+   alarm.play().catch(()=>{});
  } else {
-   alarmAudio.pause();
-   alarmAudio.currentTime = 0;
+   alarm.pause();
+   alarm.currentTime = 0;
+   acknowledged = false;
+   hideOverlay();
  }
 }
 
