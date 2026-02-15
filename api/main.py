@@ -26,7 +26,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="13.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="14.0.0")
 
 # -----------------------------
 # Vendor Lookup
@@ -182,7 +182,7 @@ def get_alerts():
     return alerts
 
 # -----------------------------
-# SOC Dashboard with Intrusion Popup
+# Dashboard with Heat Map
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -197,14 +197,14 @@ body {font-family: Arial; background:#0f172a; color:white; padding:20px;}
 .ticker span {display:inline-block; padding-left:100%; animation:ticker 18s linear infinite;}
 @keyframes ticker {0%{transform:translateX(0);}100%{transform:translateX(-100%);}}
 
+.heatmap {display:flex; gap:10px; margin:20px 0;}
+.cell {flex:1; height:50px; border-radius:6px;}
+
 .overlay {
- position:fixed;
- top:0; left:0;
+ position:fixed; top:0; left:0;
  width:100%; height:100%;
  background:rgba(0,0,0,0.85);
- display:none;
- align-items:center;
- justify-content:center;
+ display:none; align-items:center; justify-content:center;
  z-index:9999;
 }
 
@@ -222,78 +222,81 @@ body {font-family: Arial; background:#0f172a; color:white; padding:20px;}
  100%{box-shadow:0 0 10px red;}
 }
 
-button {
- margin-top:20px;
- padding:12px 22px;
- font-size:16px;
- background:#ef4444;
- border:none;
- color:white;
- cursor:pointer;
- border-radius:6px;
-}
+
 </style>
 </head>
 <body>
 
 <div class="ticker"><span id="tickerText">Loading...</span></div>
 
-<h1>🛡 HomeSecurity SOC Dashboard</h1>
+<h1>🛡 SOC Threat Dashboard</h1>
+
+<h3>Threat Heat Map</h3>
+<div class="heatmap">
+  <div id="low" class="cell"></div>
+  <div id="medium" class="cell"></div>
+  <div id="high" class="cell"></div>
+  <div id="critical" class="cell"></div>
+</div>
+
+<h3>Recent Alerts</h3>
 <div id="alerts"></div>
 
-<div id="intrusionOverlay" class="overlay">
+<div id="overlay" class="overlay">
   <div class="alert-box">
     <h1>🚨 INTRUSION DETECTED 🚨</h1>
-    <p>CRITICAL network threat detected</p>
-    <button onclick="acknowledge()">ACKNOWLEDGE</button>
+    <p>Critical threat detected</p>
+    <button onclick="ack()">ACKNOWLEDGE</button>
   </div>
 </div>
 
 <script>
 let alarm = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-alert-alarm-1005.mp3");
 alarm.loop = true;
-let acknowledged = false;
+let acknowledged=false;
 
-function showOverlay(){
- document.getElementById("intrusionOverlay").style.display="flex";
+function ack(){
+ acknowledged=true;
+ document.getElementById("overlay").style.display="none";
 }
 
-function hideOverlay(){
- document.getElementById("intrusionOverlay").style.display="none";
-}
-
-function acknowledge(){
- acknowledged = true;
- hideOverlay();
-}
-
-async function loadAlerts(){
+async function load(){
  const alerts = await fetch('/alerts').then(r=>r.json());
- let critical = false;
+
+ let counts={INFO:0,LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+ alerts.forEach(a=>counts[a.severity]++);
+
+ document.getElementById("low").style.background = counts.LOW ? "#22c55e":"#1e293b";
+ document.getElementById("medium").style.background = counts.MEDIUM ? "#facc15":"#1e293b";
+ document.getElementById("high").style.background = counts.HIGH ? "#fb923c":"#1e293b";
+ document.getElementById("critical").style.background = counts.CRITICAL ? "#ef4444":"#1e293b";
 
  document.getElementById("alerts").innerHTML =
- alerts.slice(0,5).map(a=>{
-   if(a.severity==="CRITICAL") critical = true;
-   return `<div style="margin:6px;padding:8px;border-left:6px solid red;">
-   <b>${a.severity}</b> — Risk ${a.risk_score}</div>`;
- }).join("");
+ alerts.slice(0,5).map(a =>
+ `<div style="margin:6px;padding:8px;border-left:6px solid ${
+   a.severity=="CRITICAL"?"red":
+   a.severity=="HIGH"?"orange":
+   a.severity=="MEDIUM"?"yellow":
+   a.severity=="LOW"?"green":"gray"
+ }">
+ <b>${a.severity}</b> — Score ${a.risk_score}
+ </div>`).join("");
 
  document.getElementById("tickerText").innerHTML =
- alerts.slice(0,10).map(a => `${a.severity} threat detected`).join(" ⚠ ");
+ alerts.slice(0,10).map(a => a.severity + " alert").join(" ⚠ ");
 
- if(critical){
-   if(!acknowledged) showOverlay();
+ if(counts.CRITICAL && !acknowledged){
+   document.getElementById("overlay").style.display="flex";
    alarm.play().catch(()=>{});
- } else {
+ } else if(!counts.CRITICAL){
    alarm.pause();
-   alarm.currentTime = 0;
-   acknowledged = false;
-   hideOverlay();
+   alarm.currentTime=0;
+   acknowledged=false;
  }
 }
 
-loadAlerts();
-setInterval(loadAlerts,5000);
+load();
+setInterval(load,5000);
 </script>
 </body>
 </html>
