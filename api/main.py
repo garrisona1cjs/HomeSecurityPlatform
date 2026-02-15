@@ -11,17 +11,17 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 from mac_vendor_lookup import MacLookup
 
-# OPTIONAL GEOIP (SAFE LOAD)
+# -----------------------------
+# Optional GeoIP Support
+# -----------------------------
 geo_reader = None
 if os.path.exists("GeoLite2-City.mmdb"):
     try:
         import geoip2.database
         geo_reader = geoip2.database.Reader("GeoLite2-City.mmdb")
-        print("✅ GeoIP database loaded")
-    except Exception as e:
-        print("GeoIP load failed:", e)
-else:
-    print("GeoLite2 database not found — map will use demo data")
+        print("✅ GeoIP loaded")
+    except:
+        print("GeoIP failed to load")
 
 # -----------------------------
 # Database
@@ -29,16 +29,18 @@ else:
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL not set")
+
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="LayerSeven Security Platform", version="10.0")
+app = FastAPI(title="LayerSeven Security Platform")
 
-# serve logo/static files
+
+
+
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # -----------------------------
@@ -108,7 +110,7 @@ def verify_agent(db, agent_id, api_key):
         raise HTTPException(status_code=401, detail="Invalid agent")
 
 # -----------------------------
-# Register Agent
+# Register
 # -----------------------------
 
 @app.post("/register")
@@ -131,7 +133,7 @@ def register(agent: AgentRegistration):
     return {"agent_id": agent_id, "api_key": api_key}
 
 # -----------------------------
-# Report Devices
+# Report
 # -----------------------------
 
 @app.post("/report")
@@ -139,91 +141,35 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
     verify_agent(db, report.agent_id, x_api_key)
 
-    last = db.query(Report).filter(
-        Report.agent_id == report.agent_id
-    ).order_by(Report.timestamp.desc()).first()
-
-    prev = {}
-    if last:
-        for d in json.loads(last.data):
-            prev[d["ip"]] = d
-
-    current = {}
+    new_devices = []
     for d in report.devices:
-        current[d["ip"]] = {
+        vendor = get_vendor(d["mac"])
+        new_devices.append({
             "ip": d["ip"],
             "mac": d["mac"],
-            "vendor": get_vendor(d["mac"])
-        }
+            "vendor": vendor
+        })
 
-    new_devices, missing_devices = [], []
-    mac_changes, vendor_changes = [], []
+    risk = len(new_devices) * 40
+    severity = "LOW"
+    if risk > 80: severity = "HIGH"
+    if risk > 120: severity = "CRITICAL"
 
-    for ip, dev in current.items():
-        if ip not in prev:
-            new_devices.append(dev)
-        else:
-            if prev[ip]["mac"] != dev["mac"]:
-                mac_changes.append(ip)
-            if prev[ip]["vendor"] != dev["vendor"]:
-                vendor_changes.append(ip)
-
-    for ip in prev:
-        if ip not in current:
-            missing_devices.append(ip)
-
-    SAFE = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon"]
-
-    rogue_devices = []
-    for d in new_devices:
-        if d["vendor"] == "Unknown":
-            rogue_devices.append({"ip": d["ip"], "reason":"Unknown vendor"})
-        elif not any(v.lower() in d["vendor"].lower() for v in SAFE):
-            rogue_devices.append({"ip": d["ip"], "vendor": d["vendor"]})
-
-    # Risk Score
-    risk = 40*len(new_devices) + 15*len(missing_devices)
-    if mac_changes: risk += 100
-    if vendor_changes: risk += 60
-    if rogue_devices: risk += 120
-
-    if risk == 0: severity="INFO"
-    elif risk < 40: severity="LOW"
-    elif risk < 80: severity="MEDIUM"
-    elif risk < 120: severity="HIGH"
-    else: severity="CRITICAL"
-
-    summary = {
-        "risk_score": risk,
-        "severity": severity,
-        "new_devices": new_devices,
-        "missing_devices": missing_devices,
-        "rogue_devices": rogue_devices
-    }
-
-    db.add(Report(
+    db.add(Alert(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
-        data=json.dumps(list(current.values())),
+        risk_score=str(risk),
+        severity=severity,
         timestamp=datetime.utcnow().isoformat()
     ))
-
-    if risk>0:
-        db.add(Alert(
-            id=str(uuid.uuid4()),
-            agent_id=report.agent_id,
-            risk_score=str(risk),
-            severity=severity,
-            timestamp=datetime.utcnow().isoformat()
-        ))
 
     db.commit()
     db.close()
 
-    return {"changes": summary}
+    return {"risk_score": risk, "severity": severity}
 
 # -----------------------------
-# Alerts API
+# Alerts
 # -----------------------------
 
 @app.get("/alerts")
@@ -234,75 +180,114 @@ def alerts():
     return a
 
 # -----------------------------
-# Geo endpoint
+# Threat Feed (Map Data)
 # -----------------------------
 
 @app.get("/threat-feed")
 def threat_feed():
-    data=[]
+
     db = SessionLocal()
-    alerts=db.query(Alert).all()
+    alerts = db.query(Alert).all()
     db.close()
-    
 
+    feed = []
 
-    for a in alerts:
-        if geo_reader:
-            try:
-                r=geo_reader.city("8.8.8.8")
-                data.append({"lat":r.location.latitude,"lon":r.location.longitude})
-            except:
-                pass
-        else:
-            data.append({"lat":37.77,"lon":-122.41})  # demo
+    for alert in alerts:
+        # Demo attack source locations (worldwide)
+        feed.append({
+            "lat": 37.77,
+            "lon": -122.41
+        })
+        feed.append({
+            "lat": 51.50,
+            "lon": -0.12
+        })
+        feed.append({
+            "lat": 35.68,
+            "lon": 139.69
+        })
+        feed.append({
+            "lat": 55.75,
+            "lon": 37.61
+        })
 
-    return data
+    return feed
 
 # -----------------------------
-# Dashboard
+# Dashboard with Animated Map
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     return """
+<!DOCTYPE html>
 <html>
 <head>
 <title>LayerSeven SOC</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+body { margin:0; background:#0f172a; color:white; font-family:Arial;}
+#map { height:500px; }
+.ticker {
+  background:#020617;
+  padding:10px;
+  font-weight:bold;
+}
+.pulse {
+  background:red;
+  border-radius:50%;
+  width:12px;
+  height:12px;
+  position:absolute;
+  animation:pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0% {transform:scale(.5); opacity:1;}
+  100% {transform:scale(3); opacity:0;}
+}
+</style>
 </head>
-<body style="background:#0f172a;color:white;font-family:Arial">
+<body>
 
-<h1>LayerSeven Security Operations Center</h1>
-
-<div id="ticker" style="background:#020617;padding:10px"></div>
-
-<h2>Recent Alerts</h2>
-<div id="alerts"></div>
-
-<h2>Threat Map</h2>
-<div id="map" style="height:300px;background:#020617"></div>
+<h1 style="padding:10px">🌐 LayerSeven Threat Map</h1>
+<div class="ticker" id="ticker">Loading alerts...</div>
+<div id="map"></div>
 
 <script>
-async function load(){
- const alerts=await fetch('/alerts').then(r=>r.json());
- const feed=await fetch('/threat-feed').then(r=>r.json());
+const map = L.map('map').setView([20,0],2);
 
- document.getElementById('ticker').innerHTML =
-   alerts.slice(0,5).map(a=>a.severity+" threat detected").join(" | ");
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap'
+}).addTo(map);
 
- document.getElementById('alerts').innerHTML =
-   alerts.slice(0,5).map(a=>{
-     let c={"LOW":"yellow","MEDIUM":"orange","HIGH":"red","CRITICAL":"magenta"}[a.severity];
-     return `<div style="color:${c}">${a.severity} — ${a.risk_score}</div>`
-   }).join("");
+let markers = [];
 
- document.getElementById('map').innerHTML =
-   feed.map(f=>`🌎 ${f.lat}, ${f.lon}`).join("<br>");
+async function loadFeed(){
+    const alerts = await fetch('/alerts').then(r=>r.json());
+    const feed = await fetch('/threat-feed').then(r=>r.json());
+
+    document.getElementById("ticker").innerHTML =
+        alerts.slice(0,5).map(a => a.severity + " threat detected").join(" | ");
+
+    markers.forEach(m=>map.removeLayer(m));
+    markers = [];
+
+    feed.forEach(p=>{
+        const marker = L.circleMarker([p.lat, p.lon], {
+            radius:8,
+            color:"red",
+            fillOpacity:0.7
+        }).addTo(map);
+
+        markers.push(marker);
+    });
 }
 
-load();
-setInterval(load,5000);
+loadFeed();
+setInterval(loadFeed, 5000);
 </script>
 
 </body>
