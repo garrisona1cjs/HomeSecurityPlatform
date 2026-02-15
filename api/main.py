@@ -21,7 +21,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable not set")
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=300
+)
+
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
@@ -36,7 +41,6 @@ try:
     mac_lookup.update_vendors()
 except:
     pass
-
 
 def get_vendor(mac):
     try:
@@ -61,21 +65,19 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id = Column(String, primary_key=True, index=True)
-    agent_id = Column(String)
+    agent_id = Column(String, index=True)
     risk_score = Column(String)
     severity = Column(String)
-
-    timestamp = Column(String)
+    timestamp = Column(String, index=True)
 
 
 class Report(Base):
     __tablename__ = "reports"
 
     id = Column(String, primary_key=True, index=True)
-    agent_id = Column(String)
+    agent_id = Column(String, index=True)
     data = Column(Text)
-    timestamp = Column(String)
-
+    timestamp = Column(String, index=True)
 
 
 Base.metadata.create_all(bind=engine)
@@ -93,7 +95,6 @@ class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
 
-
 # -----------------------------
 # Auth
 # -----------------------------
@@ -104,13 +105,9 @@ def verify_agent(db, agent_id: str, x_api_key: str):
         raise HTTPException(status_code=401, detail="Invalid agent")
     return agent
 
-
 # -----------------------------
 # Register Agent
 # -----------------------------
-
-
-
 
 @app.post("/register")
 def register_agent(agent: AgentRegistration):
@@ -145,7 +142,6 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
 
     verify_agent(db, report.agent_id, x_api_key)
-
 
     last_report = (
         db.query(Report)
@@ -226,7 +222,6 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "vendor_changes": vendor_changes
     }
 
-
     new_report = Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
@@ -267,11 +262,126 @@ def get_alerts():
     alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
     db.close()
 
+    return [
+        {
+            "agent_id": a.agent_id,
+            "risk_score": a.risk_score,
+            "severity": a.severity,
+            "timestamp": a.timestamp
+        }
+        for a in alerts
+    ]
+
+# =============================
+# ANALYTICS ENDPOINTS
+# =============================
+
+@app.get("/analytics/summary")
+def analytics_summary():
+    db = SessionLocal()
+
+    total_agents = db.query(Agent).count()
+    total_alerts = db.query(Alert).count()
+    total_reports = db.query(Report).count()
+
+    severity_counts = {"INFO":0,"LOW":0,"MEDIUM":0,"HIGH":0,"CRITICAL":0}
+
+    alerts = db.query(Alert).all()
+    for alert in alerts:
+        if alert.severity in severity_counts:
+            severity_counts[alert.severity] += 1
+
+    db.close()
+
+    return {
+        "total_agents": total_agents,
+        "total_reports": total_reports,
+        "total_alerts": total_alerts,
+        "severity_breakdown": severity_counts
+    }
 
 
+@app.get("/analytics/agent-health")
+def agent_health():
+    db = SessionLocal()
+
+    agents = db.query(Agent).all()
+    health = []
+
+    for agent in agents:
+        last_report = (
+            db.query(Report)
+            .filter(Report.agent_id == agent.agent_id)
+            .order_by(Report.timestamp.desc())
+            .first()
+        )
+
+        status = "offline"
+
+        if last_report:
+            last_seen = datetime.fromisoformat(last_report.timestamp)
+            minutes = (datetime.utcnow() - last_seen).total_seconds() / 60
+
+            if minutes < 5:
+                status = "online"
+            elif minutes < 60:
+                status = "idle"
+
+        health.append({
+            "agent_id": agent.agent_id,
+            "hostname": agent.hostname,
+            "ip": agent.ip_address,
+            "status": status,
+            "last_seen": last_report.timestamp if last_report else None
+        })
+
+    db.close()
+    return health
 
 
-    return alerts
+@app.get("/analytics/risk-trend/{hours}")
+def risk_trend(hours: int):
+    db = SessionLocal()
+
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    alerts = db.query(Alert).all()
+
+    trend = []
+
+    for alert in alerts:
+        alert_time = datetime.fromisoformat(alert.timestamp)
+        if alert_time >= cutoff:
+            trend.append({
+                "time": alert.timestamp,
+                "risk_score": alert.risk_score,
+                "severity": alert.severity
+            })
+
+    db.close()
+    return trend
+
+
+@app.get("/analytics/top-risk-agents")
+def top_risk_agents():
+    db = SessionLocal()
+
+    alerts = db.query(Alert).all()
+    risk_totals = {}
+
+    for alert in alerts:
+        risk_totals.setdefault(alert.agent_id, 0)
+        risk_totals[alert.agent_id] += int(alert.risk_score)
+
+    db.close()
+
+    sorted_agents = sorted(
+        risk_totals.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    return [{"agent_id": aid, "total_risk": score} for aid, score in sorted_agents]
+
 
 
 
