@@ -10,31 +10,39 @@ import json
 from sqlalchemy import create_engine, Column, String, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+from mac_vendor_lookup import MacLookup
+
 # -----------------------------
-# Database Setup (Render Ready)
+# Database Setup
 # -----------------------------
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable is not set")
+    raise RuntimeError("DATABASE_URL environment variable not set")
 
-# Force SSL if not already present (Render requires it)
-if "sslmode" not in DATABASE_URL:
-    DATABASE_URL += "?sslmode=require"
-
-print("✅ DATABASE_URL loaded")
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=300,
-)
-
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="6.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="7.0.0")
+
+# -----------------------------
+# Vendor Lookup Setup
+# -----------------------------
+
+mac_lookup = MacLookup()
+try:
+    mac_lookup.update_vendors()
+except:
+    pass
+
+
+def get_vendor(mac):
+    try:
+        return mac_lookup.lookup(mac)
+    except Exception:
+        return "Unknown"
 
 # -----------------------------
 # Database Models
@@ -69,7 +77,7 @@ class Report(Base):
     timestamp = Column(String)
 
 
-# Create tables safely
+
 Base.metadata.create_all(bind=engine)
 
 # -----------------------------
@@ -98,12 +106,10 @@ def verify_agent(db, agent_id: str, x_api_key: str):
 
 
 # -----------------------------
-# Endpoints
+# Register Agent
 # -----------------------------
 
-@app.get("/")
-def root():
-    return {"status": "HomeSecurityPlatform running"}
+
 
 
 @app.post("/register")
@@ -130,13 +136,15 @@ def register_agent(agent: AgentRegistration):
         "message": "Agent registered successfully"
     }
 
+# -----------------------------
+# Report Devices
+# -----------------------------
 
 @app.post("/report")
 def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
 
     verify_agent(db, report.agent_id, x_api_key)
-
 
 
     last_report = (
@@ -149,44 +157,54 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     previous_devices = {}
     if last_report:
         previous_data = json.loads(last_report.data)
-        previous_devices = {d["ip"]: d["mac"] for d in previous_data}
+        previous_devices = {
+            d["ip"]: {
+                "mac": d["mac"],
+                "vendor": d.get("vendor", "Unknown")
+            }
+            for d in previous_data
+        }
 
-    current_devices = {d["ip"]: d["mac"] for d in report.devices}
+    current_devices = {}
+    for d in report.devices:
+        vendor = get_vendor(d["mac"])
+        current_devices[d["ip"]] = {
+            "mac": d["mac"],
+            "vendor": vendor
+        }
 
     new_devices = []
     missing_devices = []
     mac_changes = []
+    vendor_changes = []
 
-
-    for ip, mac in current_devices.items():
+    for ip, data in current_devices.items():
         if ip not in previous_devices:
-            new_devices.append({"ip": ip, "mac": mac})
-        elif previous_devices[ip] != mac:
-            mac_changes.append({
-                "ip": ip,
-                "old_mac": previous_devices[ip],
-                "new_mac": mac
-            })
+            new_devices.append({"ip": ip, **data})
+        else:
+            if previous_devices[ip]["mac"] != data["mac"]:
+                mac_changes.append({"ip": ip})
+            if previous_devices[ip]["vendor"] != data["vendor"]:
+                vendor_changes.append({
+                    "ip": ip,
+                    "old_vendor": previous_devices[ip]["vendor"],
+                    "new_vendor": data["vendor"]
+                })
 
-
-    for ip, mac in previous_devices.items():
+    for ip in previous_devices:
         if ip not in current_devices:
-            missing_devices.append({"ip": ip, "mac": mac})
+            missing_devices.append({"ip": ip})
 
-
-
+    # Risk scoring
     risk_score = 0
-
+    risk_score += 40 * len(new_devices)
+    risk_score += 15 * len(missing_devices)
 
     if mac_changes:
         risk_score += 100
 
-
-    risk_score += 40 * len(new_devices)
-
-
-    risk_score += 15 * len(missing_devices)
-
+    if vendor_changes:
+        risk_score += 60
 
     if risk_score == 0:
         severity = "INFO"
@@ -204,28 +222,32 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "severity": severity,
         "new_devices": new_devices,
         "missing_devices": missing_devices,
-        "mac_changes": mac_changes
+        "mac_changes": mac_changes,
+        "vendor_changes": vendor_changes
     }
-    
+
 
     new_report = Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
-        data=json.dumps(report.devices),
+        data=json.dumps([
+            {"ip": ip, "mac": data["mac"], "vendor": data["vendor"]}
+            for ip, data in current_devices.items()
+        ]),
         timestamp=datetime.utcnow().isoformat()
     )
 
     db.add(new_report)
 
-    new_alert = Alert(
-        id=str(uuid.uuid4()),
-        agent_id=report.agent_id,
-        risk_score=str(risk_score),
-        severity=severity,
-        timestamp=datetime.utcnow().isoformat()
-    )
-
-    db.add(new_alert)
+    if risk_score > 0:
+        new_alert = Alert(
+            id=str(uuid.uuid4()),
+            agent_id=report.agent_id,
+            risk_score=str(risk_score),
+            severity=severity,
+            timestamp=datetime.utcnow().isoformat()
+        )
+        db.add(new_alert)
 
     db.commit()
     db.close()
@@ -235,34 +257,21 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "changes": change_summary
     }
 
-
+# -----------------------------
+# Alerts
+# -----------------------------
 
 @app.get("/alerts")
 def get_alerts():
     db = SessionLocal()
     alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
     db.close()
+
+
+
+
+
     return alerts
-
-
-@app.get("/alerts/{agent_id}")
-def get_agent_alerts(agent_id: str):
-    db = SessionLocal()
-    alerts = db.query(Alert).filter(Alert.agent_id == agent_id).all()
-    db.close()
-    return alerts
-
-
-# -----------------------------
-# ADMIN RESET ROUTE
-# -----------------------------
-
-@app.get("/admin/reset-alerts")
-def reset_alerts():
-    Alert.__table__.drop(engine, checkfirst=True)
-    Alert.__table__.create(engine, checkfirst=True)
-    return {"message": "Alerts table reset"}
-
 
 
 
