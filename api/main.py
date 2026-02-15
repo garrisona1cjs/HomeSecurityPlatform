@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List
@@ -13,6 +13,7 @@ from sqlalchemy import create_engine, Column, String, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from mac_vendor_lookup import MacLookup
+import geoip2.database
 
 # =============================
 # DATABASE
@@ -21,16 +22,13 @@ from mac_vendor_lookup import MacLookup
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable not set")
+    raise RuntimeError("DATABASE_URL not set")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="LayerSeven Security API", version="9.0.0")
-
-# serve logo/static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app = FastAPI(title="LayerSeven SOC API", version="10.0")
 
 # =============================
 # VENDOR LOOKUP
@@ -50,19 +48,41 @@ def get_vendor(mac):
         return "Unknown"
 
 # =============================
-# DATABASE MODELS
+# GEO LOCATION
+# =============================
+
+geo_reader = None
+if os.path.exists("GeoLite2-City.mmdb"):
+    geo_reader = geoip2.database.Reader("GeoLite2-City.mmdb")
+
+def get_location(ip):
+    if not geo_reader:
+        return None
+    try:
+        r = geo_reader.city(ip)
+        return {
+            "lat": r.location.latitude,
+            "lon": r.location.longitude,
+            "city": r.city.name,
+            "country": r.country.name
+        }
+    except:
+        return None
+
+# =============================
+# MODELS
 # =============================
 
 class Agent(Base):
     __tablename__ = "agents"
-    agent_id = Column(String, primary_key=True, index=True)
+    agent_id = Column(String, primary_key=True)
     hostname = Column(String)
     ip_address = Column(String)
     api_key = Column(String)
 
 class Alert(Base):
     __tablename__ = "alerts"
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     agent_id = Column(String)
     risk_score = Column(String)
     severity = Column(String)
@@ -70,7 +90,7 @@ class Alert(Base):
 
 class Report(Base):
     __tablename__ = "reports"
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
     agent_id = Column(String)
     data = Column(Text)
     timestamp = Column(String)
@@ -93,17 +113,17 @@ class DeviceReport(BaseModel):
 # AUTH
 # =============================
 
-def verify_agent(db, agent_id: str, api_key: str):
+def verify_agent(db, agent_id, api_key):
     agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
     if not agent or agent.api_key != api_key:
         raise HTTPException(status_code=401, detail="Invalid agent")
 
 # =============================
-# REGISTER AGENT
+# REGISTER
 # =============================
 
 @app.post("/register")
-def register_agent(agent: AgentRegistration):
+def register(agent: AgentRegistration):
     db = SessionLocal()
 
     agent_id = str(uuid.uuid4())
@@ -119,111 +139,81 @@ def register_agent(agent: AgentRegistration):
     db.commit()
     db.close()
 
-    return {
-        "agent_id": agent_id,
-        "api_key": api_key,
-        "message": "Agent registered successfully"
-    }
+    return {"agent_id": agent_id, "api_key": api_key}
 
 # =============================
-# REPORT DEVICES
+# REPORT
 # =============================
 
 @app.post("/report")
-def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
+def report(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
     verify_agent(db, report.agent_id, x_api_key)
 
-    last_report = db.query(Report).filter(
+    last = db.query(Report).filter(
         Report.agent_id == report.agent_id
     ).order_by(Report.timestamp.desc()).first()
 
-    previous_devices = {}
-    if last_report:
-        for d in json.loads(last_report.data):
-            previous_devices[d["ip"]] = d
+    prev = {}
+    if last:
+        for d in json.loads(last.data):
+            prev[d["ip"]] = d
 
-    current_devices = {}
-
+    current = {}
     for d in report.devices:
-        vendor = get_vendor(d["mac"])
-        current_devices[d["ip"]] = {
+        current[d["ip"]] = {
             "ip": d["ip"],
             "mac": d["mac"],
-            "vendor": vendor
+            "vendor": get_vendor(d["mac"])
         }
 
     new_devices = []
-    missing_devices = []
+    missing = []
     mac_changes = []
-    vendor_changes = []
 
-    for ip, data in current_devices.items():
-        if ip not in previous_devices:
+
+    for ip, data in current.items():
+        if ip not in prev:
             new_devices.append(data)
-        else:
-            if previous_devices[ip]["mac"] != data["mac"]:
-                mac_changes.append(ip)
-            if previous_devices[ip]["vendor"] != data["vendor"]:
-                vendor_changes.append(ip)
+        elif prev[ip]["mac"] != data["mac"]:
+            mac_changes.append(ip)
 
-    for ip in previous_devices:
-        if ip not in current_devices:
-            missing_devices.append(ip)
+    for ip in prev:
+        if ip not in current:
+            missing.append(ip)
 
-    # Rogue detection
-    SAFE_VENDORS = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
-    rogue_devices = []
+    SAFE = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
 
+    rogue = []
     for d in new_devices:
-        vendor = d["vendor"]
-        if vendor == "Unknown":
-            rogue_devices.append({"ip": d["ip"], "reason": "Unknown vendor"})
-        elif not any(v.lower() in vendor.lower() for v in SAFE_VENDORS):
-            rogue_devices.append({"ip": d["ip"], "vendor": vendor, "reason": "Unrecognized vendor"})
+        v = d["vendor"]
+        if v == "Unknown":
+            rogue.append({"ip": d["ip"], "reason": "Unknown vendor"})
+        elif not any(s.lower() in v.lower() for s in SAFE):
+            rogue.append({"ip": d["ip"], "vendor": v})
 
-    # Risk scoring
-    risk_score = (
-        40 * len(new_devices) +
-        15 * len(missing_devices) +
-        (100 if mac_changes else 0) +
-        (60 if vendor_changes else 0) +
-        (120 if rogue_devices else 0)
-    )
+    risk = 40*len(new_devices) + 15*len(missing)
+    if mac_changes: risk += 100
+    if rogue: risk += 120
 
-    if risk_score == 0:
-        severity = "INFO"
-    elif risk_score < 40:
-        severity = "LOW"
-    elif risk_score < 80:
-        severity = "MEDIUM"
-    elif risk_score < 120:
-        severity = "HIGH"
-    else:
-        severity = "CRITICAL"
-
-    summary = {
-        "risk_score": risk_score,
-        "severity": severity,
-        "new_devices": new_devices,
-        "missing_devices": missing_devices,
-        "mac_changes": mac_changes,
-        "vendor_changes": vendor_changes,
-        "rogue_devices": rogue_devices
-    }
+    if risk == 0: severity="INFO"
+    elif risk < 40: severity="LOW"
+    elif risk < 80: severity="MEDIUM"
+    elif risk < 120: severity="HIGH"
+    else: severity="CRITICAL"
 
     db.add(Report(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
-        data=json.dumps(list(current_devices.values())),
+        data=json.dumps(list(current.values())),
         timestamp=datetime.utcnow().isoformat()
     ))
 
-    if risk_score > 0:
+    if risk>0:
         db.add(Alert(
             id=str(uuid.uuid4()),
             agent_id=report.agent_id,
-            risk_score=str(risk_score),
+            risk_score=str(risk),
             severity=severity,
             timestamp=datetime.utcnow().isoformat()
         ))
@@ -231,45 +221,42 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.commit()
     db.close()
 
-    return {"message": "Report stored successfully", "changes": summary}
+    return {"risk": risk, "severity": severity, "rogue_devices": rogue}
 
 # =============================
-# ALERTS API
+# ALERTS
 # =============================
 
 @app.get("/alerts")
-def get_alerts():
+def alerts():
     db = SessionLocal()
-    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
-    db.close()
-    return alerts
-
-@app.get("/analytics/summary")
-def analytics_summary():
-    db = SessionLocal()
-    data = {
-        "total_agents": db.query(Agent).count(),
-        "total_reports": db.query(Report).count(),
-        "total_alerts": db.query(Alert).count()
-    }
+    data = db.query(Alert).order_by(Alert.timestamp.desc()).all()
     db.close()
     return data
 
-@app.get("/analytics/risk-trend/{hours}")
-def risk_trend(hours: int):
+@app.get("/alerts/map")
+def alert_map():
     db = SessionLocal()
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
-    alerts = db.query(Alert).all()
+    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).limit(20).all()
     db.close()
 
-    return [
-        {"time": a.timestamp, "risk_score": int(a.risk_score)}
-        for a in alerts
-        if datetime.fromisoformat(a.timestamp) >= cutoff
-    ]
+    results = []
+
+    for a in alerts:
+        loc = get_location("8.8.8.8")
+        if loc:
+            results.append({
+                "lat": loc["lat"],
+                "lon": loc["lon"],
+                "severity": a.severity,
+                "risk": a.risk_score,
+                "city": loc["city"],
+                "country": loc["country"]
+            })
+    return results
 
 # =============================
-# SOC DASHBOARD
+# DASHBOARD
 # =============================
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -277,75 +264,65 @@ def dashboard():
     return """
 <html>
 <head>
-<title>LayerSeven Dashboard</title>
+<title>LayerSeven SOC</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </head>
+<body style="background:#0f172a;color:white;font-family:Arial;padding:20px;">
 
-<body style="background:#0f172a;color:white;font-family:Arial;padding:20px">
+<h1>🛡 LayerSeven SOC Dashboard</h1>
 
-<img src="/static/logo.png" height="60">
-
-<h1>🛡 LayerSeven Security Dashboard</h1>
-
-<div id="ticker" style="background:black;padding:10px;margin-bottom:20px"></div>
-
-<h2>System Summary</h2>
-<div id="summary">Loading...</div>
+<h2>🌍 Live Threat Map</h2>
+<div id="map" style="height:400px;margin-bottom:30px;"></div>
 
 <h2>Recent Alerts</h2>
 <div id="alerts"></div>
 
-<h2>Risk Trend</h2>
-<canvas id="riskChart"></canvas>
+
 
 <script>
-function severityColor(level){
-    if(level=="CRITICAL") return "red";
-    if(level=="HIGH") return "orange";
-    if(level=="MEDIUM") return "yellow";
-    if(level=="LOW") return "cyan";
-    return "white";
+let map = L.map('map').setView([20,0],2);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+let markers=[];
+
+async function loadMap(){
+ const data=await fetch('/alerts/map').then(r=>r.json());
+ markers.forEach(m=>map.removeLayer(m));
+ markers=[];
+ data.forEach(a=>{
+  const color=
+   a.severity==="CRITICAL"?"red":
+   a.severity==="HIGH"?"orange":
+   a.severity==="MEDIUM"?"yellow":
+   a.severity==="LOW"?"cyan":"white";
+
+  const m=L.circleMarker([a.lat,a.lon],{radius:12,color:color}).addTo(map);
+  m.bindPopup(a.city+", "+a.country+"<br>"+a.severity+" risk:"+a.risk);
+
+  let size=12;
+  setInterval(()=>{size=size==12?18:12;m.setRadius(size)},700);
+  markers.push(m);
+ });
 }
 
-async function load(){
-    const summary = await fetch('/analytics/summary').then(r=>r.json());
-    const alerts = await fetch('/alerts').then(r=>r.json());
-    const trend = await fetch('/analytics/risk-trend/24').then(r=>r.json());
-
-    document.getElementById("summary").innerHTML =
-        "Agents: "+summary.total_agents+
-        "<br>Reports: "+summary.total_reports+
-        "<br>Alerts: "+summary.total_alerts;
-
-    document.getElementById("alerts").innerHTML =
-        alerts.slice(0,5).map(a =>
-            `<div style="color:${severityColor(a.severity)}">
-                ${a.severity} — Score ${a.risk_score}
-            </div>`
-        ).join("");
-
-    document.getElementById("ticker").innerHTML =
-        alerts.slice(0,5).map(a =>
-            `<span style="margin-right:30px;color:${severityColor(a.severity)}">
-            ⚠ ${a.severity} (${a.risk_score})
-            </span>`
-        ).join("");
-
-    const ctx = document.getElementById('riskChart').getContext('2d');
-    new Chart(ctx,{
-        type:'line',
-        data:{
-            labels:trend.map(t=>new Date(t.time).toLocaleTimeString()),
-            datasets:[{label:'Risk',data:trend.map(t=>t.risk_score)}]
-        }
-    });
+async function loadAlerts(){
+ const alerts=await fetch('/alerts').then(r=>r.json());
+ document.getElementById("alerts").innerHTML=
+  alerts.slice(0,5).map(a=>a.severity+" risk:"+a.risk_score).join("<br>");
 }
 
-load();
-setInterval(load,10000);
-</script>
+function refresh(){
+ loadMap();
+ loadAlerts();
+}
 
+refresh();
+setInterval(refresh,10000);
+</script
+>
 </body>
 </html>
 """
