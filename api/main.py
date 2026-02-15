@@ -26,7 +26,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="10.0")
+app = FastAPI(title="HomeSecurity Platform API", version="11.0")
 
 # =============================
 # VENDOR LOOKUP
@@ -116,10 +116,7 @@ def register_agent(agent: AgentRegistration):
     db.commit()
     db.close()
 
-    return {
-        "agent_id": agent_id,
-        "api_key": api_key
-    }
+    return {"agent_id": agent_id, "api_key": api_key}
 
 # =============================
 # REPORT DEVICES
@@ -154,65 +151,39 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     new_devices = []
     missing_devices = []
-    mac_changes = []
-    vendor_changes = []
+
 
     for ip, data in current_devices.items():
         if ip not in previous_devices:
             new_devices.append(data)
-        else:
-            if previous_devices[ip]["mac"] != data["mac"]:
-                mac_changes.append(ip)
-            if previous_devices[ip]["vendor"] != data["vendor"]:
-                vendor_changes.append(ip)
+
 
     for ip in previous_devices:
         if ip not in current_devices:
             missing_devices.append(ip)
+            
 
-    # Rogue device detection
     SAFE = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
     rogue_devices = []
 
     for d in new_devices:
         vendor = d["vendor"]
-        if vendor == "Unknown":
-            rogue_devices.append({"ip": d["ip"], "reason": "Unknown vendor"})
-        elif not any(s.lower() in vendor.lower() for s in SAFE):
-            rogue_devices.append({"ip": d["ip"], "vendor": vendor})
+        if vendor == "Unknown" or not any(s.lower() in vendor.lower() for s in SAFE):
+            rogue_devices.append(d)
 
-    # Risk scoring
-    risk_score = 0
-    risk_score += 40 * len(new_devices)
-    risk_score += 15 * len(missing_devices)
-
-    if mac_changes:
-        risk_score += 100
-    if vendor_changes:
-        risk_score += 60
+    risk_score = 40 * len(new_devices) + 15 * len(missing_devices)
     if rogue_devices:
         risk_score += 120
 
-    if risk_score == 0:
-        severity = "INFO"
-    elif risk_score < 40:
-        severity = "LOW"
-    elif risk_score < 80:
-        severity = "MEDIUM"
-    elif risk_score < 120:
-        severity = "HIGH"
-    else:
+    severity = "INFO"
+    if risk_score >= 120:
         severity = "CRITICAL"
-
-    summary = {
-        "risk_score": risk_score,
-        "severity": severity,
-        "new_devices": new_devices,
-        "missing_devices": missing_devices,
-        "mac_changes": mac_changes,
-        "vendor_changes": vendor_changes,
-        "rogue_devices": rogue_devices
-    }
+    elif risk_score >= 80:
+        severity = "HIGH"
+    elif risk_score >= 40:
+        severity = "MEDIUM"
+    elif risk_score > 0:
+        severity = "LOW"
 
     db.add(Report(
         id=str(uuid.uuid4()),
@@ -233,40 +204,10 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.commit()
     db.close()
 
-    return {"message": "Report stored", "changes": summary}
+    return {"risk_score": risk_score, "severity": severity}
 
 # =============================
-# ALERTS API
-# =============================
-
-@app.get("/alerts")
-def get_alerts():
-    db = SessionLocal()
-    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
-    db.close()
-    return alerts
-
-# =============================
-# RISK TREND
-# =============================
-
-@app.get("/analytics/risk-trend/{hours}")
-def risk_trend(hours: int):
-    db = SessionLocal()
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
-    alerts = db.query(Alert).all()
-
-    trend = [
-        {"time": a.timestamp, "risk_score": int(a.risk_score)}
-        for a in alerts
-        if datetime.fromisoformat(a.timestamp) >= cutoff
-    ]
-
-    db.close()
-    return trend
-
-# =============================
-# NETWORK MAP DATA
+# NETWORK DATA
 # =============================
 
 @app.get("/network")
@@ -276,23 +217,22 @@ def network_data():
     db.close()
 
     nodes = {}
-    edges = []
+
 
     for r in reports:
         devices = json.loads(r.data)
         for d in devices:
             ip = d["ip"]
-            vendor = d.get("vendor", "Unknown")
+            vendor = d.get("vendor","Unknown")
 
-            if ip not in nodes:
-                nodes[ip] = {
-                    "id": ip,
-                    "label": ip,
-                    "title": vendor,
-                    "color": "#ef4444" if vendor == "Unknown" else "#3b82f6"
-                }
+            nodes[ip] = {
+                "id": ip,
+                "label": ip,
+                "vendor": vendor,
+                "color": "#ef4444" if vendor == "Unknown" else "#3b82f6"
+            }
 
-    return {"nodes": list(nodes.values()), "edges": edges}
+    return {"nodes": list(nodes.values()), "edges": []}
 
 # =============================
 # DASHBOARD
@@ -303,78 +243,66 @@ def dashboard():
     return """
 <html>
 <head>
-<title>HomeSecurity SOC</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>SOC Dashboard</title>
 <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 <style>
-body {background:#0f172a;color:white;font-family:Arial;padding:20px}
-.ticker {overflow:hidden;white-space:nowrap;background:#111;padding:10px;margin-bottom:20px}
-.ticker span {display:inline-block;padding-left:100%;animation:ticker 20s linear infinite}
-@keyframes ticker {0%{transform:translateX(0)}100%{transform:translateX(-100%)}}
+body{background:#0f172a;color:white;font-family:Arial;padding:20px}
+#network{height:420px;background:#111;margin-top:20px}
+.panel{background:#111;padding:15px;margin-top:20px;border-radius:8px}
 </style>
 </head>
 <body>
 
-<h1>🛡 HomeSecurity SOC Dashboard</h1>
+<h1>🛡 SOC Network Map</h1>
 
-<div class="ticker"><span id="ticker">Loading alerts...</span></div>
+<div id="network"></div>
 
-<h2>Recent Alerts</h2>
-<div id="alerts"></div>
-
-<h2>Risk Trend</h2>
-<canvas id="riskChart" width="600" height="200"></canvas>
-
-<h2>Network Map</h2>
-<div id="network" style="height:400px;background:#111;"></div>
+<div class="panel" id="details">
+Click a device to view intelligence.
+</div>
 
 <script>
-function severityColor(s){
- if(s==="INFO") return "#22c55e";
- if(s==="LOW") return "#3b82f6";
- if(s==="MEDIUM") return "#eab308";
- if(s==="HIGH") return "#f97316";
- if(s==="CRITICAL") return "#ef4444";
- return "white";
-}
-
-async function load(){
- const alerts=await fetch('/alerts').then(r=>r.json());
- const trend=await fetch('/analytics/risk-trend/24').then(r=>r.json());
- const network=await fetch('/network').then(r=>r.json());
-
- document.getElementById("ticker").innerHTML =
-   alerts.slice(0,10).map(a =>
-     `${a.severity} threat detected (score ${a.risk_score})`
-   ).join(" ⚠️ ");
-
- document.getElementById("alerts").innerHTML =
- alerts.slice(0,5).map(a =>
- `<div style="margin:6px;padding:8px;border-left:6px solid ${severityColor(a.severity)};
- background:${severityColor(a.severity)}20;">
- <b>${a.severity}</b> — Score ${a.risk_score}
- </div>`).join("");
-
- new Chart(document.getElementById('riskChart'),{
-  type:'line',
-  data:{labels:trend.map(t=>new Date(t.time).toLocaleTimeString()),
-  datasets:[{label:'Risk',data:trend.map(t=>t.risk_score),tension:.3}]}
- });
+async function loadNetwork(){
+ const res = await fetch('/network');
+ const net = await res.json();
 
  const container=document.getElementById('network');
- const data={nodes:new vis.DataSet(network.nodes),edges:new vis.DataSet(network.edges)};
- const net=new vis.Network(container,data,{physics:false});
+ const data={
+  nodes:new vis.DataSet(net.nodes),
+  edges:new vis.DataSet(net.edges)
+ };
 
+ const network=new vis.Network(container,data,{physics:false});
+
+ network.on("click", function(params){
+   if(params.nodes.length > 0){
+     const nodeId=params.nodes[0];
+     const node=data.nodes.get(nodeId);
+
+     const threat = node.color === "#ef4444"
+       ? "<span style='color:#ef4444;font-weight:bold'>⚠ THREAT DETECTED</span>"
+       : "<span style='color:#22c55e'>Normal Device</span>";
+
+     document.getElementById("details").innerHTML =
+       "<h2>Device Intelligence</h2>" +
+       "<b>IP:</b> " + node.id + "<br>" +
+       "<b>Vendor:</b> " + node.vendor + "<br>" +
+       "<b>Status:</b> " + threat;
+   }
+ });
+
+ // pulse rogue nodes
  setInterval(()=>{
-  data.nodes.forEach(n=>{
-    if(n.color==="#ef4444"){n.size=n.size===18?26:18;}
-  });
-  net.setData(data);
+   data.nodes.forEach(n=>{
+     if(n.color==="#ef4444"){
+        n.size = n.size===18 ? 26 : 18;
+     }
+   });
+   network.setData(data);
  },800);
 }
 
-load();
-setInterval(load,10000);
+loadNetwork();
 </script>
 
 </body>
