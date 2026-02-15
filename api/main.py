@@ -26,7 +26,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="8.0.0")
+app = FastAPI(title="HomeSecurity Platform API", version="9.0.0")
 
 # -----------------------------
 # Vendor Lookup
@@ -65,6 +65,7 @@ class Alert(Base):
     risk_score = Column(String)
     severity = Column(String)
     timestamp = Column(String)
+
 
 class Report(Base):
     __tablename__ = "reports"
@@ -117,7 +118,6 @@ def register_agent(agent: AgentRegistration):
         api_key=api_key
     ))
 
-
     db.commit()
     db.close()
 
@@ -136,7 +136,6 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
 
     verify_agent(db, report.agent_id, x_api_key)
-
 
     last_report = (
         db.query(Report)
@@ -178,45 +177,28 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         if ip not in current_devices:
             missing_devices.append(ip)
 
-    # -----------------------------
     # Rogue Device Detection
-    # -----------------------------
-
-    SAFE_VENDORS = [
-        "Apple","Samsung","Intel","Dell","HP",
-        "Cisco","Microsoft","Google","Amazon","Raspberry"
-    ]
+    SAFE_VENDORS = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
 
     rogue_devices = []
-
     for d in new_devices:
         vendor = d["vendor"]
         if vendor == "Unknown":
             rogue_devices.append({"ip": d["ip"], "reason": "Unknown vendor"})
         elif not any(v.lower() in vendor.lower() for v in SAFE_VENDORS):
-            rogue_devices.append({
-                "ip": d["ip"],
-                "vendor": vendor,
-                "reason": "Unrecognized vendor"
-            })
+            rogue_devices.append({"ip": d["ip"], "vendor": vendor, "reason": "Unrecognized vendor"})
 
-    # -----------------------------
     # Risk Scoring
-    # -----------------------------
-
     risk_score = 0
     risk_score += 40 * len(new_devices)
     risk_score += 15 * len(missing_devices)
 
     if mac_changes:
         risk_score += 100
-
     if vendor_changes:
         risk_score += 60
-
     if rogue_devices:
         risk_score += 120
-
 
     if risk_score == 0:
         severity = "INFO"
@@ -246,7 +228,9 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         timestamp=datetime.utcnow().isoformat()
     ))
 
-    # Alert suppression
+    # Alert Suppression
+    SUPPRESSION_MINUTES = 10
+
     latest_alert = (
         db.query(Alert)
         .filter(Alert.agent_id == report.agent_id)
@@ -260,11 +244,9 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         last_time = datetime.fromisoformat(latest_alert.timestamp)
         now = datetime.utcnow()
 
-        if (
-            (now - last_time).total_seconds() < 600 and
-            latest_alert.risk_score == str(risk_score) and
-            latest_alert.severity == severity
-        ):
+        if (now - last_time).total_seconds() < SUPPRESSION_MINUTES * 60 \
+           and latest_alert.risk_score == str(risk_score) \
+           and latest_alert.severity == severity:
             store_alert = False
 
     if store_alert and risk_score > 0:
@@ -299,23 +281,27 @@ def get_alerts():
 @app.get("/analytics/summary")
 def analytics_summary():
     db = SessionLocal()
-    
-    return {
+    summary = {
         "total_agents": db.query(Agent).count(),
         "total_reports": db.query(Report).count(),
         "total_alerts": db.query(Alert).count()
     }
+    db.close()
+    return summary
+
 
 @app.get("/analytics/risk-trend/{hours}")
 def risk_trend(hours: int):
     db = SessionLocal()
+
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     alerts = db.query(Alert).all()
 
     trend = []
+
     for alert in alerts:
-        t = datetime.fromisoformat(alert.timestamp)
-        if t >= cutoff:
+        alert_time = datetime.fromisoformat(alert.timestamp)
+        if alert_time >= cutoff:
             trend.append({
                 "time": alert.timestamp,
                 "risk_score": int(alert.risk_score)
@@ -349,6 +335,17 @@ def dashboard():
         <canvas id="riskChart" width="600" height="200"></canvas>
 
         <script>
+        function severityColor(severity) {
+            switch(severity) {
+                case "INFO": return "#22c55e";
+                case "LOW": return "#3b82f6";
+                case "MEDIUM": return "#eab308";
+                case "HIGH": return "#f97316";
+                case "CRITICAL": return "#ef4444";
+                default: return "white";
+            }
+        }
+
         async function loadDashboard() {
             const summary = await fetch('/analytics/summary').then(r=>r.json());
             const alerts = await fetch('/alerts').then(r=>r.json());
@@ -361,8 +358,17 @@ def dashboard():
 
             document.getElementById("alerts").innerHTML =
                 alerts.slice(0,5).map(a =>
-                    a.severity + " — Score: " + a.risk_score
-                ).join("<br>");
+                    `<div style="
+                        margin:6px 0;
+                        padding:8px;
+                        border-radius:6px;
+                        background:${severityColor(a.severity)}20;
+                        border-left:6px solid ${severityColor(a.severity)};
+                    ">
+                        <strong>${a.severity}</strong>
+                        — Risk Score: ${a.risk_score}
+                    </div>`
+                ).join("");
 
             const ctx = document.getElementById('riskChart').getContext('2d');
 
@@ -373,8 +379,7 @@ def dashboard():
                     datasets: [{
                         label: 'Risk Score',
                         data: trend.map(t => t.risk_score),
-                        fill: false,
-                        tension: 0.1
+                        tension: 0.3
                     }]
                 }
             });
@@ -386,6 +391,7 @@ def dashboard():
     </body>
     </html>
     """
+
 
 
 
