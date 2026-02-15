@@ -11,17 +11,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 from mac_vendor_lookup import MacLookup
 
-# -----------------------------
-# Optional GeoIP Support
-# -----------------------------
-geo_reader = None
-if os.path.exists("GeoLite2-City.mmdb"):
-    try:
-        import geoip2.database
-        geo_reader = geoip2.database.Reader("GeoLite2-City.mmdb")
-        print("✅ GeoIP loaded")
-    except:
-        print("GeoIP failed to load")
+
 
 # -----------------------------
 # Database
@@ -36,6 +26,7 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 app = FastAPI(title="LayerSeven Security Platform")
+
 
 
 
@@ -79,12 +70,7 @@ class Alert(Base):
     severity = Column(String)
     timestamp = Column(String)
 
-class Report(Base):
-    __tablename__ = "reports"
-    id = Column(String, primary_key=True)
-    agent_id = Column(String)
-    data = Column(Text)
-    timestamp = Column(String)
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -133,7 +119,7 @@ def register(agent: AgentRegistration):
     return {"agent_id": agent_id, "api_key": api_key}
 
 # -----------------------------
-# Report
+# Report (generates alerts)
 # -----------------------------
 
 @app.post("/report")
@@ -141,16 +127,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
     verify_agent(db, report.agent_id, x_api_key)
 
-    new_devices = []
-    for d in report.devices:
-        vendor = get_vendor(d["mac"])
-        new_devices.append({
-            "ip": d["ip"],
-            "mac": d["mac"],
-            "vendor": vendor
-        })
-
-    risk = len(new_devices) * 40
+    risk = len(report.devices) * 40
     severity = "LOW"
     if risk > 80: severity = "HIGH"
     if risk > 120: severity = "CRITICAL"
@@ -180,41 +157,21 @@ def alerts():
     return a
 
 # -----------------------------
-# Threat Feed (Map Data)
+# Attack Paths (for map)
 # -----------------------------
-
-@app.get("/threat-feed")
-def threat_feed():
-
-    db = SessionLocal()
-    alerts = db.query(Alert).all()
-    db.close()
-
-    feed = []
-
-    for alert in alerts:
-        # Demo attack source locations (worldwide)
-        feed.append({
-            "lat": 37.77,
-            "lon": -122.41
-        })
-        feed.append({
-            "lat": 51.50,
-            "lon": -0.12
-        })
-        feed.append({
-            "lat": 35.68,
-            "lon": 139.69
-        })
-        feed.append({
-            "lat": 55.75,
-            "lon": 37.61
-        })
-
-    return feed
+@app.get("/attack-paths")
+def attack_paths():
+    # simulated global attack paths → your SOC location
+    return [
+        {"from":[55.75,37.61], "to":[41.59,-93.62]},  # Moscow → Iowa
+        {"from":[35.68,139.69], "to":[41.59,-93.62]}, # Tokyo → Iowa
+        {"from":[51.50,-0.12], "to":[41.59,-93.62]},  # London → Iowa
+        {"from":[-23.55,-46.63], "to":[41.59,-93.62]},# Brazil → Iowa
+        {"from":[37.77,-122.41], "to":[41.59,-93.62]} # SF → Iowa
+    ]
 
 # -----------------------------
-# Dashboard with Animated Map
+# Dashboard with Animated Lines
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -223,71 +180,70 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven SOC</title>
+<title>LayerSeven Threat Map</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <style>
-body { margin:0; background:#0f172a; color:white; font-family:Arial;}
-#map { height:500px; }
-.ticker {
-  background:#020617;
-  padding:10px;
-  font-weight:bold;
+body { margin:0; background:#0f172a; color:white; font-family:Arial; }
+#map { height: 95vh; }
+
+.attack-line {
+    stroke: red;
+    stroke-width: 2;
+    stroke-dasharray: 10;
+    animation: dash 1s linear infinite;
 }
-.pulse {
-  background:red;
-  border-radius:50%;
-  width:12px;
-  height:12px;
-  position:absolute;
-  animation:pulse 1.5s infinite;
+
+@keyframes dash {
+  to { stroke-dashoffset: -20; }
 }
-@keyframes pulse {
-  0% {transform:scale(.5); opacity:1;}
-  100% {transform:scale(3); opacity:0;}
-}
+
 </style>
 </head>
 <body>
 
-<h1 style="padding:10px">🌐 LayerSeven Threat Map</h1>
-<div class="ticker" id="ticker">Loading alerts...</div>
+<h2 style="padding:10px;">🌐 LayerSeven Global Attack Monitor</h2>
 <div id="map"></div>
 
 <script>
-const map = L.map('map').setView([20,0],2);
+const map = L.map('map').setView([30,0],2);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'© OpenStreetMap'
 }).addTo(map);
 
-let markers = [];
+let lines = [];
 
-async function loadFeed(){
-    const alerts = await fetch('/alerts').then(r=>r.json());
-    const feed = await fetch('/threat-feed').then(r=>r.json());
+async function loadAttacks(){
+    const paths = await fetch('/attack-paths').then(r=>r.json());
 
-    document.getElementById("ticker").innerHTML =
-        alerts.slice(0,5).map(a => a.severity + " threat detected").join(" | ");
+    lines.forEach(l=>map.removeLayer(l));
+    lines=[];
 
-    markers.forEach(m=>map.removeLayer(m));
-    markers = [];
-
-    feed.forEach(p=>{
-        const marker = L.circleMarker([p.lat, p.lon], {
-            radius:8,
-            color:"red",
-            fillOpacity:0.7
+    paths.forEach(p=>{
+        const line = L.polyline([p.from, p.to], {
+            color:'red',
+            weight:2,
+            dashArray:'10',
+            className:'attack-line'
         }).addTo(map);
 
-        markers.push(marker);
+        lines.push(line);
+
+        L.circleMarker(p.to, {
+            radius:8,
+            color:'yellow',
+            fillOpacity:1
+        }).addTo(map);
+        
+
     });
 }
 
-loadFeed();
-setInterval(loadFeed, 5000);
+loadAttacks();
+setInterval(loadAttacks, 4000);
 </script>
 
 </body>
