@@ -6,3 +6,5 @@ uvicorn
 pydantic
 psycopg2-binary
 sqlalchemy
+mac-vendor-lookup
+
