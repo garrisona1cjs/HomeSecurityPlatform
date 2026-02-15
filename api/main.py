@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List
 import uuid
 import secrets
@@ -26,7 +26,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-app = FastAPI(title="HomeSecurity Platform API", version="11.0")
+app = FastAPI(title="HomeSecurity Platform API", version="12.0")
 
 # =============================
 # VENDOR LOOKUP
@@ -127,12 +127,11 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
     verify_agent(db, report.agent_id, x_api_key)
 
-    last_report = (
-        db.query(Report)
-        .filter(Report.agent_id == report.agent_id)
-        .order_by(Report.timestamp.desc())
+    last_report = db.query(Report)\
+        .filter(Report.agent_id == report.agent_id)\
+        .order_by(Report.timestamp.desc())\
         .first()
-    )
+    
 
     previous_devices = {}
     if last_report:
@@ -161,7 +160,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     for ip in previous_devices:
         if ip not in current_devices:
             missing_devices.append(ip)
-            
+
 
     SAFE = ["Apple","Samsung","Intel","Dell","HP","Cisco","Microsoft","Google","Amazon","Raspberry"]
     rogue_devices = []
@@ -235,7 +234,7 @@ def network_data():
     return {"nodes": list(nodes.values()), "edges": []}
 
 # =============================
-# DASHBOARD
+# DASHBOARD WITH SOUND ALERTS
 # =============================
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -253,7 +252,7 @@ body{background:#0f172a;color:white;font-family:Arial;padding:20px}
 </head>
 <body>
 
-<h1>🛡 SOC Network Map</h1>
+<h1>🛡 SOC Network Monitor</h1>
 
 <div id="network"></div>
 
@@ -262,6 +261,31 @@ Click a device to view intelligence.
 </div>
 
 <script>
+let alarmPlaying = false;
+
+function playAlarm(){
+  if(alarmPlaying) return;
+  alarmPlaying = true;
+
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(880, ctx.currentTime);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  gain.gain.setValueAtTime(0.1, ctx.currentTime);
+
+  osc.start();
+  setTimeout(()=>{
+    osc.stop();
+    alarmPlaying = false;
+  }, 800);
+}
+
 async function loadNetwork(){
  const res = await fetch('/network');
  const net = await res.json();
@@ -274,10 +298,21 @@ async function loadNetwork(){
 
  const network=new vis.Network(container,data,{physics:false});
 
+ let threatDetected = false;
+
+ data.nodes.forEach(n=>{
+   if(n.color === "#ef4444"){
+     threatDetected = true;
+   }
+ });
+
+ if(threatDetected){
+   playAlarm();
+ }
+
  network.on("click", function(params){
    if(params.nodes.length > 0){
-     const nodeId=params.nodes[0];
-     const node=data.nodes.get(nodeId);
+     const node=data.nodes.get(params.nodes[0]);
 
      const threat = node.color === "#ef4444"
        ? "<span style='color:#ef4444;font-weight:bold'>⚠ THREAT DETECTED</span>"
@@ -303,6 +338,7 @@ async function loadNetwork(){
 }
 
 loadNetwork();
+setInterval(loadNetwork, 10000);
 </script>
 
 </body>
