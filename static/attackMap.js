@@ -1,6 +1,6 @@
 // =======================================
 // LayerSeven Neon Attack Beam Renderer
-// WITH Impact Flash Animation
+// WITH Impact Flash + Origin Pulse
 // =======================================
 
 // Severity colors
@@ -11,12 +11,18 @@ const severityColors = {
     low: "#00ccff"
 };
 
+// Track active origin pulses
+let activeOrigins = {};
+
 // Draw glowing beam
 function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
 
     const color = severityColors[severity] || "#00ffff";
 
-    // Glow aura layer
+    // ORIGIN PULSE
+    createOriginPulse(map, fromCoords, color);
+
+    // Glow aura beam
     L.polyline([fromCoords, toCoords], {
         color: color,
         weight: 10,
@@ -34,6 +40,54 @@ function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
 
     // Animate packet
     animatePacket(map, fromCoords, toCoords, color);
+}
+
+
+// 🟢 ORIGIN PULSE GLOW
+function createOriginPulse(map, location, color) {
+
+    const key = location.toString();
+
+    // Prevent stacking pulses on same origin
+    if (activeOrigins[key]) return;
+
+    const pulse = L.circleMarker(location, {
+        radius: 6,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.8
+    }).addTo(map);
+
+    const ring = L.circle(location, {
+        radius: 15000,
+        color: color,
+        weight: 2,
+        opacity: 0.5,
+        fillOpacity: 0
+    }).addTo(map);
+
+    let radius = 15000;
+    let opacity = 0.5;
+
+    function animatePulse() {
+
+        radius += 1000;
+        opacity -= 0.01;
+
+        ring.setRadius(radius);
+        ring.setStyle({ opacity: opacity });
+
+        if (opacity <= 0) {
+            radius = 15000;
+            opacity = 0.5;
+        }
+
+        requestAnimationFrame(animatePulse);
+    }
+
+    animatePulse();
+
+    activeOrigins[key] = true;
 }
 
 
@@ -62,7 +116,7 @@ function animatePacket(map, from, to, color) {
             requestAnimationFrame(movePacket);
         } else {
             map.removeLayer(packet);
-            createImpactFlash(map, to, color); // 💥 IMPACT EFFECT
+            createImpactFlash(map, to, color);
         }
     }
 
@@ -73,7 +127,6 @@ function animatePacket(map, from, to, color) {
 // 💥 Impact flash + shockwave
 function createImpactFlash(map, location, color) {
 
-    // bright center flash
     const flash = L.circleMarker(location, {
         radius: 8,
         color: color,
@@ -81,9 +134,8 @@ function createImpactFlash(map, location, color) {
         fillOpacity: 0.9
     }).addTo(map);
 
-    // expanding shockwave ring
     const ring = L.circle(location, {
-        radius: 20000,   // meters
+        radius: 20000,
         color: color,
         weight: 2,
         opacity: 0.6,
