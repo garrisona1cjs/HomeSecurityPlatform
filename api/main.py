@@ -172,7 +172,7 @@ def attack_paths():
 
 
 # -----------------------------
-# LayerSeven SOC Intelligence Center
+# LayerSeven SOC Operations Console
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -181,12 +181,12 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven SOC Intelligence Center</title>
+<title>LayerSeven SOC Operations Console</title>
 
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
-body { margin:0; background:black; overflow:hidden; }
+body { margin:0; background:black; overflow:hidden; font-family:monospace; }
 
 #globeViz { width:100vw; height:100vh; }
 
@@ -195,7 +195,7 @@ body { margin:0; background:black; overflow:hidden; }
     top:0;
     width:100%;
     text-align:center;
-    font-family:monospace;
+
     color:#00ffff;
     background:rgba(0,0,0,0.7);
 
@@ -208,15 +208,25 @@ body { margin:0; background:black; overflow:hidden; }
 
     left:10px;
     top:40px;
-    background:rgba(0,10,25,0.7);
+    background:rgba(0,10,25,0.75);
     padding:10px;
     border-radius:6px;
     color:#00ffff;
-    font-family:monospace;
-
 }
 
-#workflow {
+#timeline {
+    position:absolute;
+    bottom:0;
+    width:100%;
+    max-height:160px;
+    overflow:auto;
+    background:rgba(0,10,25,0.9);
+    color:#00ffff;
+    padding:6px;
+    font-size:12px;
+}
+
+#casePanel {
     position:absolute;
     right:10px;
     top:40px;
@@ -225,7 +235,7 @@ body { margin:0; background:black; overflow:hidden; }
     padding:10px;
     border-radius:6px;
     color:#00ffff;
-    font-family:monospace;
+
     font-size:12px;
 }
 
@@ -239,16 +249,7 @@ button {
     color:#00ffff;
     padding:4px;
     cursor:pointer;
-
 }
-
-
-
-
-
-
-
-
 </style>
 </head>
 <body>
@@ -256,100 +257,119 @@ button {
 <div id="globeViz"></div>
 
 <div id="topbar">
-SOC INTELLIGENCE CENTER • STATUS: <span id="status">MONITORING</span>
+SOC OPERATIONS CONSOLE • STATUS: <span id="status">MONITORING</span>
 </div>
 
 <div id="panel">
 Attacks: <span id="attackCount">0</span><br>
-Campaign Zones: <span id="zones">0</span><br>
-Threat Actor: <span id="actor">Unknown</span>
+Active Case: <span id="caseStatus">None</span><br>
+Threat Technique: <span id="mitre">N/A</span>
 </div>
 
-<div id="workflow">
-<b>Incident Workflow</b><br>
-<span id="stage">Monitoring</span><br><br>
-<button onclick="exportReport()">Export Incident Report</button>
+<div id="casePanel">
+<b>Case Management</b><br>
+Stage: <span id="stage">Monitoring</span><br><br>
+<button onclick="advanceCase()">Advance Case Stage</button>
+<button onclick="replayCampaign()">Replay Campaign</button>
+<button onclick="exportBrief()">Export Executive Brief</button>
 </div>
+
+<div id="timeline"></div>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
   .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-  .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
-
-
-  .atmosphereColor('#00ffff')
-  .atmosphereAltitude(0.25);
+  .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png');
 
 globe.controls().autoRotate = true;
 
+let attackHistory = [];
 let totalAttacks = 0;
-let campaignHeat = {};
-let threatActorProfile = {};
-let workflowStage = "Monitoring";
+let caseStage = 0;
+let timelineEvents = [];
 
-// 🎯 Predictive campaign heat map
-function updateHeat(lat,lng){
+const stages = ["Monitoring","Investigation","Containment","Eradication","Recovery"];
 
-    const key = lat+","+lng;
-    campaignHeat[key] = (campaignHeat[key] || 0) + 1;
+const mitreTechniques = [
+    "T1595 Active Scanning",
+    "T1110 Brute Force",
+    "T1046 Network Discovery",
+    "T1078 Valid Accounts",
+    "T1021 Remote Services"
+];
 
-    globe.pointsData([...globe.pointsData(), {
-        lat: lat,
-        lng: lng,
-        size: campaignHeat[key] * 0.4
-    }])
-    .pointAltitude(d => d.size)
-    .pointColor(() => '#ff0033');
+// timeline builder
+function logEvent(text){
+    timelineEvents.push(text);
 
-    document.getElementById("zones").innerHTML =
-        Object.keys(campaignHeat).length;
-}
+    const t = document.getElementById("timeline");
+    const line = document.createElement("div");
+    line.innerHTML = new Date().toLocaleTimeString() + " — " + text;
+    t.prepend(line);
 
-// 🛡 incident response playbooks
-function runPlaybook(level){
-
-    if(level > 6 && workflowStage === "Monitoring"){
-        workflowStage = "Investigation";
-    }
-    else if(level > 10){
-        workflowStage = "Containment";
-    }
-    else if(level > 15){
-        workflowStage = "Remediation";
-    }
-
-    document.getElementById("stage").innerHTML = workflowStage;
-}
-
-// 🕵️ adversary attribution modeling
-function attributeActor(key){
-
-    threatActorProfile[key] = (threatActorProfile[key] || 0) + 1;
-
-    if(threatActorProfile[key] > 12){
-        document.getElementById("actor").innerHTML = "Persistent Botnet";
-    }
-    else if(threatActorProfile[key] > 6){
-        document.getElementById("actor").innerHTML = "Coordinated Campaign";
+    while(t.children.length > 20){
+        t.removeChild(t.lastChild);
     }
 }
 
-// 📄 threat report export
-function exportReport(){
+// MITRE mapping
+function mapTechnique(){
+    const technique = mitreTechniques[
+        Math.floor(Math.random()*mitreTechniques.length)
+    ];
+
+    document.getElementById("mitre").innerHTML = technique;
+    logEvent("MITRE technique observed: " + technique);
+}
+
+// case workflow
+function advanceCase(){
+    caseStage = (caseStage + 1) % stages.length;
+    document.getElementById("stage").innerHTML = stages[caseStage];
+    document.getElementById("status").innerHTML = stages[caseStage].toUpperCase();
+}
+
+// campaign replay
+function replayCampaign(){
+
+    let i = 0;
+
+    const replay = setInterval(() => {
+
+        if(i >= attackHistory.length){
+            clearInterval(replay);
+            return;
+        }
+
+        const a = attackHistory[i];
+
+        globe.pointOfView({
+            lat: a.startLat,
+            lng: a.startLng,
+            altitude: 0.8
+        }, 1200);
+
+        i++;
+
+    }, 1400);
+}
+
+// executive briefing export
+function exportBrief(){
 
     const report = `
-LayerSeven Incident Report
+LayerSeven Executive Intelligence Brief
 
-Attacks Observed: ${totalAttacks}
-Campaign Zones: ${Object.keys(campaignHeat).length}
-Workflow Stage: ${workflowStage}
-Threat Actor: ${document.getElementById("actor").innerText}
+Total Attacks: ${totalAttacks}
+Case Stage: ${stages[caseStage]}
+Recent Technique: ${document.getElementById("mitre").innerText}
+Events Logged: ${timelineEvents.length}
 `;
 
-    const blob = new Blob([report], { type: "text/plain" });
+    const blob = new Blob([report], {type:"text/plain"});
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "incident_report.txt";
+    link.download = "executive_brief.txt";
     link.click();
 }
 
@@ -361,24 +381,27 @@ async function loadAttacks(){
     const arcs = [];
 
     for(const p of paths){
+    
 
-        const key = p.from.toString();
 
-        updateHeat(p.from[0], p.from[1]);
-        attributeActor(key);
-
-        runPlaybook(campaignHeat[p.from[0]+","+p.from[1]]);
+    
 
         arcs.push({
             startLat: p.from[0],
             startLng: p.from[1],
             endLat: p.to[0],
             endLng: p.to[1],
-            color: "#ff0033",
-            stroke: 1.2
+            color:"#ff0033",
+            stroke:1.2
         });
-        
 
+        attackHistory.push({
+            startLat:p.from[0],
+            startLng:p.from[1]
+        });
+
+        mapTechnique();
+        logEvent("Attack detected from origin");
     }
 
     globe.arcsData(arcs);
@@ -387,9 +410,7 @@ async function loadAttacks(){
     document.getElementById("attackCount").innerHTML = totalAttacks;
 
 
-    if(workflowStage !== "Monitoring"){
-        document.getElementById("status").innerHTML = workflowStage.toUpperCase();
-    }
+
 }
 
 loadAttacks();
