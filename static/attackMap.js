@@ -157,16 +157,16 @@ function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
     // glow aura
     L.polyline([fromCoords, toCoords], {
         color: color,
-        weight: 10,
-        opacity: 0.15,
+        weight: 3,
+        opacity: 0.05,
         interactive: false
     }).addTo(map);
 
     // main beam
     L.polyline([fromCoords, toCoords], {
         color: color,
-        weight: 2,
-        opacity: 0.9,
+        weight: 1,
+        opacity: 1,
         interactive: false
     }).addTo(map);
 
@@ -206,14 +206,14 @@ function createBeamTrail(map, from, to, color) {
             const lng = from[1] + (to[1] - from[1]) * p.progress;
 
             const dot = L.circleMarker([lat, lng], {
-                radius: 2,
+                radius: 1.5,
                 color: color,
                 fillColor: color,
                 fillOpacity: 0.8,
                 interactive: false
             }).addTo(map);
 
-            setTimeout(() => map.removeLayer(dot), 120);
+            setTimeout(() => map.removeLayer(dot), 180);
         });
 
         requestAnimationFrame(animateParticles);
