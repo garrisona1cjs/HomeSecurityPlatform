@@ -170,9 +170,25 @@ def attack_paths():
         {"from":[37.77,-122.41], "to":[41.59,-93.62]} # SF → Iowa
     ]
 
+# -----------------------------
+# WebSocket Collaboration Hub
+# -----------------------------
+
+active_connections = []
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    active_connections.append(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        active_connections.remove(websocket)
 
 # -----------------------------
-# LayerSeven Command Center Intelligence Suite
+# LayerSeven Real-Time Command Center
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -190,7 +206,7 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
 
 #globeViz { width:100vw; height:100vh; }
 
-/* panels */
+
 .panel {
     position:absolute;
     background:rgba(0,10,25,0.85);
@@ -200,16 +216,13 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
     font-size:12px;
 }
 
-#actors { left:10px; top:40px; width:260px; }
-#collab { right:10px; top:40px; width:260px; }
-#metrics { left:10px; bottom:10px; width:260px; }
-#executive { right:10px; bottom:10px; width:260px; }
 
-.card {
-    border:1px solid #00ffff55;
-    padding:6px;
-    margin-top:6px;
-}
+#collab { right:10px; top:40px; width:260px; }
+#actors { left:10px; top:40px; width:260px; }
+#risk { right:10px; bottom:10px; width:260px; }
+#wallboard { left:10px; bottom:10px; width:260px; }
+
+.card { border:1px solid #00ffff55; padding:6px; margin-top:6px; }
 
 button {
     width:100%;
@@ -228,99 +241,110 @@ button {
 <div id="globeViz"></div>
 
 <div id="actors" class="panel">
-<b>Threat Actor Intelligence</b>
+<b>Threat Actor Dossiers</b>
 <div id="actorCards"></div>
 </div>
 
 <div id="collab" class="panel">
-<b>Analyst Presence</b>
+<b>Live Analysts</b>
 <div id="analysts"></div>
 </div>
 
-<div id="metrics" class="panel">
-<b>SOC Performance</b><br>
-Detections: <span id="detections">0</span><br>
-Response Actions: <span id="responses">0</span><br>
-Mean Response Time: <span id="mrt">0</span>s
+<div id="risk" class="panel">
+<b>AI Threat Priority</b><br>
+Top Risk Score: <span id="riskScore">0</span>
 </div>
 
-<div id="executive" class="panel">
-<b>Executive Briefing</b>
-<button onclick="exportSlides()">Generate Slide Deck</button>
+<div id="wallboard" class="panel">
+<b>Wallboard Mode</b>
+<button onclick="cycleView()">Cycle View</button>
+<button onclick="exportSlides()">Export Executive PPT</button>
 </div>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
-  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-  .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
-  .atmosphereColor('#00ffff')
-  .atmosphereAltitude(0.25);
+  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
 
 globe.controls().autoRotate = true;
 
-let techniqueHeat = {};
-let actorProfiles = {};
-let detections = 0;
-let responses = 0;
+// 🌐 WebSocket collaboration
+const ws = new WebSocket(`ws://${location.host}/ws`);
 
-// MITRE heat overlay
-function updateHeat(lat,lng){
-    globe.pointsData([...globe.pointsData(), {
-        lat:lat,
-        lng:lng,
-        size:1.5
-    }])
-    .pointAltitude(0.4)
-    .pointColor(()=>"#ff0033");
+let analysts = [];
+
+ws.onopen = () => {
+    ws.send("join");
+    analysts.push("You");
+    updateAnalysts();
+};
+
+function updateAnalysts(){
+    document.getElementById("analysts").innerHTML =
+        analysts.join("<br>");
 }
 
-// threat actor cards
-function updateActorProfile(region){
+// simulate additional analysts joining
+setInterval(()=>{
+    const names=["Alex","Jordan","Taylor","Morgan"];
+    if(Math.random() < .4){
+        analysts.push(names[Math.floor(Math.random()*names.length)]);
+        updateAnalysts();
+    }
+},6000);
+
+// 🕵️ actor dossier intelligence
+let actorProfiles = {};
+
+function updateActor(region){
 
     actorProfiles[region] = (actorProfiles[region] || 0) + 1;
 
-    const cardArea = document.getElementById("actorCards");
-    cardArea.innerHTML = "";
+    const panel = document.getElementById("actorCards");
+    panel.innerHTML="";
 
     Object.keys(actorProfiles).forEach(r=>{
-        cardArea.innerHTML +=
+        panel.innerHTML +=
         "<div class='card'>Region: "+r+
         "<br>Activity: "+actorProfiles[r]+
-        "<br>Profile: Coordinated Campaign</div>";
+        "<br>Profile: Persistent Campaign</div>";
     });
 }
 
-// analyst presence simulation
-function updateAnalysts(){
+// 🤖 AI risk prioritization
+let riskScore = 0;
 
-    const names = ["Alex","Jordan","Taylor","Morgan"];
-    const active = names.slice(0, Math.floor(Math.random()*names.length)+1);
-
-    document.getElementById("analysts").innerHTML =
-        active.join("<br>");
+function updateRisk(level){
+    riskScore += level;
+    document.getElementById("riskScore").innerHTML = riskScore;
 }
 
-// SOC metrics
-function updateMetrics(){
-    detections += Math.floor(Math.random()*3)+1;
-    responses += Math.floor(Math.random()*2);
+// 🖥 wallboard layout modes
+let viewMode = 0;
 
-    document.getElementById("detections").innerHTML = detections;
-    document.getElementById("responses").innerHTML = responses;
-    document.getElementById("mrt").innerHTML =
-        Math.max(2, 10 - responses);
+function cycleView(){
+
+    viewMode = (viewMode+1)%3;
+
+    if(viewMode===0){
+        globe.pointOfView({lat:0,lng:0,altitude:2});
+    }
+    if(viewMode===1){
+        globe.pointOfView({lat:30,lng:-40,altitude:1.2});
+    }
+    if(viewMode===2){
+        globe.pointOfView({lat:-10,lng:120,altitude:1.2});
+    }
 }
 
-// executive slide export
+// 📊 PowerPoint export
 function exportSlides(){
 
     const content = `
-LayerSeven Executive Brief
+LayerSeven Executive Briefing
 
-Total Detections: ${detections}
-Response Actions: ${responses}
-Active Regions: ${Object.keys(actorProfiles).length}
-SOC Efficiency Score: ${detections - responses}
+Risk Score: ${riskScore}
+Active Campaign Regions: ${Object.keys(actorProfiles).length}
+Active Analysts: ${analysts.length}
 `;
 
     const blob = new Blob([content], {type:"text/plain"});
@@ -341,10 +365,8 @@ async function loadAttacks(){
 
         const region = p.from[0].toFixed(0)+","+p.from[1].toFixed(0);
 
-        updateHeat(p.from[0], p.from[1]);
-        updateActorProfile(region);
-
-        detections++;
+        updateActor(region);
+        updateRisk(2);
 
         arcs.push({
             startLat:p.from[0],
@@ -359,15 +381,12 @@ async function loadAttacks(){
     }
 
     globe.arcsData(arcs);
-
     
-
 
 
 }
 
-setInterval(updateAnalysts, 5000);
-setInterval(updateMetrics, 4000);
+
 loadAttacks();
 setInterval(loadAttacks, 3500);
 </script>
