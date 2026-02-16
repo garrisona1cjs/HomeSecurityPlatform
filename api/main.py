@@ -172,7 +172,7 @@ def attack_paths():
 
 
 # -----------------------------
-# LayerSeven Enterprise SOC Console
+# LayerSeven Enterprise Command Console
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -181,29 +181,48 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Enterprise SOC Console</title>
+<title>LayerSeven Enterprise Command Console</title>
 
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
-body { margin:0; background:black; overflow:hidden; font-family:monospace; color:#00ffff;}
+body { margin:0; background:black; color:#00ffff; font-family:monospace; overflow:hidden;}
 
 #globeViz { width:100vw; height:100vh; }
 
+/* panels */
 .panel {
     position:absolute;
-    background:rgba(0,10,25,0.8);
+    background:rgba(0,10,25,0.85);
     padding:10px;
     border-radius:6px;
 
 }
 
-#mitre { left:10px; top:40px; width:260px; }
-#tickets { right:10px; top:40px; width:260px; }
-#collab { right:10px; bottom:10px; width:260px; }
-#export { left:10px; bottom:10px; width:260px; }
+#mitreGrid { left:10px; top:40px; width:280px; }
+#tickets { right:10px; top:40px; width:280px; }
+#roles { left:10px; bottom:10px; width:280px; }
+#exec { right:10px; bottom:10px; width:280px; }
 
-button, textarea {
+/* MITRE grid */
+.grid {
+    display:grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap:4px;
+    font-size:12px;
+}
+
+.cell {
+    border:1px solid #00ffff55;
+    padding:3px;
+}
+
+.active {
+    background:#ff003355;
+}
+
+/* buttons */
+button, select {
     width:100%;
     margin-top:6px;
     background:#001f33;
@@ -219,9 +238,9 @@ button, textarea {
 
 <div id="globeViz"></div>
 
-<div id="mitre" class="panel">
-<b>MITRE ATT&CK Heat Matrix</b><br>
-<div id="matrix"></div>
+<div id="mitreGrid" class="panel">
+<b>MITRE ATT&CK Matrix</b>
+<div id="grid" class="grid"></div>
 </div>
 
 <div id="tickets" class="panel">
@@ -229,17 +248,21 @@ button, textarea {
 <div id="ticketList"></div>
 </div>
 
-<div id="collab" class="panel">
-<b>Analyst Collaboration</b><br>
-<textarea id="notes" rows="4" placeholder="Add investigation notes..."></textarea>
-<button onclick="saveNote()">Save Note</button>
-<div id="savedNotes"></div>
+<div id="roles" class="panel">
+<b>Access Role</b>
+<select id="roleSelect" onchange="setRole()">
+<option>Analyst</option>
+<option>Lead</option>
+<option>Admin</option>
+</select>
+<div id="roleStatus">Role: Analyst</div>
 </div>
 
-<div id="export" class="panel">
-<b>Reporting</b><br>
-<button onclick="exportTimeline()">Export Campaign Timeline</button>
-<button onclick="exportCompliance()">Export Compliance Report</button>
+<div id="exec" class="panel">
+<b>Executive Risk Dashboard</b><br>
+Risk Score: <span id="riskScore">0</span><br>
+Threat Actor: <span id="actor">Unknown</span><br>
+Feed Insight: <span id="feed">None</span>
 </div>
 
 <script>
@@ -248,77 +271,89 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 
-let mitreCounts = {};
-let tickets = [];
-let timeline = [];
-
-// MITRE techniques
+// MITRE techniques (matrix)
 const techniques = [
 "T1595 Active Scanning",
 "T1110 Brute Force",
 "T1046 Network Discovery",
 "T1021 Remote Services",
-"T1078 Valid Accounts"
+"T1078 Valid Accounts",
+"T1105 Exfiltration",
+"T1059 Command Execution",
+"T1087 Account Discovery"
 ];
 
-// update heat matrix
-function updateMatrix(tech){
-    mitreCounts[tech] = (mitreCounts[tech] || 0) + 1;
+let mitreHits = {};
+let tickets = [];
+let role = "Analyst";
+let riskScore = 0;
 
-    const matrix = document.getElementById("matrix");
-    matrix.innerHTML = "";
+// build matrix grid
+function renderGrid(){
+    const grid = document.getElementById("grid");
+    grid.innerHTML = "";
 
-    Object.keys(mitreCounts).forEach(t=>{
-        matrix.innerHTML += t + " [" + mitreCounts[t] + "]<br>";
+    techniques.forEach(t=>{
+        const div = document.createElement("div");
+        div.className = "cell" + (mitreHits[t] ? " active" : "");
+        div.innerHTML = t;
+        grid.appendChild(div);
     });
 }
 
-// create SOC ticket
+// update MITRE
+function updateTechnique(tech){
+    mitreHits[tech] = true;
+    renderGrid();
+}
+
+// ticket workflow
 function createTicket(tech){
-    const id = "CASE-" + Math.floor(Math.random()*9999);
-    tickets.push({id:id, technique:tech});
+    const id = "CASE-" + Math.floor(Math.random()*9000);
+    tickets.push({id:id, status:"OPEN", tech:tech});
 
+    updateTicketDisplay();
+}
+
+function updateTicketDisplay(){
     const list = document.getElementById("ticketList");
-    list.innerHTML += id + " — " + tech + "<br>";
+    list.innerHTML = "";
+
+    tickets.forEach(t=>{
+        list.innerHTML += t.id + " — " + t.tech + " [" + t.status + "]<br>";
+    });
 }
 
-// save analyst note
-function saveNote(){
-    const note = document.getElementById("notes").value;
-    if(!note) return;
-
-    document.getElementById("savedNotes").innerHTML += note + "<br>";
-    document.getElementById("notes").value="";
+// role control
+function setRole(){
+    role = document.getElementById("roleSelect").value;
+    document.getElementById("roleStatus").innerHTML = "Role: " + role;
 }
 
-// export campaign timeline
-function exportTimeline(){
-    const blob = new Blob([timeline.join("\\n")], {type:"text/plain"});
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "campaign_timeline.txt";
-    link.click();
+// threat actor attribution feed
+function attributionFeed(){
+    const actors = [
+        "APT-style behavior",
+        "Botnet campaign",
+        "Credential harvesting group",
+        "Commodity malware actor"
+    ];
+
+    const actor = actors[Math.floor(Math.random()*actors.length)];
+    document.getElementById("actor").innerHTML = actor;
 }
 
-// export compliance report
-function exportCompliance(){
+// external intelligence feed insight
+function feedInsight(){
+    const insights = [
+        "Malicious ASN correlation",
+        "Known C2 infrastructure match",
+        "Tor exit node activity",
+        "Cloud abuse pattern detected"
+    ];
 
-    const report = `
-LayerSeven Compliance Summary
-
-MITRE Techniques Observed:
-${Object.keys(mitreCounts).join("\\n")}
-
-Cases Created: ${tickets.length}
-
-Notes Logged: ${document.getElementById("savedNotes").innerText.length}
-`;
-
-    const blob = new Blob([report], {type:"text/plain"});
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "compliance_report.txt";
-    link.click();
+    document.getElementById("feed").innerHTML =
+        insights[Math.floor(Math.random()*insights.length)];
 }
 
 // load attacks
@@ -332,10 +367,10 @@ async function loadAttacks(){
 
         const tech = techniques[Math.floor(Math.random()*techniques.length)];
 
-        updateMatrix(tech);
+        updateTechnique(tech);
         createTicket(tech);
 
-        timeline.push(new Date().toLocaleTimeString() + " — " + tech);
+        riskScore += 2;
 
         arcs.push({
             startLat:p.from[0],
@@ -345,20 +380,19 @@ async function loadAttacks(){
             color:"#ff0033",
             stroke:1.2
         });
-
-
-
+        
 
     }
 
     globe.arcsData(arcs);
-    
 
+    document.getElementById("riskScore").innerHTML = riskScore;
 
-
-
+    attributionFeed();
+    feedInsight();
 }
 
+renderGrid();
 loadAttacks();
 setInterval(loadAttacks, 3500);
 </script>
