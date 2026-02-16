@@ -1,11 +1,10 @@
 // =======================================
-// LayerSeven Advanced Neon Attack Renderer
-// FULL SOC VISUAL ENGINE
+// LayerSeven Threat Intelligence Engine
 // =======================================
 
 
 // ================================
-// SEVERITY COLORS
+// CONFIG
 // ================================
 const severityColors = {
     critical: "#ff0033",
@@ -14,99 +13,116 @@ const severityColors = {
     low: "#00ccff"
 };
 
-// prevent duplicate origin pulses
+// track origin activity intensity
+let originIntensity = {};
 let activeOrigins = {};
+let attackCount = 0;
 
 
 // ================================
-// 🟢 ORIGIN PULSE GLOW
+// 🔊 SOUND ALERTS
 // ================================
-function createOriginPulse(map, location) {
+const criticalSound = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+criticalSound.volume = 0.3;
 
-    const key = location.toString();
-    if (activeOrigins[key]) return;
 
-    const pulseColor = "#00ff88";
+// ================================
+// 📊 LIVE ATTACK COUNTER
+// ================================
+function updateAttackCounter() {
 
-    const center = L.circleMarker(location, {
-        radius: 7,
-        color: pulseColor,
-        fillColor: pulseColor,
-        fillOpacity: 1
-    }).addTo(map);
+    let counter = document.getElementById("attackCounter");
 
-    const ring = L.circle(location, {
-        radius: 18000,
-        color: pulseColor,
-        weight: 2,
-        opacity: 0.65,
-        fillOpacity: 0
-    }).addTo(map);
+    if (!counter) {
+        counter = document.createElement("div");
+        counter.id = "attackCounter";
 
-    let radius = 18000;
-    let opacity = 0.65;
+        counter.style.position = "absolute";
+        counter.style.top = "10px";
+        counter.style.right = "15px";
+        counter.style.color = "#00ffff";
+        counter.style.fontFamily = "monospace";
+        counter.style.fontSize = "18px";
+        counter.style.zIndex = "999";
 
-    function animatePulse() {
-        radius += 900;
-        opacity -= 0.012;
-
-        ring.setRadius(radius);
-        ring.setStyle({ opacity: opacity });
-
-        if (opacity <= 0) {
-            radius = 18000;
-            opacity = 0.65;
-        }
-
-        requestAnimationFrame(animatePulse);
+        document.body.appendChild(counter);
     }
 
-    animatePulse();
-    activeOrigins[key] = true;
+    counter.innerHTML = "⚡ ATTACKS: " + attackCount;
 }
 
 
 // ================================
-// 💥 IMPACT FLASH + SHOCKWAVE
+// 🟢 ORIGIN HEAT GLOW
+// ================================
+function createOriginPulse(map, location) {
+
+    const key = location.toString();
+
+    if (!originIntensity[key]) originIntensity[key] = 1;
+    else originIntensity[key]++;
+
+    const intensity = Math.min(originIntensity[key], 8);
+
+    const glowColor = `rgba(255, 60, 60, ${0.1 + intensity * 0.08})`;
+
+    const aura = L.circle(location, {
+        radius: 25000 + intensity * 6000,
+        color: glowColor,
+        weight: 0,
+        fillColor: glowColor,
+        fillOpacity: 0.25
+    }).addTo(map);
+
+    setTimeout(() => map.removeLayer(aura), 1200);
+}
+
+
+// ================================
+// 🌍 COUNTRY AURA EFFECT
+// ================================
+function createCountryAura(map, location) {
+
+    const aura = L.circle(location, {
+        radius: 90000,
+        color: "rgba(255,0,0,0.15)",
+        weight: 0,
+        fillColor: "rgba(255,0,0,0.15)",
+        fillOpacity: 0.15
+    }).addTo(map);
+
+    setTimeout(() => map.removeLayer(aura), 2000);
+}
+
+
+// ================================
+// 💥 IMPACT FLASH
 // ================================
 function createImpactFlash(map, location, color) {
-
-    const flash = L.circleMarker(location, {
-        radius: 7,
-        color: color,
-        fillColor: color,
-        fillOpacity: 0.9
-    }).addTo(map);
 
     const ring = L.circle(location, {
         radius: 20000,
         color: color,
         weight: 2,
-        opacity: 0.6,
+        opacity: 0.7,
         fillOpacity: 0
     }).addTo(map);
 
-    let opacity = 0.9;
     let radius = 20000;
 
-    function animateImpact() {
-
-        opacity -= 0.05;
-        radius += 18000;
-
-        flash.setStyle({ fillOpacity: opacity, opacity: opacity });
-        ring.setStyle({ opacity: opacity });
+    function animate() {
+        radius += 16000;
         ring.setRadius(radius);
+        ring.setStyle({ opacity: ring.options.opacity - 0.05 });
 
-        if (opacity > 0) {
-            requestAnimationFrame(animateImpact);
+        if (ring.options.opacity > 0) {
+            requestAnimationFrame(animate);
         } else {
-            map.removeLayer(flash);
             map.removeLayer(ring);
         }
     }
 
-    animateImpact();
+    animate();
 }
 
 
@@ -124,8 +140,7 @@ function animatePacket(map, from, to, color) {
         fillOpacity: 1
     }).addTo(map);
 
-    function movePacket() {
-
+    function move() {
         progress += 0.02;
 
         const lat = from[0] + (to[0] - from[0]) * progress;
@@ -133,39 +148,35 @@ function animatePacket(map, from, to, color) {
 
         packet.setLatLng([lat, lng]);
 
-        if (progress < 1) {
-            requestAnimationFrame(movePacket);
-        } else {
+        if (progress < 1) requestAnimationFrame(move);
+        else {
             map.removeLayer(packet);
             createImpactFlash(map, to, color);
         }
     }
 
-    movePacket();
+    move();
 }
 
 
 // ================================
-// 🌊 BEAM TRAIL PARTICLE STREAM
+// 🌊 FLOWING TRAFFIC STREAM
 // ================================
 function createBeamTrail(map, from, to, color) {
 
-    const particles = [];
-    const particleCount = 8;
+    const particles = 8;
 
-    for (let i = 0; i < particleCount; i++) {
-        particles.push({ progress: Math.random() });
-    }
+    for (let i = 0; i < particles; i++) {
 
-    function animateParticles() {
+        let progress = Math.random();
 
-        particles.forEach(p => {
+        function animate() {
 
-            p.progress += 0.015;
-            if (p.progress > 1) p.progress = 0;
+            progress += 0.015;
+            if (progress > 1) progress = 0;
 
-            const lat = from[0] + (to[0] - from[0]) * p.progress;
-            const lng = from[1] + (to[1] - from[1]) * p.progress;
+            const lat = from[0] + (to[0] - from[0]) * progress;
+            const lng = from[1] + (to[1] - from[1]) * progress;
 
             const dot = L.circleMarker([lat, lng], {
                 radius: 1.5,
@@ -176,35 +187,28 @@ function createBeamTrail(map, from, to, color) {
             }).addTo(map);
 
             setTimeout(() => map.removeLayer(dot), 180);
-        });
+            requestAnimationFrame(animate);
+        }
 
-        requestAnimationFrame(animateParticles);
+        animate();
     }
-
-    animateParticles();
 }
 
 
 // ================================
-// ⚠️ CRITICAL BEAM PULSE
+// ⚠️ CRITICAL PULSE
 // ================================
 function pulseBeam(line) {
 
-    let growing = true;
-    let opacity = 0.15;
+    let opacity = 0.2;
+    let grow = true;
 
     function animate() {
+        opacity += grow ? 0.02 : -0.02;
+        if (opacity >= 0.4) grow = false;
+        if (opacity <= 0.15) grow = true;
 
-        if (growing) {
-            opacity += 0.02;
-            if (opacity >= 0.35) growing = false;
-        } else {
-            opacity -= 0.02;
-            if (opacity <= 0.15) growing = true;
-        }
-
-        line.setStyle({ opacity: opacity });
-
+        line.setStyle({ opacity });
         requestAnimationFrame(animate);
     }
 
@@ -213,34 +217,28 @@ function pulseBeam(line) {
 
 
 // ================================
-// 🔥 ADVANCED NEON ATTACK BEAM
+// 🔥 DRAW ADVANCED BEAM
 // ================================
-function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
+function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
 
-    const baseColor = severityColors[severity] || "#00ffff";
+    const color = severityColors[severity] || "#00ffff";
 
-    // glow intensity by severity
-    const glowSettings = {
-        critical: { weight: 4, opacity: 0.15 },
-        high:     { weight: 3.5, opacity: 0.12 },
-        medium:   { weight: 3, opacity: 0.09 },
-        low:      { weight: 2.5, opacity: 0.06 }
-    };
+    attackCount++;
+    updateAttackCounter();
 
-    const glow = glowSettings[severity] || glowSettings.medium;
-
-    // origin pulse
     createOriginPulse(map, fromCoords);
+    createCountryAura(map, fromCoords);
 
-    // subtle glow aura
-    const glowLine = L.polyline([fromCoords, toCoords], {
-        color: baseColor,
-        weight: glow.weight,
-        opacity: glow.opacity,
-        interactive: false
+    if (severity === "critical") {
+        criticalSound.play();
+    }
+
+    const glow = L.polyline([fromCoords, toCoords], {
+        color: color,
+        weight: severity === "critical" ? 4 : 2,
+        opacity: severity === "critical" ? 0.18 : 0.10
     }).addTo(map);
 
-    // gradient fade beam (directional)
     const segments = 14;
 
     for (let i = 0; i < segments; i++) {
@@ -248,25 +246,23 @@ function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
         const startLat = fromCoords[0] + (toCoords[0] - fromCoords[0]) * (i / segments);
         const startLng = fromCoords[1] + (toCoords[1] - fromCoords[1]) * (i / segments);
 
-        const endLat = fromCoords[0] + (toCoords[0] - fromCoords[0]) * ((i + 1) / segments);
-        const endLng = fromCoords[1] + (toCoords[1] - fromCoords[1]) * ((i + 1) / segments);
+        const endLat = fromCoords[0] + (toCoords[0] - fromCoords[0]) * ((i+1) / segments);
+        const endLng = fromCoords[1] + (toCoords[1] - fromCoords[1]) * ((i+1) / segments);
 
         const opacity = 0.15 + (i / segments) * 0.85;
 
-        L.polyline([[startLat, startLng], [endLat, endLng]], {
-            color: baseColor,
+        L.polyline([[startLat,startLng],[endLat,endLng]], {
+            color: color,
             weight: 1,
             opacity: opacity,
             interactive: false
         }).addTo(map);
     }
 
-    // pulse effect for critical attacks
     if (severity === "critical") {
-        pulseBeam(glowLine);
+        pulseBeam(glow);
     }
 
-    // packet + stream
-    animatePacket(map, fromCoords, toCoords, baseColor);
-    createBeamTrail(map, fromCoords, toCoords, baseColor);
+    animatePacket(map, fromCoords, toCoords, color);
+    createBeamTrail(map, fromCoords, toCoords, color);
 }
