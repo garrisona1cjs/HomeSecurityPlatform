@@ -171,7 +171,7 @@ def attack_paths():
     ]
 
 # -----------------------------
-# Dashboard with Animated Lines
+# Dashboard with Neon Attack Map
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -186,26 +186,25 @@ def dashboard():
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <style>
-body { margin:0; background:#0f172a; color:white; font-family:Arial; }
-#map { height: 95vh; }
-
-.attack-line {
-    stroke: red;
-    stroke-width: 2;
-    stroke-dasharray: 10;
-    animation: dash 1s linear infinite;
+body {
+    margin:0;
+    background:#0f172a;
+    color:white;
+    font-family:Arial;
 }
 
-@keyframes dash {
-  to { stroke-dashoffset: -20; }
+#map {
+    height: 95vh;
 }
-
 </style>
 </head>
 <body>
 
 <h2 style="padding:10px;">🌐 LayerSeven Global Attack Monitor</h2>
 <div id="map"></div>
+
+<!-- LOAD NEON BEAM ENGINE -->
+<script src="/static/attackMap.js"></script>
 
 <script>
 const map = L.map('map').setView([30,0],2);
@@ -214,36 +213,31 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'© OpenStreetMap'
 }).addTo(map);
 
-let lines = [];
+// track active beams to prevent stacking
+let activeBeams = [];
 
 async function loadAttacks(){
+
     const paths = await fetch('/attack-paths').then(r=>r.json());
 
-    lines.forEach(l=>map.removeLayer(l));
-    lines=[];
+    // clear old beams
+    activeBeams.forEach(layer => map.removeLayer(layer));
+    activeBeams = [];
 
-    paths.forEach(p=>{
-        const line = L.polyline([p.from, p.to], {
-            color:'red',
-            weight:2,
-            dashArray:'10',
-            className:'attack-line'
-        }).addTo(map);
+    paths.forEach(p => {
 
-        lines.push(line);
-
-        L.circleMarker(p.to, {
-            radius:8,
-            color:'yellow',
-            fillOpacity:1
-        }).addTo(map);
-        
+        // draw neon beam
+        drawAttackBeam(map, p.from, p.to, "critical");
 
     });
 }
 
+// load attacks
 loadAttacks();
+
+// refresh every 4 seconds
 setInterval(loadAttacks, 4000);
+
 </script>
 
 </body>
