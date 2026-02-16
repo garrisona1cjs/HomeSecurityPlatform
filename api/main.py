@@ -172,7 +172,7 @@ def attack_paths():
 
 
 # -----------------------------
-# LayerSeven SOC Operations Console
+# LayerSeven Enterprise SOC Console
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -181,66 +181,29 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven SOC Operations Console</title>
+<title>LayerSeven Enterprise SOC Console</title>
 
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
-body { margin:0; background:black; overflow:hidden; font-family:monospace; }
+body { margin:0; background:black; overflow:hidden; font-family:monospace; color:#00ffff;}
 
 #globeViz { width:100vw; height:100vh; }
 
-#topbar {
+.panel {
     position:absolute;
-    top:0;
-    width:100%;
-    text-align:center;
-
-    color:#00ffff;
-    background:rgba(0,0,0,0.7);
-
-    padding:6px;
-
-}
-
-#panel {
-    position:absolute;
-
-    left:10px;
-    top:40px;
-    background:rgba(0,10,25,0.75);
+    background:rgba(0,10,25,0.8);
     padding:10px;
     border-radius:6px;
-    color:#00ffff;
+
 }
 
-#timeline {
-    position:absolute;
-    bottom:0;
-    width:100%;
-    max-height:160px;
-    overflow:auto;
-    background:rgba(0,10,25,0.9);
-    color:#00ffff;
-    padding:6px;
-    font-size:12px;
-}
+#mitre { left:10px; top:40px; width:260px; }
+#tickets { right:10px; top:40px; width:260px; }
+#collab { right:10px; bottom:10px; width:260px; }
+#export { left:10px; bottom:10px; width:260px; }
 
-#casePanel {
-    position:absolute;
-    right:10px;
-    top:40px;
-    width:260px;
-    background:rgba(0,10,25,0.75);
-    padding:10px;
-    border-radius:6px;
-    color:#00ffff;
-
-    font-size:12px;
-}
-
-button {
-
+button, textarea {
     width:100%;
     margin-top:6px;
     background:#001f33;
@@ -248,7 +211,7 @@ button {
     border:1px solid #00ffff55;
     color:#00ffff;
     padding:4px;
-    cursor:pointer;
+
 }
 </style>
 </head>
@@ -256,120 +219,105 @@ button {
 
 <div id="globeViz"></div>
 
-<div id="topbar">
-SOC OPERATIONS CONSOLE • STATUS: <span id="status">MONITORING</span>
+<div id="mitre" class="panel">
+<b>MITRE ATT&CK Heat Matrix</b><br>
+<div id="matrix"></div>
 </div>
 
-<div id="panel">
-Attacks: <span id="attackCount">0</span><br>
-Active Case: <span id="caseStatus">None</span><br>
-Threat Technique: <span id="mitre">N/A</span>
+<div id="tickets" class="panel">
+<b>Case Tickets</b><br>
+<div id="ticketList"></div>
 </div>
 
-<div id="casePanel">
-<b>Case Management</b><br>
-Stage: <span id="stage">Monitoring</span><br><br>
-<button onclick="advanceCase()">Advance Case Stage</button>
-<button onclick="replayCampaign()">Replay Campaign</button>
-<button onclick="exportBrief()">Export Executive Brief</button>
+<div id="collab" class="panel">
+<b>Analyst Collaboration</b><br>
+<textarea id="notes" rows="4" placeholder="Add investigation notes..."></textarea>
+<button onclick="saveNote()">Save Note</button>
+<div id="savedNotes"></div>
 </div>
 
-<div id="timeline"></div>
+<div id="export" class="panel">
+<b>Reporting</b><br>
+<button onclick="exportTimeline()">Export Campaign Timeline</button>
+<button onclick="exportCompliance()">Export Compliance Report</button>
+</div>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
-  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-  .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png');
+  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
 
 globe.controls().autoRotate = true;
 
-let attackHistory = [];
-let totalAttacks = 0;
-let caseStage = 0;
-let timelineEvents = [];
+let mitreCounts = {};
+let tickets = [];
+let timeline = [];
 
-const stages = ["Monitoring","Investigation","Containment","Eradication","Recovery"];
-
-const mitreTechniques = [
-    "T1595 Active Scanning",
-    "T1110 Brute Force",
-    "T1046 Network Discovery",
-    "T1078 Valid Accounts",
-    "T1021 Remote Services"
+// MITRE techniques
+const techniques = [
+"T1595 Active Scanning",
+"T1110 Brute Force",
+"T1046 Network Discovery",
+"T1021 Remote Services",
+"T1078 Valid Accounts"
 ];
 
-// timeline builder
-function logEvent(text){
-    timelineEvents.push(text);
+// update heat matrix
+function updateMatrix(tech){
+    mitreCounts[tech] = (mitreCounts[tech] || 0) + 1;
 
-    const t = document.getElementById("timeline");
-    const line = document.createElement("div");
-    line.innerHTML = new Date().toLocaleTimeString() + " — " + text;
-    t.prepend(line);
+    const matrix = document.getElementById("matrix");
+    matrix.innerHTML = "";
 
-    while(t.children.length > 20){
-        t.removeChild(t.lastChild);
-    }
+    Object.keys(mitreCounts).forEach(t=>{
+        matrix.innerHTML += t + " [" + mitreCounts[t] + "]<br>";
+    });
 }
 
-// MITRE mapping
-function mapTechnique(){
-    const technique = mitreTechniques[
-        Math.floor(Math.random()*mitreTechniques.length)
-    ];
+// create SOC ticket
+function createTicket(tech){
+    const id = "CASE-" + Math.floor(Math.random()*9999);
+    tickets.push({id:id, technique:tech});
 
-    document.getElementById("mitre").innerHTML = technique;
-    logEvent("MITRE technique observed: " + technique);
+    const list = document.getElementById("ticketList");
+    list.innerHTML += id + " — " + tech + "<br>";
 }
 
-// case workflow
-function advanceCase(){
-    caseStage = (caseStage + 1) % stages.length;
-    document.getElementById("stage").innerHTML = stages[caseStage];
-    document.getElementById("status").innerHTML = stages[caseStage].toUpperCase();
+// save analyst note
+function saveNote(){
+    const note = document.getElementById("notes").value;
+    if(!note) return;
+
+    document.getElementById("savedNotes").innerHTML += note + "<br>";
+    document.getElementById("notes").value="";
 }
 
-// campaign replay
-function replayCampaign(){
-
-    let i = 0;
-
-    const replay = setInterval(() => {
-
-        if(i >= attackHistory.length){
-            clearInterval(replay);
-            return;
-        }
-
-        const a = attackHistory[i];
-
-        globe.pointOfView({
-            lat: a.startLat,
-            lng: a.startLng,
-            altitude: 0.8
-        }, 1200);
-
-        i++;
-
-    }, 1400);
+// export campaign timeline
+function exportTimeline(){
+    const blob = new Blob([timeline.join("\\n")], {type:"text/plain"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "campaign_timeline.txt";
+    link.click();
 }
 
-// executive briefing export
-function exportBrief(){
+// export compliance report
+function exportCompliance(){
 
     const report = `
-LayerSeven Executive Intelligence Brief
+LayerSeven Compliance Summary
 
-Total Attacks: ${totalAttacks}
-Case Stage: ${stages[caseStage]}
-Recent Technique: ${document.getElementById("mitre").innerText}
-Events Logged: ${timelineEvents.length}
+MITRE Techniques Observed:
+${Object.keys(mitreCounts).join("\\n")}
+
+Cases Created: ${tickets.length}
+
+Notes Logged: ${document.getElementById("savedNotes").innerText.length}
 `;
 
     const blob = new Blob([report], {type:"text/plain"});
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "executive_brief.txt";
+    link.download = "compliance_report.txt";
     link.click();
 }
 
@@ -381,33 +329,31 @@ async function loadAttacks(){
     const arcs = [];
 
     for(const p of paths){
-    
 
+        const tech = techniques[Math.floor(Math.random()*techniques.length)];
 
-    
+        updateMatrix(tech);
+        createTicket(tech);
+
+        timeline.push(new Date().toLocaleTimeString() + " — " + tech);
 
         arcs.push({
-            startLat: p.from[0],
-            startLng: p.from[1],
-            endLat: p.to[0],
-            endLng: p.to[1],
+            startLat:p.from[0],
+            startLng:p.from[1],
+            endLat:p.to[0],
+            endLng:p.to[1],
             color:"#ff0033",
             stroke:1.2
         });
 
-        attackHistory.push({
-            startLat:p.from[0],
-            startLng:p.from[1]
-        });
 
-        mapTechnique();
-        logEvent("Attack detected from origin");
+
+
     }
 
     globe.arcsData(arcs);
+    
 
-    totalAttacks += paths.length;
-    document.getElementById("attackCount").innerHTML = totalAttacks;
 
 
 
