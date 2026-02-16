@@ -172,7 +172,7 @@ def attack_paths():
 
 
 # -----------------------------
-# LayerSeven Enterprise Command Console
+# LayerSeven Command Center Intelligence Suite
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -181,7 +181,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Enterprise Command Console</title>
+<title>LayerSeven Command Center</title>
 
 <script src="https://unpkg.com/globe.gl"></script>
 
@@ -197,32 +197,21 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
     padding:10px;
     border-radius:6px;
 
-}
-
-#mitreGrid { left:10px; top:40px; width:280px; }
-#tickets { right:10px; top:40px; width:280px; }
-#roles { left:10px; bottom:10px; width:280px; }
-#exec { right:10px; bottom:10px; width:280px; }
-
-/* MITRE grid */
-.grid {
-    display:grid;
-    grid-template-columns:repeat(2, 1fr);
-    gap:4px;
     font-size:12px;
 }
 
-.cell {
+#actors { left:10px; top:40px; width:260px; }
+#collab { right:10px; top:40px; width:260px; }
+#metrics { left:10px; bottom:10px; width:260px; }
+#executive { right:10px; bottom:10px; width:260px; }
+
+.card {
     border:1px solid #00ffff55;
-    padding:3px;
+    padding:6px;
+    margin-top:6px;
 }
 
-.active {
-    background:#ff003355;
-}
-
-/* buttons */
-button, select {
+button {
     width:100%;
     margin-top:6px;
     background:#001f33;
@@ -238,122 +227,107 @@ button, select {
 
 <div id="globeViz"></div>
 
-<div id="mitreGrid" class="panel">
-<b>MITRE ATT&CK Matrix</b>
-<div id="grid" class="grid"></div>
+<div id="actors" class="panel">
+<b>Threat Actor Intelligence</b>
+<div id="actorCards"></div>
 </div>
 
-<div id="tickets" class="panel">
-<b>Case Tickets</b><br>
-<div id="ticketList"></div>
+<div id="collab" class="panel">
+<b>Analyst Presence</b>
+<div id="analysts"></div>
 </div>
 
-<div id="roles" class="panel">
-<b>Access Role</b>
-<select id="roleSelect" onchange="setRole()">
-<option>Analyst</option>
-<option>Lead</option>
-<option>Admin</option>
-</select>
-<div id="roleStatus">Role: Analyst</div>
+<div id="metrics" class="panel">
+<b>SOC Performance</b><br>
+Detections: <span id="detections">0</span><br>
+Response Actions: <span id="responses">0</span><br>
+Mean Response Time: <span id="mrt">0</span>s
 </div>
 
-<div id="exec" class="panel">
-<b>Executive Risk Dashboard</b><br>
-Risk Score: <span id="riskScore">0</span><br>
-Threat Actor: <span id="actor">Unknown</span><br>
-Feed Insight: <span id="feed">None</span>
+<div id="executive" class="panel">
+<b>Executive Briefing</b>
+<button onclick="exportSlides()">Generate Slide Deck</button>
 </div>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
-  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
+  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+  .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+  .atmosphereColor('#00ffff')
+  .atmosphereAltitude(0.25);
 
 globe.controls().autoRotate = true;
 
-// MITRE techniques (matrix)
-const techniques = [
-"T1595 Active Scanning",
-"T1110 Brute Force",
-"T1046 Network Discovery",
-"T1021 Remote Services",
-"T1078 Valid Accounts",
-"T1105 Exfiltration",
-"T1059 Command Execution",
-"T1087 Account Discovery"
-];
+let techniqueHeat = {};
+let actorProfiles = {};
+let detections = 0;
+let responses = 0;
 
-let mitreHits = {};
-let tickets = [];
-let role = "Analyst";
-let riskScore = 0;
+// MITRE heat overlay
+function updateHeat(lat,lng){
+    globe.pointsData([...globe.pointsData(), {
+        lat:lat,
+        lng:lng,
+        size:1.5
+    }])
+    .pointAltitude(0.4)
+    .pointColor(()=>"#ff0033");
+}
 
-// build matrix grid
-function renderGrid(){
-    const grid = document.getElementById("grid");
-    grid.innerHTML = "";
+// threat actor cards
+function updateActorProfile(region){
 
-    techniques.forEach(t=>{
-        const div = document.createElement("div");
-        div.className = "cell" + (mitreHits[t] ? " active" : "");
-        div.innerHTML = t;
-        grid.appendChild(div);
+    actorProfiles[region] = (actorProfiles[region] || 0) + 1;
+
+    const cardArea = document.getElementById("actorCards");
+    cardArea.innerHTML = "";
+
+    Object.keys(actorProfiles).forEach(r=>{
+        cardArea.innerHTML +=
+        "<div class='card'>Region: "+r+
+        "<br>Activity: "+actorProfiles[r]+
+        "<br>Profile: Coordinated Campaign</div>";
     });
 }
 
-// update MITRE
-function updateTechnique(tech){
-    mitreHits[tech] = true;
-    renderGrid();
+// analyst presence simulation
+function updateAnalysts(){
+
+    const names = ["Alex","Jordan","Taylor","Morgan"];
+    const active = names.slice(0, Math.floor(Math.random()*names.length)+1);
+
+    document.getElementById("analysts").innerHTML =
+        active.join("<br>");
 }
 
-// ticket workflow
-function createTicket(tech){
-    const id = "CASE-" + Math.floor(Math.random()*9000);
-    tickets.push({id:id, status:"OPEN", tech:tech});
+// SOC metrics
+function updateMetrics(){
+    detections += Math.floor(Math.random()*3)+1;
+    responses += Math.floor(Math.random()*2);
 
-    updateTicketDisplay();
+    document.getElementById("detections").innerHTML = detections;
+    document.getElementById("responses").innerHTML = responses;
+    document.getElementById("mrt").innerHTML =
+        Math.max(2, 10 - responses);
 }
 
-function updateTicketDisplay(){
-    const list = document.getElementById("ticketList");
-    list.innerHTML = "";
+// executive slide export
+function exportSlides(){
 
-    tickets.forEach(t=>{
-        list.innerHTML += t.id + " — " + t.tech + " [" + t.status + "]<br>";
-    });
-}
+    const content = `
+LayerSeven Executive Brief
 
-// role control
-function setRole(){
-    role = document.getElementById("roleSelect").value;
-    document.getElementById("roleStatus").innerHTML = "Role: " + role;
-}
+Total Detections: ${detections}
+Response Actions: ${responses}
+Active Regions: ${Object.keys(actorProfiles).length}
+SOC Efficiency Score: ${detections - responses}
+`;
 
-// threat actor attribution feed
-function attributionFeed(){
-    const actors = [
-        "APT-style behavior",
-        "Botnet campaign",
-        "Credential harvesting group",
-        "Commodity malware actor"
-    ];
-
-    const actor = actors[Math.floor(Math.random()*actors.length)];
-    document.getElementById("actor").innerHTML = actor;
-}
-
-// external intelligence feed insight
-function feedInsight(){
-    const insights = [
-        "Malicious ASN correlation",
-        "Known C2 infrastructure match",
-        "Tor exit node activity",
-        "Cloud abuse pattern detected"
-    ];
-
-    document.getElementById("feed").innerHTML =
-        insights[Math.floor(Math.random()*insights.length)];
+    const blob = new Blob([content], {type:"text/plain"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "executive_brief.txt";
+    link.click();
 }
 
 // load attacks
@@ -365,12 +339,12 @@ async function loadAttacks(){
 
     for(const p of paths){
 
-        const tech = techniques[Math.floor(Math.random()*techniques.length)];
+        const region = p.from[0].toFixed(0)+","+p.from[1].toFixed(0);
 
-        updateTechnique(tech);
-        createTicket(tech);
+        updateHeat(p.from[0], p.from[1]);
+        updateActorProfile(region);
 
-        riskScore += 2;
+        detections++;
 
         arcs.push({
             startLat:p.from[0],
@@ -380,19 +354,20 @@ async function loadAttacks(){
             color:"#ff0033",
             stroke:1.2
         });
-        
+
 
     }
 
     globe.arcsData(arcs);
 
-    document.getElementById("riskScore").innerHTML = riskScore;
+    
 
-    attributionFeed();
-    feedInsight();
+
+
 }
 
-renderGrid();
+setInterval(updateAnalysts, 5000);
+setInterval(updateMetrics, 4000);
 loadAttacks();
 setInterval(loadAttacks, 3500);
 </script>
