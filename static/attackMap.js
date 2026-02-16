@@ -25,6 +25,17 @@ let attackCount = 0;
 const criticalSound = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
 criticalSound.volume = 0.3;
 
+let soundEnabled = false;
+
+// enable audio after first user interaction
+document.addEventListener("click", () => {
+    soundEnabled = true;
+}, { once: true });
+
+document.addEventListener("keydown", () => {
+    soundEnabled = true;
+}, { once: true });
+
 
 // ================================
 // 📊 LIVE ATTACK COUNTER
@@ -229,8 +240,9 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     createOriginPulse(map, fromCoords);
     createCountryAura(map, fromCoords);
 
-    if (severity === "critical") {
-        criticalSound.play();
+    if (severity === "critical" && soundEnabled) {
+    criticalSound.currentTime = 0;
+    criticalSound.play().catch(()=>{});
     }
 
     const glow = L.polyline([fromCoords, toCoords], {
