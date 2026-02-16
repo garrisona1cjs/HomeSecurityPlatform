@@ -180,7 +180,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Globe Intelligence</title>
+<title>LayerSeven Threat Intelligence</title>
 
 <script src="https://unpkg.com/globe.gl"></script>
 
@@ -201,29 +201,29 @@ body { margin:0; background:black; overflow:hidden; }
     z-index:999;
 }
 
-#timeline {
-    position:absolute;
-    bottom:0;
-    width:100%;
-    max-height:140px;
-    overflow:hidden;
-    font-family:monospace;
-    font-size:12px;
-    color:#00ffff;
-    background:rgba(0,10,25,0.85);
-    padding:6px;
-}
-
-#legend {
+#queue {
     position:absolute;
     right:10px;
-    top:10px;
-    background:rgba(0,10,25,0.65);
+    bottom:10px;
+    width:260px;
+    max-height:260px;
+    overflow:auto;
+    font-family:monospace;
+    font-size:12px;
+
+    background:rgba(0,10,25,0.85);
+    
+
+
     padding:8px;
     color:#00ffff;
-    font-family:monospace;
+
     border-radius:6px;
 }
+
+.queueItem { margin-bottom:4px; }
+.high { color:#ff6600; }
+.critical { color:#ff0033; }
 </style>
 </head>
 <body>
@@ -236,15 +236,7 @@ body { margin:0; background:black; overflow:hidden; }
 <span id="aiAlert"></span>
 </div>
 
-<div id="legend">
-<b>Threat Heat</b><br>
-■ Low<br>
-■■ Moderate<br>
-■■■ Elevated<br>
-■■■■ Severe<br>
-</div>
-
-<div id="timeline"></div>
+<div id="queue"><b>Alert Queue</b><br></div>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
@@ -258,101 +250,76 @@ const globe = Globe()(document.getElementById('globeViz'))
   .atmosphereAltitude(0.25);
 
 globe.controls().autoRotate = true;
-globe.controls().autoRotateSpeed = 0.5;
+
 
 let attackHistory = [];
 
 let originCounts = {};
 let anomalyScores = {};
+let fingerprints = {};
 let totalAttacks = 0;
-let playbackMode = false;
+
 
 // severity thickness
-const thickness = { critical:1.4, high:1.1, medium:0.8, low:0.6 };
+const thickness = { critical:1.5, high:1.2, medium:0.8, low:0.6 };
 
-// timeline logger
-function logEvent(text){
-    const panel = document.getElementById("timeline");
-    const line = document.createElement("div");
-    line.innerHTML = new Date().toLocaleTimeString() + " — " + text;
-    panel.prepend(line);
-
-    while(panel.children.length > 12){
-        panel.removeChild(panel.lastChild);
-    }
+// 🌍 country flag emoji helper
+function getFlagEmoji(lat){
+    if(lat > 40 && lat < 70) return "🇷🇺";
+    if(lat > 20 && lat < 40) return "🇨🇳";
+    if(lat < -10 && lat > -40) return "🇧🇷";
+    if(lat > 35 && lat < 60 && Math.random() < .5) return "🇪🇺";
+    return "🌐";
 }
 
-// 🧠 anomaly scoring
+// 🛰 reputation lookup (framework ready)
+function reputationLookup(key){
+    if(originCounts[key] > 10) return "HIGH RISK";
+    if(originCounts[key] > 6) return "SUSPICIOUS";
+    return "NORMAL";
+}
+
+// 🧠 adaptive anomaly scoring
 function updateAnomaly(key){
     anomalyScores[key] = (anomalyScores[key] || 0) + 1;
 
-    if(anomalyScores[key] > 12){
+    const avg = Object.values(anomalyScores)
+        .reduce((a,b)=>a+b,0) / Object.keys(anomalyScores).length;
+
+    if(anomalyScores[key] > avg * 2){
         document.getElementById("aiAlert").innerHTML =
-            "⚠ Anomalous traffic spike detected";
+            "⚠ Behavioral anomaly detected";
     }
 }
 
-// 🌎 geolocation label
-function createLabel(lat, lng, text){
-    globe.labelsData([...globe.labelsData(), {
-        lat: lat,
-        lng: lng,
-        text: text,
-        size: 1.2,
-        color: "#00ffff"
-    }]);
+// 🕵️ fingerprint behavior
+function fingerprintOrigin(key){
+
+    fingerprints[key] = fingerprints[key] || {
+        firstSeen: Date.now(),
+        hits: 0
+    };
+
+    fingerprints[key].hits++;
+
+    if(fingerprints[key].hits > 12){
+        return "Persistent threat actor";
+    }
+    return null;
 }
 
-// 🛰 threat feed correlation (framework)
-function threatFeedMatch(key){
-    // placeholder: integrate live feeds later
-    if(anomalyScores[key] > 15) return true;
-    return false;
-}
+// 🚨 analyst alert queue
+function pushAlert(text, level="high"){
 
-// heat glow density
-function updateHotspots(){
+    const queue = document.getElementById("queue");
+    const item = document.createElement("div");
+    item.className = "queueItem " + level;
+    item.innerHTML = text;
+    queue.appendChild(item);
 
-    const points = Object.keys(originCounts).map(k=>{
-        const parts = k.split(",");
-        return {
-            lat: parseFloat(parts[0]),
-            lng: parseFloat(parts[1]),
-            size: originCounts[k] * 0.35
-        };
-    });
-
-    globe.pointsData(points)
-         .pointAltitude(d => d.size)
-         .pointColor(() => '#ff0033')
-         .pointRadius(0.5);
-}
-
-// cinematic playback mode
-function playbackSequence(){
-    playbackMode = true;
-    globe.controls().autoRotateSpeed = 0.2;
-
-    let i = 0;
-
-    const interval = setInterval(() => {
-        if(i >= attackHistory.length){
-            clearInterval(interval);
-            playbackMode = false;
-            globe.controls().autoRotateSpeed = 0.5;
-            return;
-        }
-
-        const a = attackHistory[i];
-
-        globe.pointOfView({
-            lat: a.startLat,
-            lng: a.startLng,
-            altitude: 0.7
-        }, 1800);
-
-        i++;
-    }, 2000);
+    if(queue.children.length > 15){
+        queue.removeChild(queue.children[1]);
+    }
 }
 
 // load attacks
@@ -361,32 +328,38 @@ async function loadAttacks(){
     const paths = await fetch('/attack-paths').then(r=>r.json());
 
     const arcs = paths.map(p => {
-    
+
 
 
         const key = p.from.toString();
         originCounts[key] = (originCounts[key] || 0) + 1;
+
         updateAnomaly(key);
+
+        const reputation = reputationLookup(key);
+        const actor = fingerprintOrigin(key);
 
         const severity = ["critical","high","medium","low"]
             [Math.floor(Math.random()*4)];
 
-        const color = "#ff0033";
+        const flag = getFlagEmoji(p.from[0]);
 
-        if(threatFeedMatch(key)){
-            logEvent("⚠ Threat feed match detected");
+        if(reputation === "HIGH RISK"){
+            pushAlert(flag + " High risk origin detected", "critical");
         }
 
-        createLabel(p.from[0], p.from[1], "Origin");
+        if(actor){
+            pushAlert("🕵️ " + actor, "critical");
+        }
 
-        logEvent("Activity from " + key);
+        pushAlert(flag + " Activity detected");
 
         return {
             startLat: p.from[0],
             startLng: p.from[1],
             endLat: p.to[0],
             endLng: p.to[1],
-            color: color,
+            color: "#ff0033",
             stroke: thickness[severity]
         };
     });
@@ -401,11 +374,10 @@ async function loadAttacks(){
     document.getElementById("attackCount").innerHTML =
         "Attacks: " + totalAttacks;
 
-    updateHotspots();
+
 }
 
-// playback every 45 seconds for executive demo
-setInterval(playbackSequence, 45000);
+
 
 loadAttacks();
 setInterval(loadAttacks, 3500);
