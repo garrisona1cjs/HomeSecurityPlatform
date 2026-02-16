@@ -172,4 +172,52 @@ function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
 
     // moving packet
     animatePacket(map, fromCoords, toCoords, color);
+
+    // 🌊 flowing particle stream
+    createBeamTrail(map, fromCoords, toCoords, color);
+}
+
+
+// ================================
+// 🌊 BEAM TRAIL PARTICLE STREAM
+// ================================
+function createBeamTrail(map, from, to, color) {
+
+    const particles = [];
+    const particleCount = 6;
+
+    for (let i = 0; i < particleCount; i++) {
+        particles.push({
+            progress: Math.random()
+        });
+    }
+
+    function animateParticles() {
+
+        particles.forEach(p => {
+
+            p.progress += 0.01;
+
+            if (p.progress > 1) {
+                p.progress = 0;
+            }
+
+            const lat = from[0] + (to[0] - from[0]) * p.progress;
+            const lng = from[1] + (to[1] - from[1]) * p.progress;
+
+            const dot = L.circleMarker([lat, lng], {
+                radius: 2,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.8,
+                interactive: false
+            }).addTo(map);
+
+            setTimeout(() => map.removeLayer(dot), 120);
+        });
+
+        requestAnimationFrame(animateParticles);
+    }
+
+    animateParticles();
 }
