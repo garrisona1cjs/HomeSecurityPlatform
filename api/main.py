@@ -234,6 +234,8 @@ globe.controls().autoRotateSpeed = 0.5;
 let attackHistory = [];
 let totalAttacks = 0;
 let originCounts = {};
+let lastCameraMove = 0;
+const cameraCooldown = 5000; // milliseconds (5 seconds)
 
 // severity colors
 const colors = {
