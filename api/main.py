@@ -171,7 +171,7 @@ def attack_paths():
     ]
 
 # -----------------------------
-# Dashboard with Neon Attack Map
+# Dashboard Command Center Mode
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -180,7 +180,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Threat Map</title>
+<title>LayerSeven Command Center</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -188,54 +188,137 @@ def dashboard():
 <style>
 body {
     margin:0;
-    background:#0f172a;
+    background:#0b1220;
     color:white;
     font-family:Arial;
 }
 
-#map {
-    height: 95vh;
+#map { height: 100vh; }
+
+/* HUD PANEL */
+#hud {
+    position:absolute;
+    top:10px;
+    left:10px;
+    z-index:999;
+    background:rgba(10,15,30,0.85);
+    padding:12px;
+    border-radius:8px;
+    font-size:13px;
+}
+
+/* legend */
+.legend div {
+    margin-bottom:4px;
+}
+
+/* toggle button */
+#globeBtn {
+    margin-top:8px;
+    padding:4px 8px;
+    background:#00ffff22;
+    border:1px solid #00ffff55;
+    color:#00ffff;
+    cursor:pointer;
 }
 </style>
 </head>
 <body>
 
-<h2 style="padding:10px;">🌐 LayerSeven Global Attack Monitor</h2>
+
 <div id="map"></div>
 
-<!-- LOAD NEON BEAM ENGINE -->
+<div id="hud">
+
+<b>Threat Legend</b>
+<div class="legend">
+<div><span style="color:#ff0033">■</span> Critical</div>
+<div><span style="color:#ff6600">■</span> High</div>
+<div><span style="color:#00ffff">■</span> Medium</div>
+<div><span style="color:#00ccff">■</span> Low</div>
+</div>
+
+<hr>
+
+<b>Filter Severity</b><br>
+<label><input type="checkbox" checked value="critical"> Critical</label><br>
+<label><input type="checkbox" checked value="high"> High</label><br>
+<label><input type="checkbox" checked value="medium"> Medium</label><br>
+<label><input type="checkbox" checked value="low"> Low</label>
+
+<hr>
+
+<button id="globeBtn">🌍 Globe Mode</button>
+
+</div>
+
 <script src="/static/attackMap.js"></script>
 
 <script>
-const map = L.map('map').setView([30,0],2);
+const map = L.map('map', {
+    worldCopyJump:true
+}).setView([20,0],2);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     attribution:'© OpenStreetMap'
 }).addTo(map);
 
-// track active beams to prevent stacking
-let activeBeams = [];
+let globeMode = false;
+let filters = new Set(["critical","high","medium","low"]);
 
+// handle filter checkboxes
+document.querySelectorAll('#hud input').forEach(cb=>{
+    cb.addEventListener('change', e=>{
+        if(e.target.checked) filters.add(e.target.value);
+        else filters.delete(e.target.value);
+    });
+});
+
+// globe mode toggle
+document.getElementById("globeBtn").onclick = () => {
+
+    globeMode = !globeMode;
+
+    if(globeMode){
+        map.flyTo([0,0], 1.6, { duration: 2 });
+        map.dragging.disable();
+    } else {
+        map.flyTo([20,0], 2, { duration: 1.5 });
+        map.dragging.enable();
+    }
+};
+
+// cinematic camera movement
+function cinematicFocus(from, to){
+    map.flyToBounds([from, to], {
+        padding:[120,120],
+        duration:2
+    });
+}
+
+// load attack paths
 async function loadAttacks(){
 
     const paths = await fetch('/attack-paths').then(r=>r.json());
 
-    // clear old beams
-    activeBeams.forEach(layer => map.removeLayer(layer));
-    activeBeams = [];
+    paths.forEach(p=>{
 
-    paths.forEach(p => {
+        const severity = ["critical","high","medium","low"]
+            [Math.floor(Math.random()*4)];
 
-        // draw neon beam
-        drawAttackBeam(map, p.from, p.to, "critical");
+        if(!filters.has(severity)) return;
 
+        drawAttackBeam(map, p.from, p.to, severity);
+
+        if(globeMode){
+            cinematicFocus(p.from, p.to);
+        }
     });
 }
 
-// load attacks
 loadAttacks();
 
-// refresh every 4 seconds
+
 setInterval(loadAttacks, 4000);
 
 </script>
