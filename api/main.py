@@ -171,7 +171,7 @@ def attack_paths():
     ]
 
 # -----------------------------
-# LayerSeven Threat Intelligence Command Center
+# LayerSeven Mission Control
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -180,7 +180,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Threat Intelligence</title>
+<title>LayerSeven Mission Control</title>
 
 <script src="https://unpkg.com/globe.gl"></script>
 
@@ -189,16 +189,28 @@ body { margin:0; background:black; overflow:hidden; }
 
 #globeViz { width:100vw; height:100vh; }
 
+#topbar {
+    position:absolute;
+    top:0;
+    width:100%;
+    background:rgba(0,0,0,0.7);
+    color:#00ffff;
+    font-family:monospace;
+    padding:6px;
+    text-align:center;
+    letter-spacing:1px;
+}
+
 #hud {
     position:absolute;
-    top:10px;
+    top:36px;
     left:10px;
     color:#00ffff;
     font-family:monospace;
-    background:rgba(0,10,25,0.65);
+    background:rgba(0,10,25,0.6);
     padding:10px;
     border-radius:6px;
-    z-index:999;
+
 }
 
 #queue {
@@ -212,7 +224,7 @@ body { margin:0; background:black; overflow:hidden; }
     font-size:12px;
 
     background:rgba(0,10,25,0.85);
-
+    
 
     padding:8px;
     color:#00ffff;
@@ -230,10 +242,13 @@ body { margin:0; background:black; overflow:hidden; }
 
 <div id="globeViz"></div>
 
+<div id="topbar">
+MISSION CONTROL • GLOBAL THREAT STATUS: <span id="status">MONITORING</span>
+</div>
+
 <div id="hud">
-<b>LayerSeven Threat Intelligence</b><br>
-<span id="attackCount">Attacks: 0</span><br>
-<span id="aiAlert"></span>
+Attacks: <span id="attackCount">0</span><br>
+Campaign Risk: <span id="campaignRisk">LOW</span>
 </div>
 
 <div id="queue"><b>Alert Queue</b><br></div>
@@ -251,155 +266,96 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 
-
-let attackHistory = [];
-
-let originCounts = {};
-
 let totalAttacks = 0;
-let campaignClusters = {};
-let blockedOrigins = {};
+let originCounts = {};
+let campaignScore = 0;
+let feedThreats = [];
 
-// severity thickness
-const thickness = { critical:1.5, high:1.2, medium:0.8, low:0.6 };
-
-// 🔥 Alert queue
+// alert queue
 function pushAlert(text, level="high"){
-
-    const queue = document.getElementById("queue");
+    const q = document.getElementById("queue");
     const item = document.createElement("div");
     item.className = "queueItem " + level;
     item.innerHTML = text;
-    queue.appendChild(item);
+    q.appendChild(item);
 
-    if(queue.children.length > 18){
-        queue.removeChild(queue.children[1]);
+    if(q.children.length > 18){
+        q.removeChild(q.children[1]);
     }
 }
 
-// 🌍 country flag (simple region logic)
-function getFlag(lat){
-    if(lat > 40 && lat < 70) return "🇷🇺";
-    if(lat > 20 && lat < 40) return "🇨🇳";
-    if(lat < -10 && lat > -40) return "🇧🇷";
-    return "🌐";
-}
+// 🌐 simulated threat feed ingestion
+function ingestThreatFeed(){
 
-// 🛰 AbuseIPDB LOOKUP (LIVE READY)
-async function checkAbuseIP(ip){
-
-    // 🔐 Replace with real API later:
-    // const res = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${ip}`, {
-    //   headers: { Key: "YOUR_API_KEY", Accept: "application/json" }
-    // });
-
-    // demo logic
-    if(Math.random() < 0.15){
-        return true;
-    }
-    return false;
-}
-
-// 🔥 heat intensity rings
-function drawHeatRing(lat, lng, intensity){
-
-    globe.ringsData([...globe.ringsData(), {
-        lat: lat,
-        lng: lng,
-        maxR: intensity * 2,
-        propagationSpeed: 2,
-        repeatPeriod: 700
-    }]);
-}
-
-// 🧠 campaign clustering
-function updateCampaign(key){
-    campaignClusters[key] = (campaignClusters[key] || 0) + 1;
-
-    if(campaignClusters[key] === 6){
-        pushAlert("⚠ Coordinated campaign emerging", "critical");
+    // simulate incoming feed indicators
+    if(Math.random() < 0.2){
+        feedThreats.push("Known malicious IP block");
+        pushAlert("🛰 Threat feed indicator received", "critical");
     }
 }
 
-// 🛡 mitigation simulation
-function simulateMitigation(key){
+setInterval(ingestThreatFeed, 7000);
 
-    if(originCounts[key] > 12 && !blockedOrigins[key]){
-        blockedOrigins[key] = true;
-        pushAlert("🛡 Mitigation simulated: origin blocked", "critical");
+// 🧠 predictive campaign modeling
+function updateCampaignRisk(){
+
+    if(campaignScore > 25){
+        document.getElementById("campaignRisk").innerHTML = "HIGH";
+        document.getElementById("status").innerHTML = "ELEVATED";
+    }
+    else if(campaignScore > 12){
+        document.getElementById("campaignRisk").innerHTML = "MEDIUM";
     }
 }
 
-// 🖥 multi-screen mode (auto view cycling)
-let viewMode = 0;
-setInterval(()=>{
-    viewMode = (viewMode + 1) % 3;
+// 🛡 automated response playbooks
+function simulateResponse(key){
 
-    if(viewMode === 0){
-        globe.controls().autoRotateSpeed = 0.5;
-    }
-    if(viewMode === 1){
-        globe.pointOfView({ lat:0, lng:0, altitude:1.8 }, 2000);
-    }
-    if(viewMode === 2){
-        globe.pointOfView({ lat:30, lng:-40, altitude:1.2 }, 2000);
+    if(originCounts[key] > 8){
+        pushAlert("🛡 Firewall rule deployed", "critical");
     }
 
-}, 30000);
+    if(originCounts[key] > 12){
+        pushAlert("🛡 Geo-block enabled", "critical");
+    }
+}
 
 // load attacks
 async function loadAttacks(){
 
     const paths = await fetch('/attack-paths').then(r=>r.json());
 
+    const arcs = [];
+
     for (const p of paths){
 
         const key = p.from.toString();
         originCounts[key] = (originCounts[key] || 0) + 1;
 
-        updateCampaign(key);
-        simulateMitigation(key);
+        campaignScore += 1;
 
-        const flagged = await checkAbuseIP(key);
+        simulateResponse(key);
 
-        if(flagged){
-            pushAlert("🚨 AbuseIPDB flagged origin", "critical");
+        if(feedThreats.length > 0){
+            pushAlert("🚨 Feed-correlated activity", "critical");
         }
 
-        const flag = getFlag(p.from[0]);
-
-        pushAlert(flag + " Activity detected");
-
-        // heat ring for persistent threats
-        if(originCounts[key] > 4){
-            drawHeatRing(p.from[0], p.from[1], originCounts[key]);
-        }
-
-        const severity = ["critical","high","medium","low"]
-            [Math.floor(Math.random()*4)];
-
-        attackHistory.push({
+        arcs.push({
             startLat: p.from[0],
             startLng: p.from[1],
             endLat: p.to[0],
             endLng: p.to[1],
-            color: flagged ? "#ff0033" : "#ff6600",
-            stroke: thickness[severity]
+            color: "#ff0033",
+            stroke: 1.2
         });
     }
-    
 
-
-    if(attackHistory.length > 80) attackHistory.shift();
-
-    globe.arcsData(attackHistory)
-         .arcStroke(d => d.stroke);
+    globe.arcsData(arcs);
 
     totalAttacks += paths.length;
-    document.getElementById("attackCount").innerHTML =
-        "Attacks: " + totalAttacks;
+    document.getElementById("attackCount").innerHTML = totalAttacks;
 
-
+    updateCampaignRisk();
 }
 
 
