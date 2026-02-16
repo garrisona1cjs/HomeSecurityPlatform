@@ -184,7 +184,7 @@ function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
 function createBeamTrail(map, from, to, color) {
 
     const particles = [];
-    const particleCount = 6;
+    const particleCount = 10;
 
     for (let i = 0; i < particleCount; i++) {
         particles.push({
@@ -196,7 +196,7 @@ function createBeamTrail(map, from, to, color) {
 
         particles.forEach(p => {
 
-            p.progress += 0.01;
+            p.progress += 0.02;
 
             if (p.progress > 1) {
                 p.progress = 0;
