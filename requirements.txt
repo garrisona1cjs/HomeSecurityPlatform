@@ -2,7 +2,7 @@ scapy
 colorama
 pyyaml
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic
 psycopg2-binary
 sqlalchemy
