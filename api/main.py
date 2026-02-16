@@ -271,14 +271,16 @@ function detectPatterns(){
 
 // auto zoom to highest severity
 function focusCritical(arcs){
+
     const critical = arcs.find(a => a.severity === "critical");
     if(!critical) return;
 
-    globe.pointOfView({
-        lat: critical.startLat,
-        lng: critical.startLng,
-        altitude: 1.5
-    }, 1500);
+   globe.pointOfView({
+    lat: critical.startLat,
+    lng: critical.startLng,
+    altitude: 0.6
+    }, 2500);   // slower camera motion
+
 }
 
 // clustering density glow
