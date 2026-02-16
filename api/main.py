@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List
-import uuid, secrets, os
+import uuid, secrets, os, random
 
 from sqlalchemy import create_engine, Column, String
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -25,6 +25,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
+
 
 app = FastAPI(title="LayerSeven Security Platform")
 
@@ -105,34 +106,7 @@ def register(agent: AgentRegistration):
     return {"agent_id": agent_id, "api_key": api_key}
 
 # -----------------------------
-# Report → Alert Generation
-# -----------------------------
-
-@app.post("/report")
-def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
-    db = SessionLocal()
-    verify_agent(db, report.agent_id, x_api_key)
-
-    risk = len(report.devices) * 40
-    severity = "LOW"
-    if risk > 80: severity = "HIGH"
-    if risk > 120: severity = "CRITICAL"
-
-    db.add(Alert(
-        id=str(uuid.uuid4()),
-        agent_id=report.agent_id,
-        risk_score=str(risk),
-        severity=severity,
-        timestamp=datetime.utcnow().isoformat()
-    ))
-
-    db.commit()
-    db.close()
-
-    return {"risk_score": risk, "severity": severity}
-
-# -----------------------------
-# Attack Paths Feed
+# Attack Feed
 # -----------------------------
 
 @app.get("/attack-paths")
@@ -147,37 +121,31 @@ def attack_paths():
     ]
 
 # -----------------------------
-# 🌐 Real-Time Collaboration Hub
+# WebSocket Hub
 # -----------------------------
 
-active_connections = set()
+connections = set()
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    active_connections.add(websocket)
+async def ws_endpoint(ws: WebSocket):
+    await ws.accept()
+    connections.add(ws)
 
-
-    for conn in active_connections:
-        await conn.send_text("JOIN")
+    for c in connections:
+        await c.send_text("JOIN")
 
     try:
         while True:
-            message = await websocket.receive_text()
-
-
-            for conn in active_connections:
-                await conn.send_text(message)
-
+            msg = await ws.receive_text()
+            for c in connections:
+                await c.send_text(msg)
     except WebSocketDisconnect:
-        active_connections.remove(websocket)
-
-
-        for conn in active_connections:
-            await conn.send_text("LEAVE")
+        connections.remove(ws)
+        for c in connections:
+            await c.send_text("LEAVE")
 
 # -----------------------------
-# SOC Dashboard
+# Dashboard
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -186,7 +154,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven SOC Command</title>
+<title>LayerSeven Cyber Operations Simulator</title>
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
@@ -202,112 +170,131 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
  border-radius:6px;
  font-size:12px;
 }
-#analysts { right:10px; top:40px; }
-#priority { right:10px; bottom:10px; }
+#status { left:10px; top:40px; }
+#training { left:10px; bottom:10px; }
 </style>
 </head>
 <body>
 
 <div id="globeViz"></div>
 
-<div id="analysts" class="panel">
-<b>Analysts</b>
-<div id="count">0 connected</div>
+<div id="status" class="panel">
+<b>Threat Level:</b> <span id="level">LOW</span><br>
+<b>Analysts:</b> <span id="users">0</span>
 </div>
 
-<div id="priority" class="panel">
-<b>Threat Level</b>
-<div id="level">LOW</div>
+<div id="training" class="panel">
+<button onclick="toggleTraining()">Toggle Training Mode</button>
+<button onclick="replayTimeline()">Replay Campaign</button>
 </div>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
- .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
- .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png');
+.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+.backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png');
 
 globe.controls().autoRotate = true;
 
-// WebSocket
+
 const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
 
-let analysts = 0;
-let heat = {};
+let users = 0;
 let threatScore = 0;
+let history = [];
+let trainingMode = false;
+let blockedRegions = {};
 
-// join/leave sync
-ws.onmessage = (e) => {
-
-    if(e.data === "JOIN") analysts++;
-    else if(e.data === "LEAVE") analysts--;
-    else if(e.data.startsWith("MARK:")){
-        const [_,lat,lng] = e.data.split(":");
-        addMarker(lat,lng);
-    }
-
-    document.getElementById("count").innerHTML =
-        analysts + " connected";
+// sync analysts
+ws.onmessage = e => {
+    if(e.data==="JOIN") users++;
+    else if(e.data==="LEAVE") users--;
+    usersDisplay();
 };
+
+function usersDisplay(){
+    users = Math.max(0, users);
+    document.getElementById("users").innerHTML = users;
+}
 
 // shared annotations
 globe.onGlobeClick(({lat,lng})=>{
     ws.send(`MARK:${lat}:${lng}`);
 });
 
-function addMarker(lat,lng){
-    globe.pointsData([...globe.pointsData(), {lat:lat,lng:lng,size:0.5}])
-         .pointColor(()=>"#00ffff");
+// threat triage
+function updateThreat(){
+    if(threatScore>25) level.innerHTML="CRITICAL";
+    else if(threatScore>15) level.innerHTML="HIGH";
+    else if(threatScore>8) level.innerHTML="MEDIUM";
 }
 
-// anomaly heat detection
-function heatDetect(lat,lng){
-    const key = lat.toFixed(0)+lng.toFixed(0);
-    heat[key] = (heat[key]||0)+1;
+// AI prediction engine
+function predictNext(origin){
+    const predicted = {
+        startLat: origin[0],
+        startLng: origin[1],
+        endLat: origin[0]+(Math.random()*20-10),
+        endLng: origin[1]+(Math.random()*20-10),
+        color:"#ff00ff"
+    };
+    return predicted;
+}
 
-    if(heat[key] > 3){
-        globe.pointsData([...globe.pointsData(), {lat:lat,lng:lng,size:2}])
-             .pointColor(()=>"#ff0033");
+// automated containment
+function contain(region){
+    if(!blockedRegions[region]){
+        blockedRegions[region]=true;
+        threatScore -= 4;
     }
 }
 
-// threat feed simulation
-function threatFeed(){
-    const intel = [
-        "Botnet signature detected",
-        "Known C2 infrastructure",
-        "Credential harvesting activity",
-        "Malicious ASN flagged"
-    ];
-    if(Math.random()<0.4){
-        console.log("INTEL:", intel[Math.floor(Math.random()*intel.length)]);
-    }
-}
-setInterval(threatFeed,5000);
-
-// triage automation
-function triage(){
-    if(threatScore>20) level.innerHTML="CRITICAL";
-    else if(threatScore>12) level.innerHTML="HIGH";
-    else if(threatScore>6) level.innerHTML="MEDIUM";
-}
-
-// red vs blue simulation
-function redBlue(){
-    if(Math.random()<0.3){
-        threatScore += 3; // attacker success
+// red vs blue simulator
+function cyberBattle(){
+    if(Math.random()<0.6){
+        threatScore += 2; // attack success
     } else {
         threatScore -= 1; // defender mitigation
     }
-    triage();
+    updateThreat();
 }
-setInterval(redBlue,4000);
+setInterval(cyberBattle, 4000);
+
+// timeline replay
+function replayTimeline(){
+    let i=0;
+    const replay=setInterval(()=>{
+        if(i>=history.length){clearInterval(replay); return;}
+        globe.pointOfView(history[i],1200);
+        i++;
+    },1500);
+}
+
+// training mode
+function toggleTraining(){
+    trainingMode=!trainingMode;
+}
 
 // load attacks
 async function load(){
     const paths = await fetch('/attack-paths').then(r=>r.json());
     const arcs=[];
+
     for(const p of paths){
-        heatDetect(p.from[0],p.from[1]);
+
+        const region = p.from.toString();
+        history.push({lat:p.from[0],lng:p.from[1],altitude:1});
+
+        if(trainingMode){
+            threatScore += 3;
+        } else {
+            threatScore += 2;
+        }
+
+        if(threatScore > 20){
+            contain(region);
+        }
+
         arcs.push({
             startLat:p.from[0],
             startLng:p.from[1],
@@ -317,11 +304,14 @@ async function load(){
             stroke:1.2
         });
 
-
+        // prediction arc
+        arcs.push(predictNext(p.from));
     }
 
     globe.arcsData(arcs);
+    updateThreat();
 }
+
 load();
 setInterval(load,3500);
 </script>
