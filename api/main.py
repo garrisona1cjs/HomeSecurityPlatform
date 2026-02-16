@@ -200,6 +200,19 @@ body { margin:0; background:black; overflow:hidden; }
     border-radius:6px;
     z-index:999;
 }
+
+#timeline {
+    position:absolute;
+    bottom:0;
+    width:100%;
+    max-height:140px;
+    overflow:hidden;
+    font-family:monospace;
+    font-size:12px;
+    color:#00ffff;
+    background:rgba(0,10,25,0.85);
+    padding:6px;
+}
 </style>
 </head>
 <body>
@@ -212,6 +225,8 @@ body { margin:0; background:black; overflow:hidden; }
 <span id="aiAlert"></span>
 </div>
 
+<div id="timeline"></div>
+
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
   .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
@@ -219,7 +234,7 @@ const globe = Globe()(document.getElementById('globeViz'))
   .arcDashLength(0.35)
   .arcDashGap(3)
   .arcDashAnimateTime(2000)
-  .arcStroke(0.6)
+
   .atmosphereColor('#00ffff')
   .atmosphereAltitude(0.25);
 
@@ -227,16 +242,13 @@ globe.controls().autoRotate = true;
 globe.controls().autoRotateSpeed = 0.5;
 
 let attackHistory = [];
-let totalAttacks = 0;
+
 let originCounts = {};
-let originTimeline = {};
-let escalationTracker = {};
+let reputationScore = {};
+let suspiciousOrigins = {};
+let totalAttacks = 0;
 
-// 🎥 camera control
-let lastCameraMove = 0;
-const cameraCooldown = 5000;
-
-// severity colors
+// 🎯 severity colors
 const colors = {
     critical: "#ff0033",
     high: "#ff6600",
@@ -244,173 +256,118 @@ const colors = {
     low: "#00ccff"
 };
 
-// simulate severity
-function randomSeverity(){
-    const s = ["critical","high","medium","low"];
-    return s[Math.floor(Math.random()*s.length)];
-}
+// 🎯 severity thickness
+const thickness = {
+    critical: 1.4,
+    high: 1.1,
+    medium: 0.8,
+    low: 0.6
+};
 
-// 🤖 baseline pattern detection
-function detectPatterns(){
+// 🎯 behavior colors
+const behaviorColors = {
+    recon: "#00ffff",
+    brute: "#ff8800",
+    botnet: "#ff00ff",
+    coordinated: "#ff0033",
+    lateral: "#a855f7"
+};
 
-    let text = "";
+// 🎯 timeline log
+function logEvent(text){
+    const panel = document.getElementById("timeline");
+    const line = document.createElement("div");
+    line.innerHTML = new Date().toLocaleTimeString() + " — " + text;
+    panel.prepend(line);
 
-    if(attackHistory.length > 25){
-        text += "⚠ Burst activity detected<br>";
+    while(panel.children.length > 12){
+        panel.removeChild(panel.lastChild);
     }
-
-    Object.keys(originCounts).forEach(k=>{
-        if(originCounts[k] > 6){
-            text += "⚠ Coordinated region activity<br>";
-        }
-    });
-
-    document.getElementById("aiAlert").innerHTML = text;
 }
 
-// 🧠 Threat Classification Engine
-function predictiveAnalysis(arcs){
+// 🅱 reputation scoring
+function updateReputation(key){
+    reputationScore[key] = (reputationScore[key] || 0) + 1;
 
-    let alerts = [];
-
-    arcs.forEach(a => {
-
-        const key = a.startLat + "," + a.startLng;
-
-        if (!originTimeline[key]) originTimeline[key] = [];
-        originTimeline[key].push(Date.now());
-
-        if (originTimeline[key].length > 25)
-            originTimeline[key].shift();
-
-        const timeline = originTimeline[key];
-
-        // 🔎 Recon Scanning
-        if (timeline.length >= 6) {
-            const span = timeline.slice(-6);
-            if (span[5] - span[0] < 15000) {
-                alerts.push("🔎 Recon scanning behavior");
-            }
-        }
-
-        // 🔐 Brute force / rapid retry behavior
-        if (!escalationTracker[key]) escalationTracker[key] = 0;
-        escalationTracker[key]++;
-
-        if (escalationTracker[key] === 10) {
-            alerts.push("🔐 Brute force / rapid retry pattern");
-        }
-
-    });
-
-    // 🤖 Botnet / distributed traffic detection
-    if (Object.keys(originCounts).length > 8 &&
-        attackHistory.length > 25) {
-        alerts.push("🤖 Distributed botnet activity");
+    if(reputationScore[key] > 10){
+        suspiciousOrigins[key] = true;
     }
+}
 
-    // ⚠ coordinated attack pattern
-    if (Object.keys(originCounts).length > 5 &&
-        attackHistory.length > 40) {
-        alerts.push("⚠ Coordinated attack pattern");
+// 🅲 threat feed correlation (framework ready)
+function correlateThreatFeed(key){
+    if(suspiciousOrigins[key]){
+        return true; // placeholder for real feed lookup
     }
-
-    // 🔄 lateral movement style spread
-    if (attackHistory.length > 50 &&
-        Object.keys(originCounts).length > 10) {
-        alerts.push("🔄 Possible lateral movement activity");
-    }
-
-    return [...new Set(alerts)];
+    return false;
 }
 
-// 🎯 focus on critical threats
-function focusCritical(arcs){
+// 🧠 behavior classification
+function classifyBehavior(key){
 
-    const now = Date.now();
-    if (now - lastCameraMove < cameraCooldown) return;
+    if(reputationScore[key] > 10)
+        return "brute";
 
-    const critical = arcs.find(a => a.severity === "critical");
-    if(!critical) return;
+    if(Object.keys(originCounts).length > 8)
+        return "botnet";
 
-    // zoom to threat
-    globe.pointOfView({
-        lat: critical.startLat,
-        lng: critical.startLng,
-        altitude: 0.6
-    }, 2200);
+    if(attackHistory.length > 40)
+        return "coordinated";
 
-    lastCameraMove = now;
+    if(attackHistory.length > 60)
+        return "lateral";
 
-    // return to global view
-    setTimeout(() => {
-        globe.pointOfView({
-            lat: 20,
-            lng: 0,
-            altitude: 2.2
-        }, 2000);
-    }, 4500);
+    return "recon";
 }
 
-// 🔥 hotspot density glow
-function updateHotspots(){
-
-    const points = Object.keys(originCounts).map(k=>{
-        const parts = k.split(",");
-        return {
-            lat: parseFloat(parts[0]),
-            lng: parseFloat(parts[1]),
-            size: originCounts[k] * 0.3
-        };
-    });
-
-    globe.pointsData(points)
-         .pointAltitude(d => d.size)
-         .pointColor(() => '#ff0033')
-         .pointRadius(0.5);
-}
-
-// load attacks & timeline playback
+// load attacks
 async function loadAttacks(){
 
     const paths = await fetch('/attack-paths').then(r=>r.json());
 
     const arcs = paths.map(p => {
 
-        const severity = randomSeverity();
+
 
         const key = p.from.toString();
         originCounts[key] = (originCounts[key] || 0) + 1;
+        updateReputation(key);
+
+        const severity = ["critical","high","medium","low"]
+            [Math.floor(Math.random()*4)];
+
+        const behavior = classifyBehavior(key);
+
+        const color = behaviorColors[behavior] || colors[severity];
+
+        const flagged = correlateThreatFeed(key);
+
+        if(flagged){
+            logEvent("⚠ Threat intelligence match detected");
+        }
+
+        logEvent(behavior.toUpperCase() + " activity detected");
 
         return {
             startLat: p.from[0],
             startLng: p.from[1],
             endLat: p.to[0],
             endLng: p.to[1],
-            color: colors[severity],
-            severity: severity
+            color: color,
+            stroke: thickness[severity]
         };
     });
 
     attackHistory = attackHistory.concat(arcs);
     if(attackHistory.length > 80) attackHistory.shift();
 
-    globe.arcsData(attackHistory);
+    globe.arcsData(attackHistory)
+         .arcStroke(d => d.stroke);
 
     totalAttacks += arcs.length;
     document.getElementById("attackCount").innerHTML =
         "Attacks: " + totalAttacks;
-
-    detectPatterns();
-    updateHotspots();
-    focusCritical(arcs);
-
-    const predictiveWarnings = predictiveAnalysis(arcs);
-
-    if (predictiveWarnings.length > 0) {
-        document.getElementById("aiAlert").innerHTML =
-            predictiveWarnings.join("<br>");
-    }
+        
 }
 
 loadAttacks();
