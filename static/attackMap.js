@@ -240,10 +240,21 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     createOriginPulse(map, fromCoords);
     createCountryAura(map, fromCoords);
 
-    if (severity === "critical" && soundEnabled) {
-    criticalSound.currentTime = 0;
-    criticalSound.play().catch(()=>{});
+ // rate-limit critical alert sound
+if (severity === "critical" && soundEnabled) {
+
+    const now = Date.now();
+
+    if (!window.lastSoundTime) {
+        window.lastSoundTime = 0;
     }
+
+    if (now - window.lastSoundTime > 800) {  // 800ms throttle
+        criticalSound.currentTime = 0;
+        criticalSound.play().catch(()=>{});
+        window.lastSoundTime = now;
+    }
+}
 
     const glow = L.polyline([fromCoords, toCoords], {
         color: color,
