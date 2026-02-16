@@ -172,7 +172,7 @@ def attack_paths():
 
 
 # -----------------------------
-# LayerSeven AI Mission Control
+# LayerSeven SOC Intelligence Center
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -181,7 +181,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven AI Mission Control</title>
+<title>LayerSeven SOC Intelligence Center</title>
 
 <script src="https://unpkg.com/globe.gl"></script>
 
@@ -216,25 +216,30 @@ body { margin:0; background:black; overflow:hidden; }
 
 }
 
-#controls {
+#workflow {
     position:absolute;
     right:10px;
     top:40px;
-    background:rgba(0,10,25,0.7);
+    width:260px;
+    background:rgba(0,10,25,0.75);
     padding:10px;
     border-radius:6px;
     color:#00ffff;
     font-family:monospace;
+    font-size:12px;
 }
 
 button {
-    margin-top:5px;
+
     width:100%;
+    margin-top:6px;
     background:#001f33;
-    color:#00ffff;
+
     border:1px solid #00ffff55;
+    color:#00ffff;
     padding:4px;
     cursor:pointer;
+
 }
 
 
@@ -251,28 +256,26 @@ button {
 <div id="globeViz"></div>
 
 <div id="topbar">
-AI MISSION CONTROL • STATUS: <span id="status">MONITORING</span>
+SOC INTELLIGENCE CENTER • STATUS: <span id="status">MONITORING</span>
 </div>
 
 <div id="panel">
 Attacks: <span id="attackCount">0</span><br>
-Campaigns: <span id="campaignCount">0</span><br>
-Risk Level: <span id="riskLevel">LOW</span>
+Campaign Zones: <span id="zones">0</span><br>
+Threat Actor: <span id="actor">Unknown</span>
 </div>
 
-<div id="controls">
-<b>Operator Panel</b><br>
-<button onclick="toggleMitigation()">Toggle Auto Mitigation</button>
-<button onclick="togglePlayback()">Toggle Playback Mode</button>
+<div id="workflow">
+<b>Incident Workflow</b><br>
+<span id="stage">Monitoring</span><br><br>
+<button onclick="exportReport()">Export Incident Report</button>
 </div>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
   .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
   .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
-  .arcDashLength(0.35)
-  .arcDashGap(3)
-  .arcDashAnimateTime(2000)
+
 
   .atmosphereColor('#00ffff')
   .atmosphereAltitude(0.25);
@@ -280,62 +283,74 @@ const globe = Globe()(document.getElementById('globeViz'))
 globe.controls().autoRotate = true;
 
 let totalAttacks = 0;
-let campaigns = {};
-let riskScore = 0;
-let autoMitigation = true;
-let playbackMode = false;
+let campaignHeat = {};
+let threatActorProfile = {};
+let workflowStage = "Monitoring";
 
-// 🛰 AbuseIPDB LIVE READY
-async function abuseCheck(ip){
+// 🎯 Predictive campaign heat map
+function updateHeat(lat,lng){
 
-    // 🔐 INSERT API KEY HERE
-    // const res = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${ip}`, {
-    //   headers: { Key: "YOUR_API_KEY", Accept: "application/json" }
-    // });
+    const key = lat+","+lng;
+    campaignHeat[key] = (campaignHeat[key] || 0) + 1;
 
-    // demo flagging logic
-    return Math.random() < 0.15;
+    globe.pointsData([...globe.pointsData(), {
+        lat: lat,
+        lng: lng,
+        size: campaignHeat[key] * 0.4
+    }])
+    .pointAltitude(d => d.size)
+    .pointColor(() => '#ff0033');
+
+    document.getElementById("zones").innerHTML =
+        Object.keys(campaignHeat).length;
 }
 
-// 🔮 Predict future path
-function projectFuturePath(from, to){
+// 🛡 incident response playbooks
+function runPlaybook(level){
 
-    const lat = to[0] + (to[0] - from[0]) * 0.5;
-    const lng = to[1] + (to[1] - from[1]) * 0.5;
-
-    return {
-        startLat: to[0],
-        startLng: to[1],
-        endLat: lat,
-        endLng: lng,
-        color: "#ff00ff"
-    };
-}
-
-// 🕵️ campaign tracking
-function trackCampaign(key){
-    campaigns[key] = (campaigns[key] || 0) + 1;
-}
-
-// 🤖 AI response decision engine
-function aiResponse(key){
-
-    if(riskScore > 20 && autoMitigation){
-        document.getElementById("status").innerHTML = "DEFENSIVE MODE";
+    if(level > 6 && workflowStage === "Monitoring"){
+        workflowStage = "Investigation";
+    }
+    else if(level > 10){
+        workflowStage = "Containment";
+    }
+    else if(level > 15){
+        workflowStage = "Remediation";
     }
 
-    if(campaigns[key] > 6 && autoMitigation){
-        document.getElementById("status").innerHTML = "MITIGATION ACTIVE";
+    document.getElementById("stage").innerHTML = workflowStage;
+}
+
+// 🕵️ adversary attribution modeling
+function attributeActor(key){
+
+    threatActorProfile[key] = (threatActorProfile[key] || 0) + 1;
+
+    if(threatActorProfile[key] > 12){
+        document.getElementById("actor").innerHTML = "Persistent Botnet";
+    }
+    else if(threatActorProfile[key] > 6){
+        document.getElementById("actor").innerHTML = "Coordinated Campaign";
     }
 }
 
-// 🎛 operator controls
-function toggleMitigation(){
-    autoMitigation = !autoMitigation;
-}
+// 📄 threat report export
+function exportReport(){
 
-function togglePlayback(){
-    playbackMode = !playbackMode;
+    const report = `
+LayerSeven Incident Report
+
+Attacks Observed: ${totalAttacks}
+Campaign Zones: ${Object.keys(campaignHeat).length}
+Workflow Stage: ${workflowStage}
+Threat Actor: ${document.getElementById("actor").innerText}
+`;
+
+    const blob = new Blob([report], { type: "text/plain" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "incident_report.txt";
+    link.click();
 }
 
 // load attacks
@@ -345,48 +360,35 @@ async function loadAttacks(){
 
     const arcs = [];
 
-    for (const p of paths){
+    for(const p of paths){
 
         const key = p.from.toString();
-        
 
-        trackCampaign(key);
-        riskScore += 1;
+        updateHeat(p.from[0], p.from[1]);
+        attributeActor(key);
 
-        const flagged = await abuseCheck(key);
-
-        if(flagged){
-            document.getElementById("status").innerHTML = "THREAT VERIFIED";
-        }
-
-        aiResponse(key);
+        runPlaybook(campaignHeat[p.from[0]+","+p.from[1]]);
 
         arcs.push({
             startLat: p.from[0],
             startLng: p.from[1],
             endLat: p.to[0],
             endLng: p.to[1],
-            color: flagged ? "#ff0033" : "#ff6600",
+            color: "#ff0033",
             stroke: 1.2
         });
+        
 
-        // predictive future path
-        if(riskScore > 10){
-            arcs.push(projectFuturePath(p.from, p.to));
-        }
     }
 
     globe.arcsData(arcs);
 
     totalAttacks += paths.length;
     document.getElementById("attackCount").innerHTML = totalAttacks;
-    document.getElementById("campaignCount").innerHTML = Object.keys(campaigns).length;
 
-    if(riskScore > 20){
-        document.getElementById("riskLevel").innerHTML = "HIGH";
-    }
-    else if(riskScore > 10){
-        document.getElementById("riskLevel").innerHTML = "MEDIUM";
+
+    if(workflowStage !== "Monitoring"){
+        document.getElementById("status").innerHTML = workflowStage.toUpperCase();
     }
 }
 
