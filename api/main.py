@@ -189,12 +189,10 @@ body { margin:0; background:black; overflow:hidden; }
 
 #globeViz { width:100vw; height:100vh; }
 
-
 #hud {
     position:absolute;
     top:10px;
     left:10px;
-
     color:#00ffff;
     font-family:monospace;
     background:rgba(0,10,25,0.65);
@@ -214,17 +212,14 @@ body { margin:0; background:black; overflow:hidden; }
 <span id="aiAlert"></span>
 </div>
 
-
-
 <script>
-
 const globe = Globe()(document.getElementById('globeViz'))
   .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
   .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
   .arcDashLength(0.35)
   .arcDashGap(3)
   .arcDashAnimateTime(2000)
-  .arcStroke(0.5)
+  .arcStroke(0.6)
   .atmosphereColor('#00ffff')
   .atmosphereAltitude(0.25);
 
@@ -234,8 +229,10 @@ globe.controls().autoRotateSpeed = 0.5;
 let attackHistory = [];
 let totalAttacks = 0;
 let originCounts = {};
+
+// 🎥 camera control
 let lastCameraMove = 0;
-const cameraCooldown = 5000; // milliseconds (5 seconds)
+const cameraCooldown = 5000;
 
 // severity colors
 const colors = {
@@ -245,47 +242,59 @@ const colors = {
     low: "#00ccff"
 };
 
-// choose severity
+// random severity simulation
 function randomSeverity(){
     const s = ["critical","high","medium","low"];
     return s[Math.floor(Math.random()*s.length)];
 }
 
-// AI pattern detection
+// 🤖 AI pattern detection
 function detectPatterns(){
 
     let aiText = "";
 
-    // burst detection
     if(attackHistory.length > 25){
         aiText += "⚠ Burst activity detected<br>";
     }
 
-    // coordinated origin detection
     Object.keys(originCounts).forEach(k=>{
         if(originCounts[k] > 6){
-            aiText += "⚠ Coordinated activity from region<br>";
+            aiText += "⚠ Coordinated activity detected<br>";
         }
     });
 
     document.getElementById("aiAlert").innerHTML = aiText;
 }
 
-// auto zoom to highest severity
+// 🎯 focus on critical threats
 function focusCritical(arcs){
+
+    const now = Date.now();
+    if (now - lastCameraMove < cameraCooldown) return;
 
     const critical = arcs.find(a => a.severity === "critical");
     if(!critical) return;
 
-   globe.pointOfView({
-    lat: critical.startLat,
-    lng: critical.startLng,
-    altitude: 0.6
-    }, 2500);   // slower camera motion
+    // zoom to threat
+    globe.pointOfView({
+        lat: critical.startLat,
+        lng: critical.startLng,
+        altitude: 0.6
+    }, 2200);
 
+    lastCameraMove = now;
+
+    // return to global view
+    setTimeout(() => {
+        globe.pointOfView({
+            lat: 20,
+            lng: 0,
+            altitude: 2.2
+        }, 2000);
+    }, 4500);
 }
 
-// clustering density glow
+// 🔥 hotspot density glow
 function updateHotspots(){
 
     const points = Object.keys(originCounts).map(k=>{
@@ -303,7 +312,7 @@ function updateHotspots(){
          .pointRadius(0.5);
 }
 
-// load attacks & animate timeline
+// load attacks & timeline playback
 async function loadAttacks(){
 
     const paths = await fetch('/attack-paths').then(r=>r.json());
@@ -326,6 +335,8 @@ async function loadAttacks(){
     });
 
     attackHistory = attackHistory.concat(arcs);
+
+    // keep timeline length manageable
     if(attackHistory.length > 80){
         attackHistory.shift();
     }
@@ -341,12 +352,9 @@ async function loadAttacks(){
     focusCritical(arcs);
 }
 
-// timeline playback loop
 loadAttacks();
 setInterval(loadAttacks, 3500);
-
 </script>
-
 </body>
 </html>
 """
