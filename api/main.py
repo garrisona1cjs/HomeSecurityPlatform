@@ -171,7 +171,7 @@ def attack_paths():
     ]
 
 # -----------------------------
-# Globe Intelligence Command Center
+# LayerSeven Threat Intelligence Command Center
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -205,14 +205,13 @@ body { margin:0; background:black; overflow:hidden; }
     position:absolute;
     right:10px;
     bottom:10px;
-    width:260px;
+    width:280px;
     max-height:260px;
     overflow:auto;
     font-family:monospace;
     font-size:12px;
 
     background:rgba(0,10,25,0.85);
-    
 
 
     padding:8px;
@@ -222,8 +221,9 @@ body { margin:0; background:black; overflow:hidden; }
 }
 
 .queueItem { margin-bottom:4px; }
-.high { color:#ff6600; }
+
 .critical { color:#ff0033; }
+.high { color:#ff6600; }
 </style>
 </head>
 <body>
@@ -231,7 +231,7 @@ body { margin:0; background:black; overflow:hidden; }
 <div id="globeViz"></div>
 
 <div id="hud">
-<b>LayerSeven Intelligence</b><br>
+<b>LayerSeven Threat Intelligence</b><br>
 <span id="attackCount">Attacks: 0</span><br>
 <span id="aiAlert"></span>
 </div>
@@ -255,60 +255,15 @@ globe.controls().autoRotate = true;
 let attackHistory = [];
 
 let originCounts = {};
-let anomalyScores = {};
-let fingerprints = {};
-let totalAttacks = 0;
 
+let totalAttacks = 0;
+let campaignClusters = {};
+let blockedOrigins = {};
 
 // severity thickness
 const thickness = { critical:1.5, high:1.2, medium:0.8, low:0.6 };
 
-// 🌍 country flag emoji helper
-function getFlagEmoji(lat){
-    if(lat > 40 && lat < 70) return "🇷🇺";
-    if(lat > 20 && lat < 40) return "🇨🇳";
-    if(lat < -10 && lat > -40) return "🇧🇷";
-    if(lat > 35 && lat < 60 && Math.random() < .5) return "🇪🇺";
-    return "🌐";
-}
-
-// 🛰 reputation lookup (framework ready)
-function reputationLookup(key){
-    if(originCounts[key] > 10) return "HIGH RISK";
-    if(originCounts[key] > 6) return "SUSPICIOUS";
-    return "NORMAL";
-}
-
-// 🧠 adaptive anomaly scoring
-function updateAnomaly(key){
-    anomalyScores[key] = (anomalyScores[key] || 0) + 1;
-
-    const avg = Object.values(anomalyScores)
-        .reduce((a,b)=>a+b,0) / Object.keys(anomalyScores).length;
-
-    if(anomalyScores[key] > avg * 2){
-        document.getElementById("aiAlert").innerHTML =
-            "⚠ Behavioral anomaly detected";
-    }
-}
-
-// 🕵️ fingerprint behavior
-function fingerprintOrigin(key){
-
-    fingerprints[key] = fingerprints[key] || {
-        firstSeen: Date.now(),
-        hits: 0
-    };
-
-    fingerprints[key].hits++;
-
-    if(fingerprints[key].hits > 12){
-        return "Persistent threat actor";
-    }
-    return null;
-}
-
-// 🚨 analyst alert queue
+// 🔥 Alert queue
 function pushAlert(text, level="high"){
 
     const queue = document.getElementById("queue");
@@ -317,60 +272,130 @@ function pushAlert(text, level="high"){
     item.innerHTML = text;
     queue.appendChild(item);
 
-    if(queue.children.length > 15){
+    if(queue.children.length > 18){
         queue.removeChild(queue.children[1]);
     }
 }
+
+// 🌍 country flag (simple region logic)
+function getFlag(lat){
+    if(lat > 40 && lat < 70) return "🇷🇺";
+    if(lat > 20 && lat < 40) return "🇨🇳";
+    if(lat < -10 && lat > -40) return "🇧🇷";
+    return "🌐";
+}
+
+// 🛰 AbuseIPDB LOOKUP (LIVE READY)
+async function checkAbuseIP(ip){
+
+    // 🔐 Replace with real API later:
+    // const res = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${ip}`, {
+    //   headers: { Key: "YOUR_API_KEY", Accept: "application/json" }
+    // });
+
+    // demo logic
+    if(Math.random() < 0.15){
+        return true;
+    }
+    return false;
+}
+
+// 🔥 heat intensity rings
+function drawHeatRing(lat, lng, intensity){
+
+    globe.ringsData([...globe.ringsData(), {
+        lat: lat,
+        lng: lng,
+        maxR: intensity * 2,
+        propagationSpeed: 2,
+        repeatPeriod: 700
+    }]);
+}
+
+// 🧠 campaign clustering
+function updateCampaign(key){
+    campaignClusters[key] = (campaignClusters[key] || 0) + 1;
+
+    if(campaignClusters[key] === 6){
+        pushAlert("⚠ Coordinated campaign emerging", "critical");
+    }
+}
+
+// 🛡 mitigation simulation
+function simulateMitigation(key){
+
+    if(originCounts[key] > 12 && !blockedOrigins[key]){
+        blockedOrigins[key] = true;
+        pushAlert("🛡 Mitigation simulated: origin blocked", "critical");
+    }
+}
+
+// 🖥 multi-screen mode (auto view cycling)
+let viewMode = 0;
+setInterval(()=>{
+    viewMode = (viewMode + 1) % 3;
+
+    if(viewMode === 0){
+        globe.controls().autoRotateSpeed = 0.5;
+    }
+    if(viewMode === 1){
+        globe.pointOfView({ lat:0, lng:0, altitude:1.8 }, 2000);
+    }
+    if(viewMode === 2){
+        globe.pointOfView({ lat:30, lng:-40, altitude:1.2 }, 2000);
+    }
+
+}, 30000);
 
 // load attacks
 async function loadAttacks(){
 
     const paths = await fetch('/attack-paths').then(r=>r.json());
 
-    const arcs = paths.map(p => {
-
-
+    for (const p of paths){
 
         const key = p.from.toString();
         originCounts[key] = (originCounts[key] || 0) + 1;
 
-        updateAnomaly(key);
+        updateCampaign(key);
+        simulateMitigation(key);
 
-        const reputation = reputationLookup(key);
-        const actor = fingerprintOrigin(key);
+        const flagged = await checkAbuseIP(key);
+
+        if(flagged){
+            pushAlert("🚨 AbuseIPDB flagged origin", "critical");
+        }
+
+        const flag = getFlag(p.from[0]);
+
+        pushAlert(flag + " Activity detected");
+
+        // heat ring for persistent threats
+        if(originCounts[key] > 4){
+            drawHeatRing(p.from[0], p.from[1], originCounts[key]);
+        }
 
         const severity = ["critical","high","medium","low"]
             [Math.floor(Math.random()*4)];
 
-        const flag = getFlagEmoji(p.from[0]);
-
-        if(reputation === "HIGH RISK"){
-            pushAlert(flag + " High risk origin detected", "critical");
-        }
-
-        if(actor){
-            pushAlert("🕵️ " + actor, "critical");
-        }
-
-        pushAlert(flag + " Activity detected");
-
-        return {
+        attackHistory.push({
             startLat: p.from[0],
             startLng: p.from[1],
             endLat: p.to[0],
             endLng: p.to[1],
-            color: "#ff0033",
+            color: flagged ? "#ff0033" : "#ff6600",
             stroke: thickness[severity]
-        };
-    });
+        });
+    }
+    
 
-    attackHistory = attackHistory.concat(arcs);
+
     if(attackHistory.length > 80) attackHistory.shift();
 
     globe.arcsData(attackHistory)
          .arcStroke(d => d.stroke);
 
-    totalAttacks += arcs.length;
+    totalAttacks += paths.length;
     document.getElementById("attackCount").innerHTML =
         "Attacks: " + totalAttacks;
 
