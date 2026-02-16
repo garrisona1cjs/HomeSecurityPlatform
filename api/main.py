@@ -268,10 +268,10 @@ function detectPatterns(){
     document.getElementById("aiAlert").innerHTML = text;
 }
 
-// 🧠 predictive threat behavior detection
+// 🧠 Threat Classification Engine
 function predictiveAnalysis(arcs){
 
-    let warnings = [];
+    let alerts = [];
 
     arcs.forEach(a => {
 
@@ -280,34 +280,48 @@ function predictiveAnalysis(arcs){
         if (!originTimeline[key]) originTimeline[key] = [];
         originTimeline[key].push(Date.now());
 
-        if (originTimeline[key].length > 20)
+        if (originTimeline[key].length > 25)
             originTimeline[key].shift();
 
-        // reconnaissance detection
-        if (originTimeline[key].length >= 6) {
-            const span = originTimeline[key].slice(-6);
-            if (span[5] - span[0] < 12000) {
-                warnings.push("🔎 Recon activity detected");
+        const timeline = originTimeline[key];
+
+        // 🔎 Recon Scanning
+        if (timeline.length >= 6) {
+            const span = timeline.slice(-6);
+            if (span[5] - span[0] < 15000) {
+                alerts.push("🔎 Recon scanning behavior");
             }
         }
 
-        // escalation detection
+        // 🔐 Brute force / rapid retry behavior
         if (!escalationTracker[key]) escalationTracker[key] = 0;
         escalationTracker[key]++;
 
-        if (escalationTracker[key] === 8) {
-            warnings.push("📈 Escalating probe intensity");
-        }
-
-        // distributed staging detection
-        if (Object.keys(originCounts).length > 5 &&
-            attackHistory.length > 20) {
-            warnings.push("⚠ Coordinated staging activity");
+        if (escalationTracker[key] === 10) {
+            alerts.push("🔐 Brute force / rapid retry pattern");
         }
 
     });
 
-    return [...new Set(warnings)];
+    // 🤖 Botnet / distributed traffic detection
+    if (Object.keys(originCounts).length > 8 &&
+        attackHistory.length > 25) {
+        alerts.push("🤖 Distributed botnet activity");
+    }
+
+    // ⚠ coordinated attack pattern
+    if (Object.keys(originCounts).length > 5 &&
+        attackHistory.length > 40) {
+        alerts.push("⚠ Coordinated attack pattern");
+    }
+
+    // 🔄 lateral movement style spread
+    if (attackHistory.length > 50 &&
+        Object.keys(originCounts).length > 10) {
+        alerts.push("🔄 Possible lateral movement activity");
+    }
+
+    return [...new Set(alerts)];
 }
 
 // 🎯 focus on critical threats
