@@ -229,6 +229,8 @@ globe.controls().autoRotateSpeed = 0.5;
 let attackHistory = [];
 let totalAttacks = 0;
 let originCounts = {};
+let originTimeline = {};
+let escalationTracker = {};
 
 // 🎥 camera control
 let lastCameraMove = 0;
@@ -242,28 +244,70 @@ const colors = {
     low: "#00ccff"
 };
 
-// random severity simulation
+// simulate severity
 function randomSeverity(){
     const s = ["critical","high","medium","low"];
     return s[Math.floor(Math.random()*s.length)];
 }
 
-// 🤖 AI pattern detection
+// 🤖 baseline pattern detection
 function detectPatterns(){
 
-    let aiText = "";
+    let text = "";
 
     if(attackHistory.length > 25){
-        aiText += "⚠ Burst activity detected<br>";
+        text += "⚠ Burst activity detected<br>";
     }
 
     Object.keys(originCounts).forEach(k=>{
         if(originCounts[k] > 6){
-            aiText += "⚠ Coordinated activity detected<br>";
+            text += "⚠ Coordinated region activity<br>";
         }
     });
 
-    document.getElementById("aiAlert").innerHTML = aiText;
+    document.getElementById("aiAlert").innerHTML = text;
+}
+
+// 🧠 predictive threat behavior detection
+function predictiveAnalysis(arcs){
+
+    let warnings = [];
+
+    arcs.forEach(a => {
+
+        const key = a.startLat + "," + a.startLng;
+
+        if (!originTimeline[key]) originTimeline[key] = [];
+        originTimeline[key].push(Date.now());
+
+        if (originTimeline[key].length > 20)
+            originTimeline[key].shift();
+
+        // reconnaissance detection
+        if (originTimeline[key].length >= 6) {
+            const span = originTimeline[key].slice(-6);
+            if (span[5] - span[0] < 12000) {
+                warnings.push("🔎 Recon activity detected");
+            }
+        }
+
+        // escalation detection
+        if (!escalationTracker[key]) escalationTracker[key] = 0;
+        escalationTracker[key]++;
+
+        if (escalationTracker[key] === 8) {
+            warnings.push("📈 Escalating probe intensity");
+        }
+
+        // distributed staging detection
+        if (Object.keys(originCounts).length > 5 &&
+            attackHistory.length > 20) {
+            warnings.push("⚠ Coordinated staging activity");
+        }
+
+    });
+
+    return [...new Set(warnings)];
 }
 
 // 🎯 focus on critical threats
@@ -335,11 +379,7 @@ async function loadAttacks(){
     });
 
     attackHistory = attackHistory.concat(arcs);
-
-    // keep timeline length manageable
-    if(attackHistory.length > 80){
-        attackHistory.shift();
-    }
+    if(attackHistory.length > 80) attackHistory.shift();
 
     globe.arcsData(attackHistory);
 
@@ -350,6 +390,13 @@ async function loadAttacks(){
     detectPatterns();
     updateHotspots();
     focusCritical(arcs);
+
+    const predictiveWarnings = predictiveAnalysis(arcs);
+
+    if (predictiveWarnings.length > 0) {
+        document.getElementById("aiAlert").innerHTML =
+            predictiveWarnings.join("<br>");
+    }
 }
 
 loadAttacks();
