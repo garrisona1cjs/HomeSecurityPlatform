@@ -9,7 +9,7 @@ import uuid, secrets, os
 from sqlalchemy import create_engine, Column, String
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from mac_vendor_lookup import MacLookup
+
 
 
 
@@ -35,22 +35,7 @@ app = FastAPI(title="LayerSeven Security Platform")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# -----------------------------
-# Vendor Lookup
-# -----------------------------
 
-mac_lookup = MacLookup()
-
-try:
-    mac_lookup.update_vendors()
-except:
-    pass
-
-def get_vendor(mac):
-    try:
-        return mac_lookup.lookup(mac)
-    except:
-        return "Unknown"
 
 # -----------------------------
 # Models
@@ -120,7 +105,7 @@ def register(agent: AgentRegistration):
     return {"agent_id": agent_id, "api_key": api_key}
 
 # -----------------------------
-# Device Report → Alerts
+# Report → Alert Generation
 # -----------------------------
 
 @app.post("/report")
@@ -147,18 +132,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     return {"risk_score": risk, "severity": severity}
 
 # -----------------------------
-# Alerts Endpoint
-# -----------------------------
-
-@app.get("/alerts")
-def alerts():
-    db = SessionLocal()
-    results = db.query(Alert).order_by(Alert.timestamp.desc()).all()
-    db.close()
-    return results
-
-# -----------------------------
-# Attack Paths (SOC Map Feed)
+# Attack Paths Feed
 # -----------------------------
 
 @app.get("/attack-paths")
@@ -183,7 +157,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_connections.add(websocket)
 
-    # notify all clients someone joined
+
     for conn in active_connections:
         await conn.send_text("JOIN")
 
@@ -191,14 +165,14 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             message = await websocket.receive_text()
 
-            # broadcast messages (annotations etc.)
+
             for conn in active_connections:
                 await conn.send_text(message)
 
     except WebSocketDisconnect:
         active_connections.remove(websocket)
 
-        # notify clients someone left
+
         for conn in active_connections:
             await conn.send_text("LEAVE")
 
@@ -228,8 +202,8 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
  border-radius:6px;
  font-size:12px;
 }
-#analysts { right:10px; top:40px; width:200px; }
-#risk { right:10px; bottom:10px; width:200px; }
+#analysts { right:10px; top:40px; }
+#priority { right:10px; bottom:10px; }
 </style>
 </head>
 <body>
@@ -237,13 +211,13 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
 <div id="globeViz"></div>
 
 <div id="analysts" class="panel">
-<b>Live Analysts</b>
-<div id="analystList">0 connected</div>
+<b>Analysts</b>
+<div id="count">0 connected</div>
 </div>
 
-<div id="risk" class="panel">
-<b>Threat Priority</b><br>
-Level: <span id="priority">LOW</span>
+<div id="priority" class="panel">
+<b>Threat Level</b>
+<div id="level">LOW</div>
 </div>
 
 <script>
@@ -253,46 +227,87 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 
-// WebSocket (Render-safe)
+// WebSocket
 const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
 
 let analysts = 0;
-let alertScore = 0;
+let heat = {};
+let threatScore = 0;
 
 // join/leave sync
-ws.onmessage = (event) => {
+ws.onmessage = (e) => {
 
-    if(event.data === "JOIN") analysts++;
-    if(event.data === "LEAVE") analysts = Math.max(0, analysts - 1);
+    if(e.data === "JOIN") analysts++;
+    else if(e.data === "LEAVE") analysts--;
+    else if(e.data.startsWith("MARK:")){
+        const [_,lat,lng] = e.data.split(":");
+        addMarker(lat,lng);
+    }
 
-    document.getElementById("analystList").innerHTML =
+    document.getElementById("count").innerHTML =
         analysts + " connected";
 };
 
-// click globe to share markers
+// shared annotations
 globe.onGlobeClick(({lat,lng})=>{
     ws.send(`MARK:${lat}:${lng}`);
 });
 
-// anomaly detection & triage
-function triage(score){
-    if(score > 20) priority.innerHTML = "CRITICAL";
-    else if(score > 10) priority.innerHTML = "HIGH";
-    else if(score > 5) priority.innerHTML = "MEDIUM";
+function addMarker(lat,lng){
+    globe.pointsData([...globe.pointsData(), {lat:lat,lng:lng,size:0.5}])
+         .pointColor(()=>"#00ffff");
 }
 
+// anomaly heat detection
+function heatDetect(lat,lng){
+    const key = lat.toFixed(0)+lng.toFixed(0);
+    heat[key] = (heat[key]||0)+1;
+
+    if(heat[key] > 3){
+        globe.pointsData([...globe.pointsData(), {lat:lat,lng:lng,size:2}])
+             .pointColor(()=>"#ff0033");
+    }
+}
+
+// threat feed simulation
+function threatFeed(){
+    const intel = [
+        "Botnet signature detected",
+        "Known C2 infrastructure",
+        "Credential harvesting activity",
+        "Malicious ASN flagged"
+    ];
+    if(Math.random()<0.4){
+        console.log("INTEL:", intel[Math.floor(Math.random()*intel.length)]);
+    }
+}
+setInterval(threatFeed,5000);
+
+// triage automation
+function triage(){
+    if(threatScore>20) level.innerHTML="CRITICAL";
+    else if(threatScore>12) level.innerHTML="HIGH";
+    else if(threatScore>6) level.innerHTML="MEDIUM";
+}
+
+// red vs blue simulation
+function redBlue(){
+    if(Math.random()<0.3){
+        threatScore += 3; // attacker success
+    } else {
+        threatScore -= 1; // defender mitigation
+    }
+    triage();
+}
+setInterval(redBlue,4000);
+
 // load attacks
-async function loadAttacks(){
-
+async function load(){
     const paths = await fetch('/attack-paths').then(r=>r.json());
-
-    const arcs = [];
-
+    const arcs=[];
     for(const p of paths){
-        alertScore += 2;
-        triage(alertScore);
-
+        heatDetect(p.from[0],p.from[1]);
         arcs.push({
             startLat:p.from[0],
             startLng:p.from[1],
@@ -301,20 +316,14 @@ async function loadAttacks(){
             color:"#ff0033",
             stroke:1.2
         });
-        
+
 
     }
 
     globe.arcsData(arcs);
-
-
-
 }
-
-
-
-loadAttacks();
-setInterval(loadAttacks, 3500);
+load();
+setInterval(load,3500);
 </script>
 </body>
 </html>
