@@ -171,7 +171,7 @@ def attack_paths():
     ]
 
 # -----------------------------
-# Dashboard Command Center Mode
+# Globe Intelligence Command Center
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -180,146 +180,166 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Command Center</title>
+<title>LayerSeven Globe Intelligence</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/globe.gl"></script>
 
 <style>
-body {
-    margin:0;
-    background:#0b1220;
-    color:white;
-    font-family:Arial;
-}
+body { margin:0; background:black; overflow:hidden; }
 
-#map { height: 100vh; }
+#globeViz { width:100vw; height:100vh; }
 
-/* HUD PANEL */
+
 #hud {
     position:absolute;
     top:10px;
     left:10px;
-    z-index:999;
-    background:rgba(10,15,30,0.85);
-    padding:12px;
-    border-radius:8px;
-    font-size:13px;
-}
 
-/* legend */
-.legend div {
-    margin-bottom:4px;
-}
-
-/* toggle button */
-#globeBtn {
-    margin-top:8px;
-    padding:4px 8px;
-    background:#00ffff22;
-    border:1px solid #00ffff55;
     color:#00ffff;
-    cursor:pointer;
+    font-family:monospace;
+    background:rgba(0,10,25,0.65);
+    padding:10px;
+    border-radius:6px;
+    z-index:999;
 }
 </style>
 </head>
 <body>
 
-
-<div id="map"></div>
+<div id="globeViz"></div>
 
 <div id="hud">
-
-<b>Threat Legend</b>
-<div class="legend">
-<div><span style="color:#ff0033">■</span> Critical</div>
-<div><span style="color:#ff6600">■</span> High</div>
-<div><span style="color:#00ffff">■</span> Medium</div>
-<div><span style="color:#00ccff">■</span> Low</div>
+<b>LayerSeven Globe Intelligence</b><br>
+<span id="attackCount">Attacks: 0</span><br>
+<span id="aiAlert"></span>
 </div>
 
-<hr>
 
-<b>Filter Severity</b><br>
-<label><input type="checkbox" checked value="critical"> Critical</label><br>
-<label><input type="checkbox" checked value="high"> High</label><br>
-<label><input type="checkbox" checked value="medium"> Medium</label><br>
-<label><input type="checkbox" checked value="low"> Low</label>
-
-<hr>
-
-<button id="globeBtn">🌍 Globe Mode</button>
-
-</div>
-
-<script src="/static/attackMap.js"></script>
 
 <script>
-const map = L.map('map', {
-    worldCopyJump:true
-}).setView([20,0],2);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    attribution:'© OpenStreetMap'
-}).addTo(map);
+const globe = Globe()(document.getElementById('globeViz'))
+  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+  .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+  .arcDashLength(0.35)
+  .arcDashGap(3)
+  .arcDashAnimateTime(2000)
+  .arcStroke(0.5)
+  .atmosphereColor('#00ffff')
+  .atmosphereAltitude(0.25);
 
-let globeMode = false;
-let filters = new Set(["critical","high","medium","low"]);
+globe.controls().autoRotate = true;
+globe.controls().autoRotateSpeed = 0.5;
 
-// handle filter checkboxes
-document.querySelectorAll('#hud input').forEach(cb=>{
-    cb.addEventListener('change', e=>{
-        if(e.target.checked) filters.add(e.target.value);
-        else filters.delete(e.target.value);
-    });
-});
+let attackHistory = [];
+let totalAttacks = 0;
+let originCounts = {};
 
-// globe mode toggle
-document.getElementById("globeBtn").onclick = () => {
-
-    globeMode = !globeMode;
-
-    if(globeMode){
-        map.flyTo([0,0], 1.6, { duration: 2 });
-        map.dragging.disable();
-    } else {
-        map.flyTo([20,0], 2, { duration: 1.5 });
-        map.dragging.enable();
-    }
+// severity colors
+const colors = {
+    critical: "#ff0033",
+    high: "#ff6600",
+    medium: "#00ffff",
+    low: "#00ccff"
 };
 
-// cinematic camera movement
-function cinematicFocus(from, to){
-    map.flyToBounds([from, to], {
-        padding:[120,120],
-        duration:2
-    });
+// choose severity
+function randomSeverity(){
+    const s = ["critical","high","medium","low"];
+    return s[Math.floor(Math.random()*s.length)];
 }
 
-// load attack paths
+// AI pattern detection
+function detectPatterns(){
+
+    let aiText = "";
+
+    // burst detection
+    if(attackHistory.length > 25){
+        aiText += "⚠ Burst activity detected<br>";
+    }
+
+    // coordinated origin detection
+    Object.keys(originCounts).forEach(k=>{
+        if(originCounts[k] > 6){
+            aiText += "⚠ Coordinated activity from region<br>";
+        }
+    });
+
+    document.getElementById("aiAlert").innerHTML = aiText;
+}
+
+// auto zoom to highest severity
+function focusCritical(arcs){
+    const critical = arcs.find(a => a.severity === "critical");
+    if(!critical) return;
+
+    globe.pointOfView({
+        lat: critical.startLat,
+        lng: critical.startLng,
+        altitude: 1.5
+    }, 1500);
+}
+
+// clustering density glow
+function updateHotspots(){
+
+    const points = Object.keys(originCounts).map(k=>{
+        const parts = k.split(",");
+        return {
+            lat: parseFloat(parts[0]),
+            lng: parseFloat(parts[1]),
+            size: originCounts[k] * 0.3
+        };
+    });
+
+    globe.pointsData(points)
+         .pointAltitude(d => d.size)
+         .pointColor(() => '#ff0033')
+         .pointRadius(0.5);
+}
+
+// load attacks & animate timeline
 async function loadAttacks(){
 
     const paths = await fetch('/attack-paths').then(r=>r.json());
 
-    paths.forEach(p=>{
+    const arcs = paths.map(p => {
 
-        const severity = ["critical","high","medium","low"]
-            [Math.floor(Math.random()*4)];
+        const severity = randomSeverity();
 
-        if(!filters.has(severity)) return;
+        const key = p.from.toString();
+        originCounts[key] = (originCounts[key] || 0) + 1;
 
-        drawAttackBeam(map, p.from, p.to, severity);
-
-        if(globeMode){
-            cinematicFocus(p.from, p.to);
-        }
+        return {
+            startLat: p.from[0],
+            startLng: p.from[1],
+            endLat: p.to[0],
+            endLng: p.to[1],
+            color: colors[severity],
+            severity: severity
+        };
     });
+
+    attackHistory = attackHistory.concat(arcs);
+    if(attackHistory.length > 80){
+        attackHistory.shift();
+    }
+
+    globe.arcsData(attackHistory);
+
+    totalAttacks += arcs.length;
+    document.getElementById("attackCount").innerHTML =
+        "Attacks: " + totalAttacks;
+
+    detectPatterns();
+    updateHotspots();
+    focusCritical(arcs);
 }
 
+// timeline playback loop
 loadAttacks();
-
-
-setInterval(loadAttacks, 4000);
+setInterval(loadAttacks, 3500);
 
 </script>
 
