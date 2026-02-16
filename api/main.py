@@ -170,8 +170,9 @@ def attack_paths():
         {"from":[37.77,-122.41], "to":[41.59,-93.62]} # SF → Iowa
     ]
 
+
 # -----------------------------
-# LayerSeven Mission Control
+# LayerSeven AI Mission Control
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -180,7 +181,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Mission Control</title>
+<title>LayerSeven AI Mission Control</title>
 
 <script src="https://unpkg.com/globe.gl"></script>
 
@@ -193,49 +194,56 @@ body { margin:0; background:black; overflow:hidden; }
     position:absolute;
     top:0;
     width:100%;
-    background:rgba(0,0,0,0.7);
-    color:#00ffff;
-    font-family:monospace;
-    padding:6px;
     text-align:center;
-    letter-spacing:1px;
+    font-family:monospace;
+    color:#00ffff;
+    background:rgba(0,0,0,0.7);
+
+    padding:6px;
+
 }
 
-#hud {
+#panel {
     position:absolute;
-    top:36px;
+
     left:10px;
-    color:#00ffff;
-    font-family:monospace;
-    background:rgba(0,10,25,0.6);
+    top:40px;
+    background:rgba(0,10,25,0.7);
     padding:10px;
     border-radius:6px;
+    color:#00ffff;
+    font-family:monospace;
 
 }
 
-#queue {
+#controls {
     position:absolute;
     right:10px;
-    bottom:10px;
-    width:280px;
-    max-height:260px;
-    overflow:auto;
-    font-family:monospace;
-    font-size:12px;
-
-    background:rgba(0,10,25,0.85);
-    
-
-    padding:8px;
-    color:#00ffff;
-
+    top:40px;
+    background:rgba(0,10,25,0.7);
+    padding:10px;
     border-radius:6px;
+    color:#00ffff;
+    font-family:monospace;
 }
 
-.queueItem { margin-bottom:4px; }
+button {
+    margin-top:5px;
+    width:100%;
+    background:#001f33;
+    color:#00ffff;
+    border:1px solid #00ffff55;
+    padding:4px;
+    cursor:pointer;
+}
 
-.critical { color:#ff0033; }
-.high { color:#ff6600; }
+
+
+
+
+
+
+
 </style>
 </head>
 <body>
@@ -243,15 +251,20 @@ body { margin:0; background:black; overflow:hidden; }
 <div id="globeViz"></div>
 
 <div id="topbar">
-MISSION CONTROL • GLOBAL THREAT STATUS: <span id="status">MONITORING</span>
+AI MISSION CONTROL • STATUS: <span id="status">MONITORING</span>
 </div>
 
-<div id="hud">
+<div id="panel">
 Attacks: <span id="attackCount">0</span><br>
-Campaign Risk: <span id="campaignRisk">LOW</span>
+Campaigns: <span id="campaignCount">0</span><br>
+Risk Level: <span id="riskLevel">LOW</span>
 </div>
 
-<div id="queue"><b>Alert Queue</b><br></div>
+<div id="controls">
+<b>Operator Panel</b><br>
+<button onclick="toggleMitigation()">Toggle Auto Mitigation</button>
+<button onclick="togglePlayback()">Toggle Playback Mode</button>
+</div>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
@@ -267,57 +280,62 @@ const globe = Globe()(document.getElementById('globeViz'))
 globe.controls().autoRotate = true;
 
 let totalAttacks = 0;
-let originCounts = {};
-let campaignScore = 0;
-let feedThreats = [];
+let campaigns = {};
+let riskScore = 0;
+let autoMitigation = true;
+let playbackMode = false;
 
-// alert queue
-function pushAlert(text, level="high"){
-    const q = document.getElementById("queue");
-    const item = document.createElement("div");
-    item.className = "queueItem " + level;
-    item.innerHTML = text;
-    q.appendChild(item);
+// 🛰 AbuseIPDB LIVE READY
+async function abuseCheck(ip){
 
-    if(q.children.length > 18){
-        q.removeChild(q.children[1]);
+    // 🔐 INSERT API KEY HERE
+    // const res = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${ip}`, {
+    //   headers: { Key: "YOUR_API_KEY", Accept: "application/json" }
+    // });
+
+    // demo flagging logic
+    return Math.random() < 0.15;
+}
+
+// 🔮 Predict future path
+function projectFuturePath(from, to){
+
+    const lat = to[0] + (to[0] - from[0]) * 0.5;
+    const lng = to[1] + (to[1] - from[1]) * 0.5;
+
+    return {
+        startLat: to[0],
+        startLng: to[1],
+        endLat: lat,
+        endLng: lng,
+        color: "#ff00ff"
+    };
+}
+
+// 🕵️ campaign tracking
+function trackCampaign(key){
+    campaigns[key] = (campaigns[key] || 0) + 1;
+}
+
+// 🤖 AI response decision engine
+function aiResponse(key){
+
+    if(riskScore > 20 && autoMitigation){
+        document.getElementById("status").innerHTML = "DEFENSIVE MODE";
+    }
+
+    if(campaigns[key] > 6 && autoMitigation){
+        document.getElementById("status").innerHTML = "MITIGATION ACTIVE";
     }
 }
 
-// 🌐 simulated threat feed ingestion
-function ingestThreatFeed(){
-
-    // simulate incoming feed indicators
-    if(Math.random() < 0.2){
-        feedThreats.push("Known malicious IP block");
-        pushAlert("🛰 Threat feed indicator received", "critical");
-    }
+// 🎛 operator controls
+function toggleMitigation(){
+    autoMitigation = !autoMitigation;
 }
 
-setInterval(ingestThreatFeed, 7000);
-
-// 🧠 predictive campaign modeling
-function updateCampaignRisk(){
-
-    if(campaignScore > 25){
-        document.getElementById("campaignRisk").innerHTML = "HIGH";
-        document.getElementById("status").innerHTML = "ELEVATED";
-    }
-    else if(campaignScore > 12){
-        document.getElementById("campaignRisk").innerHTML = "MEDIUM";
-    }
-}
-
-// 🛡 automated response playbooks
-function simulateResponse(key){
-
-    if(originCounts[key] > 8){
-        pushAlert("🛡 Firewall rule deployed", "critical");
-    }
-
-    if(originCounts[key] > 12){
-        pushAlert("🛡 Geo-block enabled", "critical");
-    }
+function togglePlayback(){
+    playbackMode = !playbackMode;
 }
 
 // load attacks
@@ -330,35 +348,47 @@ async function loadAttacks(){
     for (const p of paths){
 
         const key = p.from.toString();
-        originCounts[key] = (originCounts[key] || 0) + 1;
+        
 
-        campaignScore += 1;
+        trackCampaign(key);
+        riskScore += 1;
 
-        simulateResponse(key);
+        const flagged = await abuseCheck(key);
 
-        if(feedThreats.length > 0){
-            pushAlert("🚨 Feed-correlated activity", "critical");
+        if(flagged){
+            document.getElementById("status").innerHTML = "THREAT VERIFIED";
         }
+
+        aiResponse(key);
 
         arcs.push({
             startLat: p.from[0],
             startLng: p.from[1],
             endLat: p.to[0],
             endLng: p.to[1],
-            color: "#ff0033",
+            color: flagged ? "#ff0033" : "#ff6600",
             stroke: 1.2
         });
+
+        // predictive future path
+        if(riskScore > 10){
+            arcs.push(projectFuturePath(p.from, p.to));
+        }
     }
 
     globe.arcsData(arcs);
 
     totalAttacks += paths.length;
     document.getElementById("attackCount").innerHTML = totalAttacks;
+    document.getElementById("campaignCount").innerHTML = Object.keys(campaigns).length;
 
-    updateCampaignRisk();
+    if(riskScore > 20){
+        document.getElementById("riskLevel").innerHTML = "HIGH";
+    }
+    else if(riskScore > 10){
+        document.getElementById("riskLevel").innerHTML = "MEDIUM";
+    }
 }
-
-
 
 loadAttacks();
 setInterval(loadAttacks, 3500);
