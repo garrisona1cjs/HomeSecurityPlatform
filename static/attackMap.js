@@ -1,5 +1,6 @@
 // =======================================
 // LayerSeven Neon Attack Beam Renderer
+// WITH Impact Flash Animation
 // =======================================
 
 // Severity colors
@@ -15,7 +16,7 @@ function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
 
     const color = severityColors[severity] || "#00ffff";
 
-    // Glow layer (soft neon aura)
+    // Glow aura layer
     L.polyline([fromCoords, toCoords], {
         color: color,
         weight: 10,
@@ -23,7 +24,7 @@ function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
         interactive: false
     }).addTo(map);
 
-    // Main beam line
+    // Main beam
     L.polyline([fromCoords, toCoords], {
         color: color,
         weight: 2,
@@ -31,12 +32,12 @@ function drawAttackBeam(map, fromCoords, toCoords, severity = "medium") {
         interactive: false
     }).addTo(map);
 
-    // Animate packet flow
+    // Animate packet
     animatePacket(map, fromCoords, toCoords, color);
 }
 
 
-// Animate packet moving along beam
+// Animate packet movement
 function animatePacket(map, from, to, color) {
 
     let progress = 0;
@@ -61,8 +62,53 @@ function animatePacket(map, from, to, color) {
             requestAnimationFrame(movePacket);
         } else {
             map.removeLayer(packet);
+            createImpactFlash(map, to, color); // 💥 IMPACT EFFECT
         }
     }
 
     movePacket();
+}
+
+
+// 💥 Impact flash + shockwave
+function createImpactFlash(map, location, color) {
+
+    // bright center flash
+    const flash = L.circleMarker(location, {
+        radius: 8,
+        color: color,
+        fillColor: color,
+        fillOpacity: 0.9
+    }).addTo(map);
+
+    // expanding shockwave ring
+    const ring = L.circle(location, {
+        radius: 20000,   // meters
+        color: color,
+        weight: 2,
+        opacity: 0.6,
+        fillOpacity: 0
+    }).addTo(map);
+
+    let opacity = 0.9;
+    let radius = 20000;
+
+    function animateImpact() {
+
+        opacity -= 0.05;
+        radius += 20000;
+
+        flash.setStyle({ fillOpacity: opacity, opacity: opacity });
+        ring.setStyle({ opacity: opacity });
+        ring.setRadius(radius);
+
+        if (opacity > 0) {
+            requestAnimationFrame(animateImpact);
+        } else {
+            map.removeLayer(flash);
+            map.removeLayer(ring);
+        }
+    }
+
+    animateImpact();
 }
