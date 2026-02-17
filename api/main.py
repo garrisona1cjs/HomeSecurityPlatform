@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List
-import uuid, secrets, os
+import uuid, secrets, os, random
 
 from sqlalchemy import create_engine, Column, String
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -42,12 +42,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Models
 # -----------------------------
 
-class Agent(Base):
-    __tablename__ = "agents"
-    agent_id = Column(String, primary_key=True)
-    hostname = Column(String)
-    ip_address = Column(String)
-    api_key = Column(String)
+
 
 class Alert(Base):
     __tablename__ = "alerts"
@@ -56,81 +51,21 @@ class Alert(Base):
     risk_score = Column(String)
     severity = Column(String)
     timestamp = Column(String)
-
-
+    technique = Column(String)
 
 Base.metadata.create_all(bind=engine)
 
 # -----------------------------
-# Schemas
+# MITRE Technique Map
 # -----------------------------
 
-class AgentRegistration(BaseModel):
-    hostname: str
-    ip_address: str
-
-class DeviceReport(BaseModel):
-    agent_id: str
-    devices: List[dict]
-
-# -----------------------------
-# Auth
-# -----------------------------
-
-def verify_agent(db, agent_id, api_key):
-    agent = db.query(Agent).filter(Agent.agent_id == agent_id).first()
-    if not agent or agent.api_key != api_key:
-        raise HTTPException(status_code=401, detail="Invalid agent")
-
-# -----------------------------
-# Agent Registration
-# -----------------------------
-
-@app.post("/register")
-def register(agent: AgentRegistration):
-    db = SessionLocal()
-
-    agent_id = str(uuid.uuid4())
-    api_key = secrets.token_hex(32)
-
-    db.add(Agent(
-        agent_id=agent_id,
-        hostname=agent.hostname,
-        ip_address=agent.ip_address,
-        api_key=api_key
-    ))
-
-    db.commit()
-    db.close()
-
-    return {"agent_id": agent_id, "api_key": api_key}
-
-# -----------------------------
-# Device Report → Alert Generation
-# -----------------------------
-
-@app.post("/report")
-def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
-    db = SessionLocal()
-    verify_agent(db, report.agent_id, x_api_key)
-
-    risk = len(report.devices) * 40
-    severity = "LOW"
-    if risk > 80: severity = "HIGH"
-    if risk > 120: severity = "CRITICAL"
-
-    db.add(Alert(
-        id=str(uuid.uuid4()),
-        agent_id=report.agent_id,
-        risk_score=str(risk),
-        severity=severity,
-        timestamp=datetime.utcnow().isoformat()
-    ))
-
-    db.commit()
-    db.close()
-
-    return {"risk_score": risk, "severity": severity}
+techniques = [
+    ("T1110", "Brute Force"),
+    ("T1078", "Valid Accounts"),
+    ("T1046", "Network Scanning"),
+    ("T1059", "Command Execution"),
+    ("T1566", "Phishing"),
+]
 
 # -----------------------------
 # Alerts API
@@ -144,7 +79,7 @@ def get_alerts():
     return alerts
 
 # -----------------------------
-# Attack Paths Feed
+# Attack Feed
 # -----------------------------
 
 @app.get("/attack-paths")
@@ -159,7 +94,7 @@ def attack_paths():
     ]
 
 # -----------------------------
-# 🌐 Real-Time Collaboration Hub
+# 🌐 WebSocket Hub
 # -----------------------------
 
 connections = set()
@@ -169,7 +104,8 @@ async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
 
-    # notify clients
+
+
     for c in connections:
         await c.send_text("JOIN")
 
@@ -193,7 +129,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Cyber Operations Simulator</title>
+<title>LayerSeven SOC Intelligence Console</title>
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
@@ -210,7 +146,7 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
  font-size:12px;
 }
 #status { left:10px; top:40px; }
-#controls { left:10px; bottom:10px; }
+#intel { right:10px; top:40px; width:220px; }
 </style>
 </head>
 <body>
@@ -218,13 +154,13 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
 <div id="globeViz"></div>
 
 <div id="status" class="panel">
-<b>Threat Level:</b> <span id="level">LOW</span><br>
-<b>Analysts:</b> <span id="users">0</span>
+Threat Level: <span id="level">LOW</span><br>
+Analysts: <span id="users">0</span>
 </div>
 
-<div id="controls" class="panel">
-<button onclick="toggleTraining()">Training Mode</button>
-<button onclick="replayTimeline()">Replay Campaign</button>
+<div id="intel" class="panel">
+<b>Threat Intel</b>
+<div id="feed"></div>
 </div>
 
 <script>
@@ -234,30 +170,63 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 
-// WebSocket (Render-safe)
+
 const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
 
-let users = 0;
-let threatScore = 0;
-let history = [];
-let trainingMode = false;
-
+let users=0;
+let threatScore=0;
+let anomalyMap={};
 
 // analyst sync
 ws.onmessage = e => {
     if(e.data==="JOIN") users++;
     else if(e.data==="LEAVE") users--;
-    
-
-    users = Math.max(0, users);
-    document.getElementById("users").innerHTML = users;
+    users=Math.max(0,users);
+    document.getElementById("users").innerHTML=users;
 };
 
-// shared annotations
-globe.onGlobeClick(({lat,lng})=>{
-    ws.send(`MARK:${lat}:${lng}`);
-});
+// anomaly detection
+function detectAnomaly(lat,lng){
+    const key=lat.toFixed(0)+lng.toFixed(0);
+    anomalyMap[key]=(anomalyMap[key]||0)+1;
+    if(anomalyMap[key]>3){
+        globe.pointsData([...globe.pointsData(),{lat:lat,lng:lng,size:2}])
+             .pointColor(()=>"#ff0033");
+    }
+}
+
+// MITRE mapping
+const mitre = [
+ "T1110 Brute Force",
+ "T1078 Valid Accounts",
+ "T1046 Network Scannin",
+ "T1059 Command Exec",
+ "T1566 Phishing"
+];
+
+// threat intel feed simulation
+function intelFeed(){
+    const iocs=[
+      "Malicious ASN flagged",
+      "Botnet infrastructure detected",
+      "Known ransomware node",
+      "Credential harvesting domain"
+    ];
+    if(Math.random()<.4){
+      document.getElementById("feed").innerHTML=
+        iocs[Math.floor(Math.random()*iocs.length)];
+    }
+}
+setInterval(intelFeed,4000);
+
+// incident response automation
+function respond(){
+    if(threatScore>20){
+        threatScore-=5;
+        console.log("Auto mitigation executed");
+    }
+}
 
 // threat level
 function updateThreat(){
@@ -266,51 +235,16 @@ function updateThreat(){
     else if(threatScore>8) level.innerHTML="MEDIUM";
 }
 
-// prediction arc
-function predictNext(origin){
-    return {
-        startLat: origin[0],
-        startLng: origin[1],
-        endLat: origin[0] + (Math.random()*20-10),
-        endLng: origin[1] + (Math.random()*20-10),
-        color:"#ff00ff"
-    };
-
-}
-
-// cyber battle simulation
-function cyberBattle(){
-    if(Math.random()<0.6) threatScore += 2;
-    else threatScore -= 1;
-    updateThreat();
-}
-setInterval(cyberBattle, 4000);
-
-// replay
-function replayTimeline(){
-    let i=0;
-    const r=setInterval(()=>{
-        if(i>=history.length){clearInterval(r);return;}
-        globe.pointOfView(history[i],1200);
-        i++;
-    },1500);
-}
-
-// toggle training
-function toggleTraining(){
-    trainingMode=!trainingMode;
-}
-
-// load attacks
+// load attacks + live alerts
 async function load(){
-    const paths = await fetch('/attack-paths').then(r=>r.json());
+    const paths=await fetch('/attack-paths').then(r=>r.json());
     const arcs=[];
-
+    
     for(const p of paths){
 
+        detectAnomaly(p.from[0],p.from[1]);
 
-        history.push({lat:p.from[0],lng:p.from[1],altitude:1});
-        threatScore += trainingMode ? 3 : 2;
+        threatScore+=2;
 
         arcs.push({
             startLat:p.from[0],
@@ -321,11 +255,16 @@ async function load(){
             stroke:1.2
         });
 
-        
-        arcs.push(predictNext(p.from));
+        // live alert pulse
+        globe.pointsData([...globe.pointsData(),
+          {lat:p.to[0],lng:p.to[1],size:0.7}])
+          .pointColor(()=>"#ffff00");
+
+        console.log("Technique:", mitre[Math.floor(Math.random()*mitre.length)]);
     }
 
     globe.arcsData(arcs);
+    respond();
     updateThreat();
 }
 
