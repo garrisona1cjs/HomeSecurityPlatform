@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List
-import uuid, secrets, os, random
+import uuid, secrets, os
 
 from sqlalchemy import create_engine, Column, String
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -83,7 +83,7 @@ def verify_agent(db, agent_id, api_key):
         raise HTTPException(status_code=401, detail="Invalid agent")
 
 # -----------------------------
-# Register Agent
+# Agent Registration
 # -----------------------------
 
 @app.post("/register")
@@ -106,7 +106,45 @@ def register(agent: AgentRegistration):
     return {"agent_id": agent_id, "api_key": api_key}
 
 # -----------------------------
-# Attack Feed
+# Device Report → Alert Generation
+# -----------------------------
+
+@app.post("/report")
+def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
+    db = SessionLocal()
+    verify_agent(db, report.agent_id, x_api_key)
+
+    risk = len(report.devices) * 40
+    severity = "LOW"
+    if risk > 80: severity = "HIGH"
+    if risk > 120: severity = "CRITICAL"
+
+    db.add(Alert(
+        id=str(uuid.uuid4()),
+        agent_id=report.agent_id,
+        risk_score=str(risk),
+        severity=severity,
+        timestamp=datetime.utcnow().isoformat()
+    ))
+
+    db.commit()
+    db.close()
+
+    return {"risk_score": risk, "severity": severity}
+
+# -----------------------------
+# Alerts API
+# -----------------------------
+
+@app.get("/alerts")
+def get_alerts():
+    db = SessionLocal()
+    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
+    db.close()
+    return alerts
+
+# -----------------------------
+# Attack Paths Feed
 # -----------------------------
 
 @app.get("/attack-paths")
@@ -121,7 +159,7 @@ def attack_paths():
     ]
 
 # -----------------------------
-# WebSocket Hub
+# 🌐 Real-Time Collaboration Hub
 # -----------------------------
 
 connections = set()
@@ -131,6 +169,7 @@ async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
 
+    # notify clients
     for c in connections:
         await c.send_text("JOIN")
 
@@ -145,7 +184,7 @@ async def ws_endpoint(ws: WebSocket):
             await c.send_text("LEAVE")
 
 # -----------------------------
-# Dashboard
+# SOC Dashboard
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -171,7 +210,7 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
  font-size:12px;
 }
 #status { left:10px; top:40px; }
-#training { left:10px; bottom:10px; }
+#controls { left:10px; bottom:10px; }
 </style>
 </head>
 <body>
@@ -183,8 +222,8 @@ body { margin:0; background:black; color:#00ffff; font-family:monospace; overflo
 <b>Analysts:</b> <span id="users">0</span>
 </div>
 
-<div id="training" class="panel">
-<button onclick="toggleTraining()">Toggle Training Mode</button>
+<div id="controls" class="panel">
+<button onclick="toggleTraining()">Training Mode</button>
 <button onclick="replayTimeline()">Replay Campaign</button>
 </div>
 
@@ -195,7 +234,7 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 
-
+// WebSocket (Render-safe)
 const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
 
@@ -203,74 +242,61 @@ let users = 0;
 let threatScore = 0;
 let history = [];
 let trainingMode = false;
-let blockedRegions = {};
 
-// sync analysts
+
+// analyst sync
 ws.onmessage = e => {
     if(e.data==="JOIN") users++;
     else if(e.data==="LEAVE") users--;
-    usersDisplay();
-};
+    
 
-function usersDisplay(){
     users = Math.max(0, users);
     document.getElementById("users").innerHTML = users;
-}
+};
 
 // shared annotations
 globe.onGlobeClick(({lat,lng})=>{
     ws.send(`MARK:${lat}:${lng}`);
 });
 
-// threat triage
+// threat level
 function updateThreat(){
     if(threatScore>25) level.innerHTML="CRITICAL";
     else if(threatScore>15) level.innerHTML="HIGH";
     else if(threatScore>8) level.innerHTML="MEDIUM";
 }
 
-// AI prediction engine
+// prediction arc
 function predictNext(origin){
-    const predicted = {
+    return {
         startLat: origin[0],
         startLng: origin[1],
-        endLat: origin[0]+(Math.random()*20-10),
-        endLng: origin[1]+(Math.random()*20-10),
+        endLat: origin[0] + (Math.random()*20-10),
+        endLng: origin[1] + (Math.random()*20-10),
         color:"#ff00ff"
     };
-    return predicted;
+
 }
 
-// automated containment
-function contain(region){
-    if(!blockedRegions[region]){
-        blockedRegions[region]=true;
-        threatScore -= 4;
-    }
-}
-
-// red vs blue simulator
+// cyber battle simulation
 function cyberBattle(){
-    if(Math.random()<0.6){
-        threatScore += 2; // attack success
-    } else {
-        threatScore -= 1; // defender mitigation
-    }
+    if(Math.random()<0.6) threatScore += 2;
+    else threatScore -= 1;
     updateThreat();
 }
 setInterval(cyberBattle, 4000);
 
-// timeline replay
+// replay
 function replayTimeline(){
     let i=0;
-    const replay=setInterval(()=>{
-        if(i>=history.length){clearInterval(replay); return;}
+    const r=setInterval(()=>{
+        if(i>=history.length){clearInterval(r);return;}
         globe.pointOfView(history[i],1200);
         i++;
     },1500);
 }
 
-// training mode
+// toggle training
 function toggleTraining(){
     trainingMode=!trainingMode;
 }
@@ -282,18 +308,9 @@ async function load(){
 
     for(const p of paths){
 
-        const region = p.from.toString();
+
         history.push({lat:p.from[0],lng:p.from[1],altitude:1});
-
-        if(trainingMode){
-            threatScore += 3;
-        } else {
-            threatScore += 2;
-        }
-
-        if(threatScore > 20){
-            contain(region);
-        }
+        threatScore += trainingMode ? 3 : 2;
 
         arcs.push({
             startLat:p.from[0],
@@ -304,7 +321,7 @@ async function load(){
             stroke:1.2
         });
 
-        // prediction arc
+        
         arcs.push(predictNext(p.from));
     }
 
