@@ -53,6 +53,18 @@ class Alert(Base):
     timestamp = Column(String)
     technique = Column(String)
 
+from sqlalchemy import inspect
+
+# ensure alerts table schema is correct
+inspector = inspect(engine)
+
+if "alerts" in inspector.get_table_names():
+    columns = [col["name"] for col in inspector.get_columns("alerts")]
+
+    # if schema is outdated, recreate table
+    if "technique" not in columns:
+        Alert.__table__.drop(engine)
+
 Base.metadata.create_all(bind=engine)
 
 # -----------------------------
