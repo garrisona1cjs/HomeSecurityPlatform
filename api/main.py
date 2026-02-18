@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List
 import uuid, secrets, os, random
 
-from sqlalchemy import create_engine, Column, String
+from sqlalchemy import create_engine, Column, String, inspect
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
@@ -50,34 +50,25 @@ class Alert(Base):
     agent_id = Column(String)
     risk_score = Column(String)
     severity = Column(String)
-    timestamp = Column(String)
     technique = Column(String)
+    timestamp = Column(String)
 
-from sqlalchemy import inspect
+# -----------------------------
+# Auto Schema Fix (free-tier safe)
+# -----------------------------
 
-# ensure alerts table schema is correct
+
+
 inspector = inspect(engine)
 
 if "alerts" in inspector.get_table_names():
-    columns = [col["name"] for col in inspector.get_columns("alerts")]
-
-    # if schema is outdated, recreate table
-    if "technique" not in columns:
+    cols = [c["name"] for c in inspector.get_columns("alerts")]
+    if "technique" not in cols:
         Alert.__table__.drop(engine)
 
 Base.metadata.create_all(bind=engine)
 
-# -----------------------------
-# MITRE Technique Map
-# -----------------------------
 
-techniques = [
-    ("T1110", "Brute Force"),
-    ("T1078", "Valid Accounts"),
-    ("T1046", "Network Scanning"),
-    ("T1059", "Command Execution"),
-    ("T1566", "Phishing"),
-]
 
 # -----------------------------
 # Schemas
@@ -92,15 +83,27 @@ class DeviceReport(BaseModel):
     devices: List[dict]
 
 # -----------------------------
+# MITRE Techniques
+# -----------------------------
+
+techniques = [
+    "T1110 Brute Force",
+    "T1078 Valid Accounts",
+    "T1046 Network Scannin",
+    "T1059 Command Exec",
+    "T1566 Phishing"
+]
+
+# -----------------------------
 # Register Agent
 # -----------------------------
 
 @app.post("/register")
 def register(agent: AgentRegistration):
-    agent_id = str(uuid.uuid4())
-    api_key = secrets.token_hex(16)
-
-    return {"agent_id": agent_id, "api_key": api_key}
+    return {
+        "agent_id": str(uuid.uuid4()),
+        "api_key": secrets.token_hex(16)
+    }
 
 # -----------------------------
 # Report → Create Alert
@@ -110,18 +113,24 @@ def register(agent: AgentRegistration):
 def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db = SessionLocal()
 
-    severity = "LOW"
+
     risk = len(report.devices) * 40
 
-    if risk > 80: severity = "HIGH"
-    if risk > 120: severity = "CRITICAL"
+    if risk >= 120:
+        severity = "CRITICAL"
+    elif risk >= 80:
+        severity = "HIGH"
+    elif risk >= 40:
+        severity = "MEDIUM"
+    else:
+        severity = "LOW"
 
     db.add(Alert(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
         risk_score=str(risk),
         severity=severity,
-        technique=random.choice(["T1110","T1078","T1046","T1059"]),
+        technique=random.choice(techniques),
         timestamp=datetime.utcnow().isoformat()
     ))
 
@@ -157,7 +166,7 @@ def attack_paths():
     ]
 
 # -----------------------------
-# 🌐 WebSocket Hub
+# WebSocket Hub
 # -----------------------------
 
 connections = set()
@@ -167,10 +176,9 @@ async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
 
+    
 
 
-    for c in connections:
-        await c.send_text("JOIN")
 
     try:
         while True:
@@ -179,8 +187,7 @@ async def ws_endpoint(ws: WebSocket):
                 await c.send_text(msg)
     except WebSocketDisconnect:
         connections.remove(ws)
-        for c in connections:
-            await c.send_text("LEAVE")
+
 
 # -----------------------------
 # SOC Dashboard
@@ -196,35 +203,21 @@ def dashboard():
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
-body { margin:0; background:black; color:#00ffff; font-family:monospace; overflow:hidden;}
-
+body { margin:0; background:black; overflow:hidden; }
 #globeViz { width:100vw; height:100vh; }
 
 
-.panel {
- position:absolute;
- background:rgba(0,10,25,0.85);
- padding:10px;
- border-radius:6px;
- font-size:12px;
-}
-#status { left:10px; top:40px; }
-#intel { right:10px; top:40px; width:220px; }
+
 </style>
 </head>
 <body>
 
 <div id="globeViz"></div>
 
-<div id="status" class="panel">
-Threat Level: <span id="level">LOW</span><br>
-Analysts: <span id="users">0</span>
-</div>
 
-<div id="intel" class="panel">
-<b>Threat Intel</b>
-<div id="feed"></div>
-</div>
+
+
+
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
@@ -233,102 +226,88 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 
-
-const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
-const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
-
-let users=0;
-let threatScore=0;
-let anomalyMap={};
-
-// analyst sync
-ws.onmessage = e => {
-    if(e.data==="JOIN") users++;
-    else if(e.data==="LEAVE") users--;
-    users=Math.max(0,users);
-    document.getElementById("users").innerHTML=users;
+const severityColors = {
+ LOW:"#00ffff",
+ MEDIUM:"#ffaa00",
+ HIGH:"#ff5500",
+ CRITICAL:"#ff0033"
 };
 
-// anomaly detection
-function detectAnomaly(lat,lng){
-    const key=lat.toFixed(0)+lng.toFixed(0);
-    anomalyMap[key]=(anomalyMap[key]||0)+1;
-    if(anomalyMap[key]>3){
-        globe.pointsData([...globe.pointsData(),{lat:lat,lng:lng,size:2}])
-             .pointColor(()=>"#ff0033");
-    }
+let heatMap = {};
+
+const ticker = document.createElement("div");
+ticker.style.position="absolute";
+ticker.style.bottom="0";
+ticker.style.width="100%";
+ticker.style.background="rgba(0,0,0,.7)";
+ticker.style.color="#00ffff";
+ticker.style.textAlign="center";
+ticker.style.padding="4px";
+document.body.appendChild(ticker);
+
+const popup=document.createElement("div");
+popup.style.position="absolute";
+popup.style.right="20px";
+popup.style.bottom="40px";
+popup.style.background="rgba(0,10,25,.9)";
+popup.style.padding="10px";
+popup.style.display="none";
+document.body.appendChild(popup);
+
+function criticalFlash(lat,lng){
+ globe.pointsData([...globe.pointsData(),{lat:lat,lng:lng,size:2}])
+ .pointColor(()=>"#ff0033");
+ document.body.style.background="#220000";
+ setTimeout(()=>document.body.style.background="black",150);
 }
 
-// MITRE mapping
-const mitre = [
- "T1110 Brute Force",
- "T1078 Valid Accounts",
- "T1046 Network Scannin",
- "T1059 Command Exec",
- "T1566 Phishing"
-];
-
-// threat intel feed simulation
-function intelFeed(){
-    const iocs=[
-      "Malicious ASN flagged",
-      "Botnet infrastructure detected",
-      "Known ransomware node",
-      "Credential harvesting domain"
-    ];
-    if(Math.random()<.4){
-      document.getElementById("feed").innerHTML=
-        iocs[Math.floor(Math.random()*iocs.length)];
-    }
-}
-setInterval(intelFeed,4000);
-
-// incident response automation
-function respond(){
-    if(threatScore>20){
-        threatScore-=5;
-        console.log("Auto mitigation executed");
-    }
+function showMitre(t){
+ popup.innerHTML="<b>MITRE:</b><br>"+t;
+ popup.style.display="block";
+ setTimeout(()=>popup.style.display="none",2500);
 }
 
-// threat level
-function updateThreat(){
-    if(threatScore>25) level.innerHTML="CRITICAL";
-    else if(threatScore>15) level.innerHTML="HIGH";
-    else if(threatScore>8) level.innerHTML="MEDIUM";
+function heatGlow(lat,lng){
+ const key=lat.toFixed(0)+lng.toFixed(0);
+ heatMap[key]=(heatMap[key]||0)+1;
+ globe.pointsData([...globe.pointsData(),{
+  lat:lat,lng:lng,size:0.5*heatMap[key]
+ }]).pointColor(()=>"#ff0033");
 }
 
-// load attacks + live alerts
+
 async function load(){
-    const paths=await fetch('/attack-paths').then(r=>r.json());
-    const arcs=[];
-    
-    for(const p of paths){
+ const paths=await fetch('/attack-paths').then(r=>r.json());
+ const alerts=await fetch('/alerts').then(r=>r.json());
+ const arcs=[];
 
-        detectAnomaly(p.from[0],p.from[1]);
+ alerts.forEach(a=>{
+  ticker.innerHTML=`⚠ ${a.severity} threat • ${a.technique}`;
+ });
 
-        threatScore+=2;
+ paths.forEach(p=>{
+  const severityLevels=["LOW","MEDIUM","HIGH","CRITICAL"];
+  const severity=severityLevels[Math.floor(Math.random()*4)];
+  const color=severityColors[severity];
 
-        arcs.push({
-            startLat:p.from[0],
-            startLng:p.from[1],
-            endLat:p.to[0],
-            endLng:p.to[1],
-            color:"#ff0033",
-            stroke:1.2
-        });
+  arcs.push({
+   startLat:p.from[0],
+   startLng:p.from[1],
+   endLat:p.to[0],
+   endLng:p.to[1],
+   color:color,
+   stroke: severity==="CRITICAL"?2.5:1.2
+  });
 
-        // live alert pulse
-        globe.pointsData([...globe.pointsData(),
-          {lat:p.to[0],lng:p.to[1],size:0.7}])
-          .pointColor(()=>"#ffff00");
+  heatGlow(p.from[0],p.from[1]);
 
-        console.log("Technique:", mitre[Math.floor(Math.random()*mitre.length)]);
-    }
+  if(severity==="CRITICAL"){
+    criticalFlash(p.to[0],p.to[1]);
+    showMitre(alerts.length?alerts[0].technique:"T1110");
+  }
+ });
 
-    globe.arcsData(arcs);
-    respond();
-    updateThreat();
+ globe.arcsData(arcs);
 }
 
 load();
