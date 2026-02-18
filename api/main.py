@@ -80,6 +80,57 @@ techniques = [
 ]
 
 # -----------------------------
+# Schemas
+# -----------------------------
+
+class AgentRegistration(BaseModel):
+    hostname: str
+    ip_address: str
+
+class DeviceReport(BaseModel):
+    agent_id: str
+    devices: List[dict]
+
+# -----------------------------
+# Register Agent
+# -----------------------------
+
+@app.post("/register")
+def register(agent: AgentRegistration):
+    agent_id = str(uuid.uuid4())
+    api_key = secrets.token_hex(16)
+
+    return {"agent_id": agent_id, "api_key": api_key}
+
+# -----------------------------
+# Report → Create Alert
+# -----------------------------
+
+@app.post("/report")
+def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
+    db = SessionLocal()
+
+    severity = "LOW"
+    risk = len(report.devices) * 40
+
+    if risk > 80: severity = "HIGH"
+    if risk > 120: severity = "CRITICAL"
+
+    db.add(Alert(
+        id=str(uuid.uuid4()),
+        agent_id=report.agent_id,
+        risk_score=str(risk),
+        severity=severity,
+        technique=random.choice(["T1110","T1078","T1046","T1059"]),
+        timestamp=datetime.utcnow().isoformat()
+    ))
+
+    db.commit()
+    db.close()
+
+    return {"risk_score": risk, "severity": severity}
+
+# -----------------------------
 # Alerts API
 # -----------------------------
 
