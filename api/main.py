@@ -10,7 +10,7 @@ import os
 import random
 import asyncio
 
-from sqlalchemy import create_engine, Column, String, inspect
+from sqlalchemy import create_engine, Column, String, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # =========================================================
@@ -51,30 +51,32 @@ class Alert(Base):
     technique = Column(String)
     timestamp = Column(String)
 
-    # 🌍 origin info
+    # 🌍 origin intelligence
     origin_label = Column(String)
     latitude = Column(String)
     longitude = Column(String)
 
-    # 🔥 critical pulse flag
+    # 🔥 CRITICAL pulse trigger
     shockwave = Column(String)
 
-# ---- Safe schema update ----
+# =========================================================
+# SAFE SCHEMA CHECK (NO TABLE DROPS)
+# =========================================================
 
 inspector = inspect(engine)
 
 if "alerts" in inspector.get_table_names():
     existing_cols = [c["name"] for c in inspector.get_columns("alerts")]
 
-    required_cols = {
-        "origin_label",
-        "latitude",
-        "longitude",
-        "shockwave"
-    }
-
-    if not required_cols.issubset(existing_cols):
-        Alert.__table__.drop(engine)
+    with engine.connect() as conn:
+        if "origin_label" not in existing_cols:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN origin_label VARCHAR"))
+        if "latitude" not in existing_cols:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN latitude VARCHAR"))
+        if "longitude" not in existing_cols:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN longitude VARCHAR"))
+        if "shockwave" not in existing_cols:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN shockwave VARCHAR"))
 
 Base.metadata.create_all(bind=engine)
 
@@ -91,7 +93,7 @@ class DeviceReport(BaseModel):
     devices: List[dict]
 
 # =========================================================
-# MOCK GEOLOCATION
+# GEOLOCATION (SIMULATED)
 # =========================================================
 
 def geo_lookup():
@@ -108,7 +110,7 @@ def geo_lookup():
     return random.choice(locations)
 
 # =========================================================
-# MITRE TECHNIQUES (simulation)
+# MITRE TECHNIQUES (SIMULATION)
 # =========================================================
 
 techniques = [
@@ -169,9 +171,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.commit()
     db.close()
 
-    # =========================
-    # REAL-TIME BROADCAST
-    # =========================
+    # 🔴 Real-time broadcast
     payload = {
         "severity": severity,
         "technique": technique,
@@ -222,7 +222,6 @@ async def ws_endpoint(ws: WebSocket):
     connections.add(ws)
     
 
-
     try:
         while True:
             await ws.receive_text()
@@ -230,13 +229,32 @@ async def ws_endpoint(ws: WebSocket):
         connections.remove(ws)
 
 # =========================================================
-# DASHBOARD ROUTE
+# DASHBOARD (EMBEDDED — FIXES ERROR)
 # =========================================================
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
-    with open("static/dashboard.html", encoding="utf-8") as f:
-        return f.read()
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<title>LayerSeven SOC Command Center</title>
+<script src="https://unpkg.com/globe.gl"></script>
+<style>
+body { margin:0; background:black; overflow:hidden; }
+#globeViz { width:100vw; height:100vh; }
+</style>
+</head>
+<body>
+<div id="globeViz"></div>
+<script>
+const globe = Globe()(document.getElementById('globeViz'))
+.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
+globe.controls().autoRotate = true;
+</script>
+</body>
+</html>
+"""
 
 # =========================================================
 # HEALTH CHECK
