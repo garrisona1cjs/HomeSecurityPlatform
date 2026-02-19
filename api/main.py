@@ -37,6 +37,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 
+
 # -----------------------------
 # Database Model
 # -----------------------------
@@ -157,7 +158,7 @@ connections = set()
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
-    
+
 
 
     try:
@@ -200,17 +201,20 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 #intel { right:10px; top:10px; width:240px; }
 #controls { left:10px; bottom:10px; }
 #ticker { bottom:0; width:100%; text-align:center; }
-
-
-
-
-
-
+#legend { left:10px; top:10px; width:180px; }
 </style>
 </head>
 <body>
 
 <div id="globeViz"></div>
+
+<div id="legend" class="panel">
+<b>Threat Levels</b><br>
+<span style="color:#00ffff">LOW</span>: <span id="lowCount">0</span><br>
+<span style="color:#ffaa00">MEDIUM</span>: <span id="medCount">0</span><br>
+<span style="color:#ff5500">HIGH</span>: <span id="highCount">0</span><br>
+<span style="color:#ff0033">CRITICAL</span>: <span id="critCount">0</span>
+</div>
 
 <div id="intel" class="panel"><b>Threat Intel</b><div id="feed"></div></div>
 
@@ -224,63 +228,69 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 
 
 <script>
+// ================= FEATURE FLAGS =================
+const FEATURES = {
+ impactGlow: true,
+ heatMap: true,
+ camera: true,
+ intelFeed: true
+};
+
+// ================= GLOBE =================
 const globe = Globe()(document.getElementById('globeViz'))
 .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
 
 globe.controls().autoRotate = true;
 
-/* cinematic camera */
-const cameraViews = [
+// cinematic camera
+if(FEATURES.camera){
+ const views=[
   {lat:25,lng:-40,altitude:2},
   {lat:40,lng:110,altitude:2},
   {lat:-15,lng:-60,altitude:2}
-];
-
-let camIndex=0;
-setInterval(()=>{
-  camIndex=(camIndex+1)%cameraViews.length;
-  globe.pointOfView(cameraViews[camIndex],2500);
-},9000);
-
-/* threat intel feed */
-const feed=document.getElementById("feed");
-const ticker=document.getElementById("ticker");
-
-
-
-
-
-
-
-const intelSources=[
- "CISA: active exploitation detected",
- "AbuseIPDB: malicious IP surge",
- "Spamhaus: botnet infrastructure spike",
- "Emerging Threats: C2 beacon traffic",
- "TOR exit node traffic increase"
-];
-
-setInterval(()=>{
- feed.innerHTML=intelSources[Math.floor(Math.random()*intelSources.length)];
-},4000);
-
-/* training mode */
-let training=false;
-function toggleTraining(){
- training=!training;
- ticker.innerHTML=training ? "🎯 TRAINING MODE ACTIVE" : "LIVE OPERATIONS MODE";
- document.body.style.background=training ? "#001a22" : "black";
+ ];
+ let i=0;
+ setInterval(()=>{
+  i=(i+1)%views.length;
+  globe.pointOfView(views[i],2500);
+ },9000);
 }
 
-/* red vs blue simulation */
+// intel feed
+const feed=document.getElementById("feed");
+const intel=[
+ "CISA exploitation warning",
+ "Botnet C2 surge detected",
+ "AbuseIPDB malicious spike",
+ "Spamhaus threat escalation",
+ "TOR exit node traffic rise"
+];
+
+if(FEATURES.intelFeed){
+ setInterval(()=>{
+  feed.innerHTML=intel[Math.floor(Math.random()*intel.length)];
+ },4000);
+}
+
+// training mode
+let training=false;
+const ticker=document.getElementById("ticker");
+
+function toggleTraining(){
+ training=!training;
+ ticker.innerHTML=training?"🎯 TRAINING MODE ACTIVE":"LIVE OPERATIONS MODE";
+ document.body.style.background=training?"#001a22":"black";
+}
+
+// red vs blue
 function simulateBattle(){
  ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
  document.body.style.background="#220000";
  setTimeout(()=>document.body.style.background="black",800);
 }
 
-/* severity colors */
-const severityColors={
+// severity colors
+const colors={
  LOW:"#00ffff",
  MEDIUM:"#ffaa00",
  HIGH:"#ff5500",
@@ -289,50 +299,60 @@ const severityColors={
 
 let heatMap={};
 
-/* load attacks */
+// counters
+let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+
 async function load(){
  const paths=await fetch('/attack-paths').then(r=>r.json());
  const alerts=await fetch('/alerts').then(r=>r.json());
 
  const arcs=[];
 
+ counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+
  alerts.forEach(a=>{
-   ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
+  ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
  });
 
  paths.forEach(p=>{
-   const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
-   const sev=levels[Math.floor(Math.random()*4)];
+  const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
+  const sev=levels[Math.floor(Math.random()*4)];
 
-   /* heat glow */
+  counts[sev]++;
+
+  if(FEATURES.heatMap){
    const key=p.from.toString();
    heatMap[key]=(heatMap[key]||0)+1;
-
+   
    globe.pointsData([
-     ...globe.pointsData(),
-     {lat:p.from[0],lng:p.from[1],size:0.35*heatMap[key]}
+    ...globe.pointsData(),
+    {lat:p.from[0],lng:p.from[1],size:0.35*heatMap[key]}
    ]).pointColor(()=>"#ff0033");
+  }
 
-   /* impact glow */
+  if(FEATURES.impactGlow){
    globe.pointsData([
-     ...globe.pointsData(),
-     {lat:p.to[0],lng:p.to[1],size:1.6}
+    ...globe.pointsData(),
+    {lat:p.to[0],lng:p.to[1],size:1.6}
    ]).pointColor(()=>"#ff0033");
+  }
 
-   arcs.push({
-     startLat:p.from[0],
-     startLng:p.from[1],
-     endLat:p.to[0],
-     endLng:p.to[1],
-     color:severityColors[sev],
-     stroke: sev==="CRITICAL" ? 2.6 : 1.2
-   });
-
-
+  arcs.push({
+   startLat:p.from[0],
+   startLng:p.from[1],
+   endLat:p.to[0],
+   endLng:p.to[1],
+   color:colors[sev],
+   stroke: sev==="CRITICAL"?2.6:1.2
+  });
  });
 
  globe.arcsData(arcs);
 
+ document.getElementById("lowCount").innerText=counts.LOW;
+ document.getElementById("medCount").innerText=counts.MEDIUM;
+ document.getElementById("highCount").innerText=counts.HIGH;
+ document.getElementById("critCount").innerText=counts.CRITICAL;
 }
 
 load();
