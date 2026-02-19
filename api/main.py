@@ -255,10 +255,9 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 }
 
 #legend { left:10px; top:10px; width:180px; }
-#intel { right:10px; top:10px; width:240px; }
-#controls { left:10px; bottom:10px; }
+
 #ticker { bottom:0; width:100%; text-align:center; }
-#counter { right:10px; bottom:10px; }
+
 
 #banner {
  position:absolute;
@@ -279,21 +278,10 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 
 <div id="legend" class="panel">
 <b>Threat Levels</b><br>
-<span style="color:#00ffff">LOW</span>: <span id="lowCount">0</span><br>
-<span style="color:#ffaa00">MEDIUM</span>: <span id="medCount">0</span><br>
-<span style="color:#ff5500">HIGH</span>: <span id="highCount">0</span><br>
-<span style="color:#ff0033">CRITICAL</span>: <span id="critCount">0</span>
-</div>
-
-<div id="intel" class="panel"><b>Threat Intel</b><div id="feed"></div></div>
-
-<div id="controls" class="panel">
-<button onclick="toggleTraining()">Training Mode</button>
-<button onclick="simulateBattle()">Red vs Blue</button>
-</div>
-
-<div id="counter" class="panel">
-<b>Active Attacks:</b> <span id="attackCount">0</span>
+<span style="color:#00ffff">LOW</span><br>
+<span style="color:#ffaa00">MEDIUM</span><br>
+<span style="color:#ff5500">HIGH</span><br>
+<span style="color:#ff0033">CRITICAL</span>
 </div>
 
 <div id="ticker" class="panel"></div>
@@ -301,9 +289,15 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 <script>
 
 const globe = Globe()(document.getElementById('globeViz'))
-.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
+.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+.arcsTransitionDuration(900)
+.arcAltitudeAutoScale(0.35)
+.arcStroke(1.2);
 
 globe.controls().autoRotate = true;
+
+const banner=document.getElementById("banner");
+const ticker=document.getElementById("ticker");
 
 const colors={
  LOW:"#00ffff",
@@ -312,46 +306,15 @@ const colors={
  CRITICAL:"#ff0033"
 };
 
-const banner=document.getElementById("banner");
-const ticker=document.getElementById("ticker");
 
-/* intel feed */
-const intel=[
- "CISA exploitation warning",
- "Botnet C2 surge detected",
- "AbuseIPDB malicious spike",
- "Spamhaus threat escalation",
- "TOR exit node traffic rise"
-];
-
-setInterval(()=>{
- document.getElementById("feed").innerHTML =
- intel[Math.floor(Math.random()*intel.length)];
-},4000);
-
-/* training */
-let training=false;
-function toggleTraining(){
- training=!training;
- ticker.innerHTML=training?"TRAINING MODE ACTIVE":"LIVE OPERATIONS MODE";
- document.body.style.background=training?"#001a22":"black";
-}
-
-/* simulation */
-function simulateBattle(){
- ticker.innerHTML="RED vs BLUE ENGAGEMENT";
- document.body.style.background="#220000";
- setTimeout(()=>document.body.style.background="black",800);
-}
 
 async function load(){
  const paths=await fetch('/attack-paths').then(r=>r.json());
  const alerts=await fetch('/alerts').then(r=>r.json());
 
- let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
- let arcs=[];
 
- document.getElementById("attackCount").innerText=paths.length;
+ let arcs=[];
+ let points=[];
 
  alerts.forEach(a=>{
    ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
@@ -360,11 +323,14 @@ async function load(){
  paths.forEach(p=>{
    const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
    const sev=levels[Math.floor(Math.random()*4)];
-   counts[sev]++;
+   
 
    if(sev==="CRITICAL"){
       banner.style.display="block";
       setTimeout(()=>banner.style.display="none",1200);
+
+      // 🎯 zoom to attack target
+      globe.pointOfView({lat:p.to[0], lng:p.to[1], altitude:1.3}, 1600);
    }
 
    arcs.push({
@@ -373,16 +339,31 @@ async function load(){
      endLat:p.to[0],
      endLng:p.to[1],
      color:colors[sev],
-     stroke: sev==="CRITICAL"?2.6:1.2
+     stroke: sev==="CRITICAL"?2.5:1.2
+   });
+
+   // 🔴 origin glow
+   points.push({
+     lat:p.from[0],
+     lng:p.from[1],
+     size:0.35,
+     color:"#ff0033"
+   });
+
+   // 🔴 impact glow
+   points.push({
+     lat:p.to[0],
+     lng:p.to[1],
+     size:1.2,
+     color:"#ff0033"
    });
  });
 
  globe.arcsData(arcs);
-
- document.getElementById("lowCount").innerText=counts.LOW;
- document.getElementById("medCount").innerText=counts.MEDIUM;
- document.getElementById("highCount").innerText=counts.HIGH;
- document.getElementById("critCount").innerText=counts.CRITICAL;
+ globe.pointsData(points)
+      .pointAltitude(0.01)
+      .pointRadius('size')
+      .pointColor('color');
 }
 
 load();
