@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -54,7 +54,7 @@ class Alert(Base):
     timestamp = Column(String)
 
 # -----------------------------
-# Auto Schema Fix (free-tier safe)
+# Auto Schema Fix
 # -----------------------------
 
 
@@ -175,9 +175,7 @@ connections = set()
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
-
     
-
 
 
     try:
@@ -199,82 +197,95 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven SOC Intelligence Console</title>
+<title>LayerSeven SOC Command Center</title>
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
-body { margin:0; background:black; overflow:hidden; }
+body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:monospace;}
 #globeViz { width:100vw; height:100vh; }
 
+/* HUD panels */
+.panel {
+ position:absolute;
+ background:rgba(0,10,25,.85);
+ padding:10px;
+ border:1px solid #00ffff55;
+ border-radius:6px;
+ font-size:12px;
+}
 
+#legend { left:10px; top:10px; }
+#stats { right:10px; top:10px; }
+#ticker { bottom:0; width:100%; text-align:center; }
+#executive { left:10px; bottom:10px; }
 
+.hud-line {
+ position:absolute;
+ border-top:1px solid #00ffff22;
+ width:100%;
+ top:50%;
+}
 </style>
 </head>
 <body>
 
 <div id="globeViz"></div>
+<div class="hud-line"></div>
 
+<div id="legend" class="panel">
+<b>Threat Legend</b><br>
+<span style="color:#00ffff">LOW</span><br>
+<span style="color:#ffaa00">MEDIUM</span><br>
+<span style="color:#ff5500">HIGH</span><br>
+<span style="color:#ff0033">CRITICAL</span>
+</div>
 
+<div id="stats" class="panel">
+<b>Attack Counters</b><br>
+Total: <span id="total">0</span><br>
+Critical: <span id="critical">0</span>
+</div>
 
+<div id="executive" class="panel">
+<b>Wallboard Mode</b><br>
+<button onclick="toggleWall()">Toggle Executive Mode</button>
+</div>
 
+<div id="ticker" class="panel"></div>
 
+<audio id="criticalSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
+<audio id="highSound" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
-.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-.backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png');
+.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
 
 globe.controls().autoRotate = true;
 
-const severityColors = {
+const severityColors={
  LOW:"#00ffff",
  MEDIUM:"#ffaa00",
  HIGH:"#ff5500",
  CRITICAL:"#ff0033"
 };
 
-let heatMap = {};
+let total=0;
+let criticalCount=0;
+let wallMode=false;
 
-const ticker = document.createElement("div");
-ticker.style.position="absolute";
-ticker.style.bottom="0";
-ticker.style.width="100%";
-ticker.style.background="rgba(0,0,0,.7)";
-ticker.style.color="#00ffff";
-ticker.style.textAlign="center";
-ticker.style.padding="4px";
-document.body.appendChild(ticker);
+const ticker=document.getElementById("ticker");
+const critSound=document.getElementById("criticalSound");
+const highSound=document.getElementById("highSound");
 
-const popup=document.createElement("div");
-popup.style.position="absolute";
-popup.style.right="20px";
-popup.style.bottom="40px";
-popup.style.background="rgba(0,10,25,.9)";
-popup.style.padding="10px";
-popup.style.display="none";
-document.body.appendChild(popup);
-
-function criticalFlash(lat,lng){
- globe.pointsData([...globe.pointsData(),{lat:lat,lng:lng,size:2}])
- .pointColor(()=>"#ff0033");
- document.body.style.background="#220000";
- setTimeout(()=>document.body.style.background="black",150);
+function toggleWall(){
+ wallMode=!wallMode;
+ document.getElementById("legend").style.display=wallMode?"none":"block";
 }
 
-function showMitre(t){
- popup.innerHTML="<b>MITRE:</b><br>"+t;
- popup.style.display="block";
- setTimeout(()=>popup.style.display="none",2500);
+function playSound(sev){
+ if(sev==="CRITICAL"){ critSound.currentTime=0; critSound.play().catch(()=>{}); }
+ else if(sev==="HIGH"){ highSound.currentTime=0; highSound.play().catch(()=>{}); }
 }
-
-function heatGlow(lat,lng){
- const key=lat.toFixed(0)+lng.toFixed(0);
- heatMap[key]=(heatMap[key]||0)+1;
- globe.pointsData([...globe.pointsData(),{
-  lat:lat,lng:lng,size:0.5*heatMap[key]
- }]).pointColor(()=>"#ff0033");
-}
-
 
 async function load(){
  const paths=await fetch('/attack-paths').then(r=>r.json());
@@ -282,29 +293,35 @@ async function load(){
  const arcs=[];
 
  alerts.forEach(a=>{
-  ticker.innerHTML=`⚠ ${a.severity} threat • ${a.technique}`;
+   ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
  });
 
  paths.forEach(p=>{
-  const severityLevels=["LOW","MEDIUM","HIGH","CRITICAL"];
-  const severity=severityLevels[Math.floor(Math.random()*4)];
-  const color=severityColors[severity];
+   const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
+   const sev=levels[Math.floor(Math.random()*4)];
+   const color=severityColors[sev];
 
-  arcs.push({
-   startLat:p.from[0],
-   startLng:p.from[1],
-   endLat:p.to[0],
-   endLng:p.to[1],
-   color:color,
-   stroke: severity==="CRITICAL"?2.5:1.2
-  });
+   total++;
+   if(sev==="CRITICAL") criticalCount++;
 
-  heatGlow(p.from[0],p.from[1]);
+   document.getElementById("total").innerText=total;
+   document.getElementById("critical").innerText=criticalCount;
 
-  if(severity==="CRITICAL"){
-    criticalFlash(p.to[0],p.to[1]);
-    showMitre(alerts.length?alerts[0].technique:"T1110");
-  }
+   playSound(sev);
+
+   arcs.push({
+     startLat:p.from[0],
+     startLng:p.from[1],
+     endLat:p.to[0],
+     endLng:p.to[1],
+     color:color,
+     stroke: sev==="CRITICAL"?2.5:1.2
+   });
+
+   if(sev==="CRITICAL"){
+     globe.pointsData([...globe.pointsData(),{lat:p.to[0],lng:p.to[1],size:2}])
+       .pointColor(()=>"#ff0033");
+   }
  });
 
  globe.arcsData(arcs);
