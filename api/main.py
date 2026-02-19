@@ -220,7 +220,7 @@ connections = set()
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
-    
+
 
     try:
         while True:
@@ -240,29 +240,163 @@ def dashboard():
 <head>
 <title>LayerSeven SOC Command Center</title>
 <script src="https://unpkg.com/globe.gl"></script>
+
 <style>
-body { margin:0; background:black; overflow:hidden; }
+body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:monospace;}
 #globeViz { width:100vw; height:100vh; }
+
+.panel {
+ position:absolute;
+ background:rgba(0,10,25,.85);
+ padding:8px;
+ border:1px solid #00ffff55;
+ border-radius:6px;
+ font-size:12px;
+}
+
+#legend { left:10px; top:10px; width:180px; }
+#intel { right:10px; top:10px; width:240px; }
+#controls { left:10px; bottom:10px; }
+#ticker { bottom:0; width:100%; text-align:center; }
+#counter { right:10px; bottom:10px; }
+
+#banner {
+ position:absolute;
+ top:40%;
+ width:100%;
+ text-align:center;
+ font-size:48px;
+ color:#ff0033;
+ display:none;
+ text-shadow:0 0 25px #ff0033;
+}
 </style>
 </head>
 <body>
+
 <div id="globeViz"></div>
+<div id="banner">CRITICAL THREAT</div>
+
+<div id="legend" class="panel">
+<b>Threat Levels</b><br>
+<span style="color:#00ffff">LOW</span>: <span id="lowCount">0</span><br>
+<span style="color:#ffaa00">MEDIUM</span>: <span id="medCount">0</span><br>
+<span style="color:#ff5500">HIGH</span>: <span id="highCount">0</span><br>
+<span style="color:#ff0033">CRITICAL</span>: <span id="critCount">0</span>
+</div>
+
+<div id="intel" class="panel"><b>Threat Intel</b><div id="feed"></div></div>
+
+<div id="controls" class="panel">
+<button onclick="toggleTraining()">Training Mode</button>
+<button onclick="simulateBattle()">Red vs Blue</button>
+</div>
+
+<div id="counter" class="panel">
+<b>Active Attacks:</b> <span id="attackCount">0</span>
+</div>
+
+<div id="ticker" class="panel"></div>
+
 <script>
+
 const globe = Globe()(document.getElementById('globeViz'))
 .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
+
 globe.controls().autoRotate = true;
+
+const colors={
+ LOW:"#00ffff",
+ MEDIUM:"#ffaa00",
+ HIGH:"#ff5500",
+ CRITICAL:"#ff0033"
+};
+
+const banner=document.getElementById("banner");
+const ticker=document.getElementById("ticker");
+
+/* intel feed */
+const intel=[
+ "CISA exploitation warning",
+ "Botnet C2 surge detected",
+ "AbuseIPDB malicious spike",
+ "Spamhaus threat escalation",
+ "TOR exit node traffic rise"
+];
+
+setInterval(()=>{
+ document.getElementById("feed").innerHTML =
+ intel[Math.floor(Math.random()*intel.length)];
+},4000);
+
+/* training */
+let training=false;
+function toggleTraining(){
+ training=!training;
+ ticker.innerHTML=training?"TRAINING MODE ACTIVE":"LIVE OPERATIONS MODE";
+ document.body.style.background=training?"#001a22":"black";
+}
+
+/* simulation */
+function simulateBattle(){
+ ticker.innerHTML="RED vs BLUE ENGAGEMENT";
+ document.body.style.background="#220000";
+ setTimeout(()=>document.body.style.background="black",800);
+}
+
+async function load(){
+ const paths=await fetch('/attack-paths').then(r=>r.json());
+ const alerts=await fetch('/alerts').then(r=>r.json());
+
+ let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+ let arcs=[];
+
+ document.getElementById("attackCount").innerText=paths.length;
+
+ alerts.forEach(a=>{
+   ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
+ });
+
+ paths.forEach(p=>{
+   const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
+   const sev=levels[Math.floor(Math.random()*4)];
+   counts[sev]++;
+
+   if(sev==="CRITICAL"){
+      banner.style.display="block";
+      setTimeout(()=>banner.style.display="none",1200);
+   }
+
+   arcs.push({
+     startLat:p.from[0],
+     startLng:p.from[1],
+     endLat:p.to[0],
+     endLng:p.to[1],
+     color:colors[sev],
+     stroke: sev==="CRITICAL"?2.6:1.2
+   });
+ });
+
+ globe.arcsData(arcs);
+
+ document.getElementById("lowCount").innerText=counts.LOW;
+ document.getElementById("medCount").innerText=counts.MEDIUM;
+ document.getElementById("highCount").innerText=counts.HIGH;
+ document.getElementById("critCount").innerText=counts.CRITICAL;
+}
+
+load();
+setInterval(load,3500);
+
 </script>
 </body>
 </html>
 """
 
-# =========================================================
-# HEALTH CHECK
-# =========================================================
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+
+
+
 
 
 
