@@ -38,7 +38,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # -----------------------------
-# Model
+# Database Model
 # -----------------------------
 
 
@@ -157,7 +157,7 @@ connections = set()
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
-
+    
 
 
     try:
@@ -180,7 +180,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven Cyber Range</title>
+<title>LayerSeven SOC Command Center</title>
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
@@ -191,14 +191,14 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 .panel {
  position:absolute;
  background:rgba(0,10,25,.85);
- padding:10px;
+ padding:8px;
  border:1px solid #00ffff55;
  border-radius:6px;
  font-size:12px;
 }
 
-#intel { right:10px; top:10px; width:260px; }
-#training { left:10px; bottom:10px; }
+#intel { right:10px; top:10px; width:240px; }
+#controls { left:10px; bottom:10px; }
 #ticker { bottom:0; width:100%; text-align:center; }
 
 
@@ -212,11 +212,13 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 
 <div id="globeViz"></div>
 
-<div id="intel" class="panel"><b>Threat Intel Feed</b><div id="feed"></div></div>
-<div id="training" class="panel">
+<div id="intel" class="panel"><b>Threat Intel</b><div id="feed"></div></div>
+
+<div id="controls" class="panel">
 <button onclick="toggleTraining()">Training Mode</button>
 <button onclick="simulateBattle()">Red vs Blue</button>
 </div>
+
 <div id="ticker" class="panel"></div>
 
 
@@ -227,86 +229,110 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 
-
-
-const ticker=document.getElementById("ticker");
-const feed=document.getElementById("feed");
-
-let training=false;
-let threatScore=0;
-
-// real-world intel simulation
-const intelSources=[
- "CISA: Active exploitation detected",
- "AbuseIPDB: malicious IP surge",
- "Emerging Threats: botnet C2 activity",
- "TOR exit nodes spike observed",
- "Spamhaus: new malware distribution wave"
+/* cinematic camera */
+const cameraViews = [
+  {lat:25,lng:-40,altitude:2},
+  {lat:40,lng:110,altitude:2},
+  {lat:-15,lng:-60,altitude:2}
 ];
 
-function intelFeed(){
- if(Math.random()<0.5){
-   feed.innerHTML=intelSources[Math.floor(Math.random()*intelSources.length)];
- }
-}
-setInterval(intelFeed,4000);
+let camIndex=0;
+setInterval(()=>{
+  camIndex=(camIndex+1)%cameraViews.length;
+  globe.pointOfView(cameraViews[camIndex],2500);
+},9000);
 
-// AI prediction paths
-function predictPath(origin){
- return {
-   startLat:origin[0],
-   startLng:origin[1],
-   endLat:origin[0]+(Math.random()*30-15),
-   endLng:origin[1]+(Math.random()*30-15),
-   color:"#ff00ff",
-   stroke:0.8
- };
-}
+/* threat intel feed */
+const feed=document.getElementById("feed");
+const ticker=document.getElementById("ticker");
 
-// playbook automation
-function autoRespond(){
- if(threatScore>20){
-   ticker.innerHTML="🛡 Automated containment executed";
-   threatScore-=5;
- }
-}
 
-// red vs blue simulation
-function simulateBattle(){
- ticker.innerHTML="⚔ Red vs Blue engagement started";
-}
 
-// training mode
+
+
+
+
+const intelSources=[
+ "CISA: active exploitation detected",
+ "AbuseIPDB: malicious IP surge",
+ "Spamhaus: botnet infrastructure spike",
+ "Emerging Threats: C2 beacon traffic",
+ "TOR exit node traffic increase"
+];
+
+setInterval(()=>{
+ feed.innerHTML=intelSources[Math.floor(Math.random()*intelSources.length)];
+},4000);
+
+/* training mode */
+let training=false;
 function toggleTraining(){
  training=!training;
- ticker.innerHTML=training ? "🎯 Training Mode Enabled" : "Training Mode Disabled";
+ ticker.innerHTML=training ? "🎯 TRAINING MODE ACTIVE" : "LIVE OPERATIONS MODE";
+ document.body.style.background=training ? "#001a22" : "black";
 }
 
-// cyber range attack loader
+/* red vs blue simulation */
+function simulateBattle(){
+ ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
+ document.body.style.background="#220000";
+ setTimeout(()=>document.body.style.background="black",800);
+}
+
+/* severity colors */
+const severityColors={
+ LOW:"#00ffff",
+ MEDIUM:"#ffaa00",
+ HIGH:"#ff5500",
+ CRITICAL:"#ff0033"
+};
+
+let heatMap={};
+
+/* load attacks */
 async function load(){
  const paths=await fetch('/attack-paths').then(r=>r.json());
+ const alerts=await fetch('/alerts').then(r=>r.json());
 
  const arcs=[];
- 
+
+ alerts.forEach(a=>{
+   ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
+ });
 
  paths.forEach(p=>{
-   threatScore+= training ? 1 : 2;
+   const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
+   const sev=levels[Math.floor(Math.random()*4)];
+
+   /* heat glow */
+   const key=p.from.toString();
+   heatMap[key]=(heatMap[key]||0)+1;
+
+   globe.pointsData([
+     ...globe.pointsData(),
+     {lat:p.from[0],lng:p.from[1],size:0.35*heatMap[key]}
+   ]).pointColor(()=>"#ff0033");
+
+   /* impact glow */
+   globe.pointsData([
+     ...globe.pointsData(),
+     {lat:p.to[0],lng:p.to[1],size:1.6}
+   ]).pointColor(()=>"#ff0033");
 
    arcs.push({
      startLat:p.from[0],
      startLng:p.from[1],
      endLat:p.to[0],
      endLng:p.to[1],
-     color:"#ff0033",
-     stroke:1.2
+     color:severityColors[sev],
+     stroke: sev==="CRITICAL" ? 2.6 : 1.2
    });
 
-   // AI prediction
-   arcs.push(predictPath(p.from));
+
  });
 
  globe.arcsData(arcs);
- autoRespond();
+
 }
 
 load();
