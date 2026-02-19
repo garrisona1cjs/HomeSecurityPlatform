@@ -254,8 +254,10 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
  font-size:12px;
 }
 
-#controls { left:10px; bottom:10px; }
+
 #legend { left:10px; top:10px; width:170px; }
+#intel { right:10px; top:10px; width:230px; }
+#controls { left:10px; bottom:10px; }
 #ticker { bottom:0; width:100%; text-align:center; }
 
 
@@ -284,6 +286,11 @@ HIGH: <span id="highCount">0</span><br>
 CRITICAL: <span id="critCount">0</span>
 </div>
 
+<div id="intel" class="panel">
+<b>Threat Intel</b>
+<div id="intelFeed">Awaiting alerts...</div>
+</div>
+
 <div id="controls" class="panel">
 <button onclick="toggleTraining()">Training Mode</button>
 <button onclick="simulateBattle()">Red vs Blue</button>
@@ -303,6 +310,7 @@ globe.controls().autoRotate = true;
 
 const banner=document.getElementById("banner");
 const ticker=document.getElementById("ticker");
+const intelFeed=document.getElementById("intelFeed");
 
 const colors={
  LOW:"#00ffff",
@@ -310,6 +318,19 @@ const colors={
  HIGH:"#ff5500",
  CRITICAL:"#ff0033"
 };
+
+/* rotating threat intel */
+const intelMessages=[
+ "CISA exploitation warning",
+ "Botnet C2 surge detected",
+ "AbuseIPDB malicious spike",
+ "Spamhaus threat escalation",
+ "TOR exit node activity increase"
+];
+
+setInterval(()=>{
+ intelFeed.innerHTML=intelMessages[Math.floor(Math.random()*intelMessages.length)];
+},5000);
 
 /* TRAINING MODE */
 let training=false;
@@ -337,9 +358,11 @@ async function load(){
  let points=[];
  let counts={LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
 
- alerts.forEach(a=>{
-   ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
- });
+ if(alerts.length){
+   const latest = alerts[0];
+   ticker.innerHTML=`⚠ ${latest.severity} • ${latest.technique}`;
+   intelFeed.innerHTML=`Latest: ${latest.technique}`;
+ }
 
  paths.forEach(p=>{
    const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
@@ -374,7 +397,7 @@ async function load(){
       .pointRadius('size')
       .pointColor('color');
 
- /* 🔴 UPDATE LEGEND */
+
  document.getElementById("lowCount").innerText = counts.LOW;
  document.getElementById("medCount").innerText = counts.MEDIUM;
  document.getElementById("highCount").innerText = counts.HIGH;
