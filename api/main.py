@@ -13,9 +13,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 
 
-# -----------------------------
-# Database
-# -----------------------------
+
 
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -39,7 +37,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # -----------------------------
-# Models
+# Model
 # -----------------------------
 
 
@@ -53,9 +51,7 @@ class Alert(Base):
     technique = Column(String)
     timestamp = Column(String)
 
-# -----------------------------
-# Auto Schema Fix
-# -----------------------------
+
 
 
 
@@ -82,9 +78,7 @@ class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
 
-# -----------------------------
-# MITRE Techniques
-# -----------------------------
+
 
 techniques = [
     "T1110 Brute Force",
@@ -95,19 +89,12 @@ techniques = [
 ]
 
 # -----------------------------
-# Register Agent
+# API ROUTES
 # -----------------------------
 
 @app.post("/register")
 def register(agent: AgentRegistration):
-    return {
-        "agent_id": str(uuid.uuid4()),
-        "api_key": secrets.token_hex(16)
-    }
-
-# -----------------------------
-# Report → Create Alert
-# -----------------------------
+    return {"agent_id": str(uuid.uuid4()), "api_key": secrets.token_hex(16)}
 
 @app.post("/report")
 def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
@@ -139,20 +126,14 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     return {"risk_score": risk, "severity": severity}
 
-# -----------------------------
-# Alerts API
-# -----------------------------
+
 
 @app.get("/alerts")
-def get_alerts():
+def alerts():
     db = SessionLocal()
-    alerts = db.query(Alert).order_by(Alert.timestamp.desc()).all()
+    data = db.query(Alert).order_by(Alert.timestamp.desc()).all()
     db.close()
-    return alerts
-
-# -----------------------------
-# Attack Feed
-# -----------------------------
+    return data
 
 @app.get("/attack-paths")
 def attack_paths():
@@ -188,7 +169,7 @@ async def ws_endpoint(ws: WebSocket):
 
 
 # -----------------------------
-# SOC Dashboard
+# DASHBOARD
 # -----------------------------
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -197,14 +178,14 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven SOC Command Center</title>
+<title>LayerSeven SOC War Room</title>
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
 body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:monospace;}
 #globeViz { width:100vw; height:100vh; }
 
-/* HUD panels */
+
 .panel {
  position:absolute;
  background:rgba(0,10,25,.85);
@@ -214,47 +195,28 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
  font-size:12px;
 }
 
-#legend { left:10px; top:10px; }
-#stats { right:10px; top:10px; }
+#queue { right:10px; top:10px; width:240px; max-height:300px; overflow:auto;}
+#matrix { left:10px; bottom:10px; }
 #ticker { bottom:0; width:100%; text-align:center; }
-#executive { left:10px; bottom:10px; }
 
-.hud-line {
- position:absolute;
- border-top:1px solid #00ffff22;
- width:100%;
- top:50%;
+.matrix-cell {
+ width:20px; height:20px; display:inline-block; margin:1px;
+ background:#001a22;
 }
+
+.heat { background:#ff0033; }
+
 </style>
 </head>
 <body>
 
 <div id="globeViz"></div>
-<div class="hud-line"></div>
 
-<div id="legend" class="panel">
-<b>Threat Legend</b><br>
-<span style="color:#00ffff">LOW</span><br>
-<span style="color:#ffaa00">MEDIUM</span><br>
-<span style="color:#ff5500">HIGH</span><br>
-<span style="color:#ff0033">CRITICAL</span>
-</div>
-
-<div id="stats" class="panel">
-<b>Attack Counters</b><br>
-Total: <span id="total">0</span><br>
-Critical: <span id="critical">0</span>
-</div>
-
-<div id="executive" class="panel">
-<b>Wallboard Mode</b><br>
-<button onclick="toggleWall()">Toggle Executive Mode</button>
-</div>
-
+<div id="queue" class="panel"><b>Alert Queue</b><div id="alerts"></div></div>
+<div id="matrix" class="panel"><b>MITRE Matrix</b><br><div id="mitre"></div></div>
 <div id="ticker" class="panel"></div>
 
-<audio id="criticalSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
-<audio id="highSound" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"></audio>
+
 
 <script>
 const globe = Globe()(document.getElementById('globeViz'))
@@ -262,29 +224,45 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 
-const severityColors={
- LOW:"#00ffff",
- MEDIUM:"#ffaa00",
- HIGH:"#ff5500",
- CRITICAL:"#ff0033"
-};
 
-let total=0;
-let criticalCount=0;
-let wallMode=false;
 
 const ticker=document.getElementById("ticker");
-const critSound=document.getElementById("criticalSound");
-const highSound=document.getElementById("highSound");
+const queue=document.getElementById("alerts");
+const matrix=document.getElementById("mitre");
 
-function toggleWall(){
- wallMode=!wallMode;
- document.getElementById("legend").style.display=wallMode?"none":"block";
+let heat={};
+let cameraIndex=0;
+
+// cinematic camera rotation
+const cameraViews=[
+ {lat:20,lng:-40,altitude:2},
+ {lat:35,lng:100,altitude:2},
+ {lat:-20,lng:-60,altitude:2}
+];
+
+setInterval(()=>{
+ cameraIndex=(cameraIndex+1)%cameraViews.length;
+ globe.pointOfView(cameraViews[cameraIndex],2000);
+},8000);
+
+// build MITRE matrix
+for(let i=0;i<40;i++){
+ const cell=document.createElement("div");
+ cell.className="matrix-cell";
+ matrix.appendChild(cell);
 }
 
-function playSound(sev){
- if(sev==="CRITICAL"){ critSound.currentTime=0; critSound.play().catch(()=>{}); }
- else if(sev==="HIGH"){ highSound.currentTime=0; highSound.play().catch(()=>{}); }
+function updateMatrix(){
+ const cells=document.querySelectorAll(".matrix-cell");
+ const idx=Math.floor(Math.random()*cells.length);
+ cells[idx].classList.add("heat");
+}
+
+// ransomware simulation
+function ransomwareEvent(){
+ ticker.innerHTML="🚨 RANSOMWARE DEPLOYMENT DETECTED";
+ document.body.style.background="#220000";
+ setTimeout(()=>document.body.style.background="black",2000);
 }
 
 async function load(){
@@ -292,36 +270,30 @@ async function load(){
  const alerts=await fetch('/alerts').then(r=>r.json());
  const arcs=[];
 
- alerts.forEach(a=>{
-   ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
+ queue.innerHTML="";
+ alerts.slice(0,6).forEach(a=>{
+   queue.innerHTML += `<div>${a.severity} • ${a.technique}</div>`;
  });
+
+ if(Math.random()<0.08) ransomwareEvent();
 
  paths.forEach(p=>{
    const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
    const sev=levels[Math.floor(Math.random()*4)];
-   const color=severityColors[sev];
 
-   total++;
-   if(sev==="CRITICAL") criticalCount++;
-
-   document.getElementById("total").innerText=total;
-   document.getElementById("critical").innerText=criticalCount;
-
-   playSound(sev);
+   const key=p.from.toString();
+   heat[key]=(heat[key]||0)+1;
 
    arcs.push({
      startLat:p.from[0],
      startLng:p.from[1],
      endLat:p.to[0],
      endLng:p.to[1],
-     color:color,
-     stroke: sev==="CRITICAL"?2.5:1.2
+     color:"#ff0033",
+     stroke:1.2 + heat[key]*0.2
    });
 
-   if(sev==="CRITICAL"){
-     globe.pointsData([...globe.pointsData(),{lat:p.to[0],lng:p.to[1],size:2}])
-       .pointColor(()=>"#ff0033");
-   }
+   updateMatrix();
  });
 
  globe.arcsData(arcs);
