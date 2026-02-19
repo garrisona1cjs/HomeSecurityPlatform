@@ -254,8 +254,7 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
  font-size:12px;
 }
 
-
-#legend { left:10px; top:10px; width:170px; }
+#legend { left:10px; top:10px; width:180px; }
 #intel { right:10px; top:10px; width:230px; }
 #controls { left:10px; bottom:10px; }
 #ticker { bottom:0; width:100%; text-align:center; }
@@ -287,8 +286,8 @@ CRITICAL: <span id="critCount">0</span>
 </div>
 
 <div id="intel" class="panel">
-<b>Threat Intel</b>
-<div id="intelFeed">Awaiting alerts...</div>
+<b>Live Alerts</b>
+<div id="intelFeed">Waiting for threats...</div>
 </div>
 
 <div id="controls" class="panel">
@@ -304,7 +303,7 @@ const globe = Globe()(document.getElementById('globeViz'))
 .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
 
 .arcAltitudeAutoScale(0.35)
-.arcsTransitionDuration(900);
+.arcsTransitionDuration(600);
 
 globe.controls().autoRotate = true;
 
@@ -319,20 +318,26 @@ const colors={
  CRITICAL:"#ff0033"
 };
 
-/* rotating threat intel */
-const intelMessages=[
- "CISA exploitation warning",
- "Botnet C2 surge detected",
- "AbuseIPDB malicious spike",
- "Spamhaus threat escalation",
- "TOR exit node activity increase"
-];
+let arcs=[];
+let points=[];
+let counts={LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
 
-setInterval(()=>{
- intelFeed.innerHTML=intelMessages[Math.floor(Math.random()*intelMessages.length)];
-},5000);
+function updateLegend(){
+ document.getElementById("lowCount").innerText = counts.LOW;
+ document.getElementById("medCount").innerText = counts.MEDIUM;
+ document.getElementById("highCount").innerText = counts.HIGH;
+ document.getElementById("critCount").innerText = counts.CRITICAL;
+}
 
-/* TRAINING MODE */
+function render(){
+ globe.arcsData(arcs);
+ globe.pointsData(points)
+      .pointAltitude(0.01)
+      .pointRadius('size')
+      .pointColor('color');
+}
+
+/* 🎯 TRAINING MODE */
 let training=false;
 function toggleTraining(){
  training=!training;
@@ -342,71 +347,72 @@ function toggleTraining(){
  document.body.style.background = training ? "#001a22" : "black";
 }
 
-/* RED VS BLUE */
+/* ⚔ RED VS BLUE */
 function simulateBattle(){
  ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
  document.body.style.background="#220000";
  setTimeout(()=>document.body.style.background="black",800);
 }
 
-async function load(){
- const paths=await fetch('/attack-paths').then(r=>r.json());
+/* Load existing alerts */
+async function loadExisting(){
  const alerts=await fetch('/alerts').then(r=>r.json());
 
-
- let arcs=[];
- let points=[];
- let counts={LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
-
- if(alerts.length){
-   const latest = alerts[0];
-   ticker.innerHTML=`⚠ ${latest.severity} • ${latest.technique}`;
-   intelFeed.innerHTML=`Latest: ${latest.technique}`;
- }
-
- paths.forEach(p=>{
-   const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
-   const sev=levels[Math.floor(Math.random()*4)];
-
-   counts[sev]++;
-
-   if(sev==="CRITICAL"){
-      banner.style.display="block";
-      setTimeout(()=>banner.style.display="none",1200);
-      
-
-      globe.pointOfView({lat:p.to[0], lng:p.to[1], altitude:1.3}, 1600);
-   }
-
-   arcs.push({
-     startLat:p.from[0],
-     startLng:p.from[1],
-     endLat:p.to[0],
-     endLng:p.to[1],
-     color:colors[sev],
-     stroke: sev==="CRITICAL"?2.5:1.2
-   });
-
-   points.push({lat:p.from[0], lng:p.from[1], size:0.35, color:"#ff0033"});
-   points.push({lat:p.to[0], lng:p.to[1], size:1.2, color:"#ff0033"});
- });
-
- globe.arcsData(arcs);
- globe.pointsData(points)
-      .pointAltitude(0.01)
-      .pointRadius('size')
-      .pointColor('color');
-
-
- document.getElementById("lowCount").innerText = counts.LOW;
- document.getElementById("medCount").innerText = counts.MEDIUM;
- document.getElementById("highCount").innerText = counts.HIGH;
- document.getElementById("critCount").innerText = counts.CRITICAL;
+ alerts.forEach(addAlertVisual);
+ render();
+ updateLegend();
 }
 
-load();
-setInterval(load,3500);
+/* Add alert visuals */
+function addAlertVisual(alert){
 
+ const severity = alert.severity;
+ const color = colors[severity] || "#ffffff";
+
+ counts[severity]++;
+
+ const lat = parseFloat(alert.latitude);
+ const lng = parseFloat(alert.longitude);
+
+ // origin point
+ points.push({
+   lat: lat,
+   lng: lng,
+   size: 0.4,
+   color: color
+ });
+
+ // arc to SOC center (Des Moines)
+ arcs.push({
+   startLat: lat,
+   startLng: lng,
+   endLat: 41.59,
+   endLng: -93.62,
+   color: color,
+   stroke: severity==="CRITICAL" ? 2.6 : 1.2
+ });
+
+ if(severity === "CRITICAL"){
+   banner.style.display="block";
+   setTimeout(()=>banner.style.display="none",1400);
+   globe.pointOfView({lat:lat,lng:lng,altitude:1.3},1600);
+ }
+
+ ticker.innerHTML = `⚠ ${severity} • ${alert.technique}`;
+ intelFeed.innerHTML = `${alert.origin_label} — ${alert.technique}`;
+}
+
+/* WebSocket Live Stream */
+const ws = new WebSocket(`wss://${location.host}/ws`);
+
+ws.onmessage = (event) => {
+ const alert = JSON.parse(event.data);
+ addAlertVisual(alert);
+ render();
+ updateLegend();
+};
+
+loadExisting();
 </script>
 </body>
 </html>
