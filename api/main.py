@@ -254,8 +254,8 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
  font-size:12px;
 }
 
-#legend { left:10px; top:10px; width:180px; }
-
+#controls { left:10px; bottom:10px; }
+#legend { left:10px; top:10px; width:170px; }
 #ticker { bottom:0; width:100%; text-align:center; }
 
 
@@ -278,10 +278,15 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 
 <div id="legend" class="panel">
 <b>Threat Levels</b><br>
-<span style="color:#00ffff">LOW</span><br>
-<span style="color:#ffaa00">MEDIUM</span><br>
-<span style="color:#ff5500">HIGH</span><br>
-<span style="color:#ff0033">CRITICAL</span>
+LOW: <span id="lowCount">0</span><br>
+MEDIUM: <span id="medCount">0</span><br>
+HIGH: <span id="highCount">0</span><br>
+CRITICAL: <span id="critCount">0</span>
+</div>
+
+<div id="controls" class="panel">
+<button onclick="toggleTraining()">Training Mode</button>
+<button onclick="simulateBattle()">Red vs Blue</button>
 </div>
 
 <div id="ticker" class="panel"></div>
@@ -290,9 +295,9 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 
 const globe = Globe()(document.getElementById('globeViz'))
 .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-.arcsTransitionDuration(900)
+
 .arcAltitudeAutoScale(0.35)
-.arcStroke(1.2);
+.arcsTransitionDuration(900);
 
 globe.controls().autoRotate = true;
 
@@ -306,7 +311,22 @@ const colors={
  CRITICAL:"#ff0033"
 };
 
+/* TRAINING MODE */
+let training=false;
+function toggleTraining(){
+ training=!training;
+ ticker.innerHTML = training
+   ? "🎯 TRAINING MODE ACTIVE"
+   : "LIVE OPERATIONS MODE";
+ document.body.style.background = training ? "#001a22" : "black";
+}
 
+/* RED VS BLUE */
+function simulateBattle(){
+ ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
+ document.body.style.background="#220000";
+ setTimeout(()=>document.body.style.background="black",800);
+}
 
 async function load(){
  const paths=await fetch('/attack-paths').then(r=>r.json());
@@ -315,6 +335,7 @@ async function load(){
 
  let arcs=[];
  let points=[];
+ let counts={LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
 
  alerts.forEach(a=>{
    ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
@@ -323,13 +344,14 @@ async function load(){
  paths.forEach(p=>{
    const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
    const sev=levels[Math.floor(Math.random()*4)];
-   
+
+   counts[sev]++;
 
    if(sev==="CRITICAL"){
       banner.style.display="block";
       setTimeout(()=>banner.style.display="none",1200);
+      
 
-      // 🎯 zoom to attack target
       globe.pointOfView({lat:p.to[0], lng:p.to[1], altitude:1.3}, 1600);
    }
 
@@ -342,21 +364,8 @@ async function load(){
      stroke: sev==="CRITICAL"?2.5:1.2
    });
 
-   // 🔴 origin glow
-   points.push({
-     lat:p.from[0],
-     lng:p.from[1],
-     size:0.35,
-     color:"#ff0033"
-   });
-
-   // 🔴 impact glow
-   points.push({
-     lat:p.to[0],
-     lng:p.to[1],
-     size:1.2,
-     color:"#ff0033"
-   });
+   points.push({lat:p.from[0], lng:p.from[1], size:0.35, color:"#ff0033"});
+   points.push({lat:p.to[0], lng:p.to[1], size:1.2, color:"#ff0033"});
  });
 
  globe.arcsData(arcs);
@@ -364,6 +373,12 @@ async function load(){
       .pointAltitude(0.01)
       .pointRadius('size')
       .pointColor('color');
+
+ /* 🔴 UPDATE LEGEND */
+ document.getElementById("lowCount").innerText = counts.LOW;
+ document.getElementById("medCount").innerText = counts.MEDIUM;
+ document.getElementById("highCount").innerText = counts.HIGH;
+ document.getElementById("critCount").innerText = counts.CRITICAL;
 }
 
 load();
