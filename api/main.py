@@ -36,6 +36,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 
+
 # -----------------------------
 # Model
 # -----------------------------
@@ -156,7 +157,7 @@ connections = set()
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
-    
+
 
 
     try:
@@ -166,6 +167,7 @@ async def ws_endpoint(ws: WebSocket):
                 await c.send_text(msg)
     except WebSocketDisconnect:
         connections.remove(ws)
+
 
 
 # -----------------------------
@@ -178,7 +180,7 @@ def dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-<title>LayerSeven SOC War Room</title>
+<title>LayerSeven Cyber Range</title>
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
@@ -195,16 +197,14 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
  font-size:12px;
 }
 
-#queue { right:10px; top:10px; width:240px; max-height:300px; overflow:auto;}
-#matrix { left:10px; bottom:10px; }
+#intel { right:10px; top:10px; width:260px; }
+#training { left:10px; bottom:10px; }
 #ticker { bottom:0; width:100%; text-align:center; }
 
-.matrix-cell {
- width:20px; height:20px; display:inline-block; margin:1px;
- background:#001a22;
-}
 
-.heat { background:#ff0033; }
+
+
+
 
 </style>
 </head>
@@ -212,8 +212,11 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 
 <div id="globeViz"></div>
 
-<div id="queue" class="panel"><b>Alert Queue</b><div id="alerts"></div></div>
-<div id="matrix" class="panel"><b>MITRE Matrix</b><br><div id="mitre"></div></div>
+<div id="intel" class="panel"><b>Threat Intel Feed</b><div id="feed"></div></div>
+<div id="training" class="panel">
+<button onclick="toggleTraining()">Training Mode</button>
+<button onclick="simulateBattle()">Red vs Blue</button>
+</div>
 <div id="ticker" class="panel"></div>
 
 
@@ -227,62 +230,67 @@ globe.controls().autoRotate = true;
 
 
 const ticker=document.getElementById("ticker");
-const queue=document.getElementById("alerts");
-const matrix=document.getElementById("mitre");
+const feed=document.getElementById("feed");
 
-let heat={};
-let cameraIndex=0;
+let training=false;
+let threatScore=0;
 
-// cinematic camera rotation
-const cameraViews=[
- {lat:20,lng:-40,altitude:2},
- {lat:35,lng:100,altitude:2},
- {lat:-20,lng:-60,altitude:2}
+// real-world intel simulation
+const intelSources=[
+ "CISA: Active exploitation detected",
+ "AbuseIPDB: malicious IP surge",
+ "Emerging Threats: botnet C2 activity",
+ "TOR exit nodes spike observed",
+ "Spamhaus: new malware distribution wave"
 ];
 
-setInterval(()=>{
- cameraIndex=(cameraIndex+1)%cameraViews.length;
- globe.pointOfView(cameraViews[cameraIndex],2000);
-},8000);
+function intelFeed(){
+ if(Math.random()<0.5){
+   feed.innerHTML=intelSources[Math.floor(Math.random()*intelSources.length)];
+ }
+}
+setInterval(intelFeed,4000);
 
-// build MITRE matrix
-for(let i=0;i<40;i++){
- const cell=document.createElement("div");
- cell.className="matrix-cell";
- matrix.appendChild(cell);
+// AI prediction paths
+function predictPath(origin){
+ return {
+   startLat:origin[0],
+   startLng:origin[1],
+   endLat:origin[0]+(Math.random()*30-15),
+   endLng:origin[1]+(Math.random()*30-15),
+   color:"#ff00ff",
+   stroke:0.8
+ };
 }
 
-function updateMatrix(){
- const cells=document.querySelectorAll(".matrix-cell");
- const idx=Math.floor(Math.random()*cells.length);
- cells[idx].classList.add("heat");
+// playbook automation
+function autoRespond(){
+ if(threatScore>20){
+   ticker.innerHTML="🛡 Automated containment executed";
+   threatScore-=5;
+ }
 }
 
-// ransomware simulation
-function ransomwareEvent(){
- ticker.innerHTML="🚨 RANSOMWARE DEPLOYMENT DETECTED";
- document.body.style.background="#220000";
- setTimeout(()=>document.body.style.background="black",2000);
+// red vs blue simulation
+function simulateBattle(){
+ ticker.innerHTML="⚔ Red vs Blue engagement started";
 }
 
+// training mode
+function toggleTraining(){
+ training=!training;
+ ticker.innerHTML=training ? "🎯 Training Mode Enabled" : "Training Mode Disabled";
+}
+
+// cyber range attack loader
 async function load(){
  const paths=await fetch('/attack-paths').then(r=>r.json());
- const alerts=await fetch('/alerts').then(r=>r.json());
+
  const arcs=[];
-
- queue.innerHTML="";
- alerts.slice(0,6).forEach(a=>{
-   queue.innerHTML += `<div>${a.severity} • ${a.technique}</div>`;
- });
-
- if(Math.random()<0.08) ransomwareEvent();
+ 
 
  paths.forEach(p=>{
-   const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
-   const sev=levels[Math.floor(Math.random()*4)];
-
-   const key=p.from.toString();
-   heat[key]=(heat[key]||0)+1;
+   threatScore+= training ? 1 : 2;
 
    arcs.push({
      startLat:p.from[0],
@@ -290,13 +298,15 @@ async function load(){
      endLat:p.to[0],
      endLng:p.to[1],
      color:"#ff0033",
-     stroke:1.2 + heat[key]*0.2
+     stroke:1.2
    });
 
-   updateMatrix();
+   // AI prediction
+   arcs.push(predictPath(p.from));
  });
 
  globe.arcsData(arcs);
+ autoRespond();
 }
 
 load();
