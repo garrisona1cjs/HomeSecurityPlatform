@@ -68,6 +68,7 @@ Base.metadata.create_all(bind=engine)
 
 
 
+
 # -----------------------------
 # Schemas
 # -----------------------------
@@ -79,6 +80,7 @@ class AgentRegistration(BaseModel):
 class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
+
 
 
 
@@ -127,6 +129,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.close()
 
     return {"risk_score": risk, "severity": severity}
+
 
 
 
@@ -198,15 +201,28 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
  font-size:12px;
 }
 
+#legend { left:10px; top:10px; width:180px; }
 #intel { right:10px; top:10px; width:240px; }
 #controls { left:10px; bottom:10px; }
 #ticker { bottom:0; width:100%; text-align:center; }
-#legend { left:10px; top:10px; width:180px; }
+#counter { right:10px; bottom:10px; }
+
+#banner {
+ position:absolute;
+ top:40%;
+ width:100%;
+ text-align:center;
+ font-size:48px;
+ color:#ff0033;
+ display:none;
+ text-shadow:0 0 25px #ff0033;
+}
 </style>
 </head>
 <body>
 
 <div id="globeViz"></div>
+<div id="banner">CRITICAL THREAT</div>
 
 <div id="legend" class="panel">
 <b>Threat Levels</b><br>
@@ -223,40 +239,35 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 <button onclick="simulateBattle()">Red vs Blue</button>
 </div>
 
+<div id="counter" class="panel">
+<b>Active Attacks:</b> <span id="attackCount">0</span>
+</div>
+
 <div id="ticker" class="panel"></div>
 
 
 
 <script>
-// ================= FEATURE FLAGS =================
-const FEATURES = {
- impactGlow: true,
- heatMap: true,
- camera: true,
- intelFeed: true
-};
 
-// ================= GLOBE =================
+
 const globe = Globe()(document.getElementById('globeViz'))
 .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
 
 globe.controls().autoRotate = true;
 
-// cinematic camera
-if(FEATURES.camera){
- const views=[
-  {lat:25,lng:-40,altitude:2},
-  {lat:40,lng:110,altitude:2},
-  {lat:-15,lng:-60,altitude:2}
- ];
- let i=0;
- setInterval(()=>{
-  i=(i+1)%views.length;
-  globe.pointOfView(views[i],2500);
- },9000);
-}
+/* cinematic camera */
+const views=[
+ {lat:25,lng:-40,altitude:2},
+ {lat:40,lng:110,altitude:2},
+ {lat:-15,lng:-60,altitude:2}
+];
+let camIndex=0;
+setInterval(()=>{
+ camIndex=(camIndex+1)%views.length;
+ globe.pointOfView(views[camIndex],2500);
+},9000);
 
-// intel feed
+/* intel feed */
 const feed=document.getElementById("feed");
 const intel=[
  "CISA exploitation warning",
@@ -265,14 +276,9 @@ const intel=[
  "Spamhaus threat escalation",
  "TOR exit node traffic rise"
 ];
+setInterval(()=>{ feed.innerHTML=intel[Math.floor(Math.random()*intel.length)]; },4000);
 
-if(FEATURES.intelFeed){
- setInterval(()=>{
-  feed.innerHTML=intel[Math.floor(Math.random()*intel.length)];
- },4000);
-}
-
-// training mode
+/* training mode */
 let training=false;
 const ticker=document.getElementById("ticker");
 
@@ -282,14 +288,15 @@ function toggleTraining(){
  document.body.style.background=training?"#001a22":"black";
 }
 
-// red vs blue
+/* red vs blue simulation */
 function simulateBattle(){
  ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
  document.body.style.background="#220000";
  setTimeout(()=>document.body.style.background="black",800);
 }
 
-// severity colors
+
+
 const colors={
  LOW:"#00ffff",
  MEDIUM:"#ffaa00",
@@ -299,52 +306,56 @@ const colors={
 
 let heatMap={};
 
-// counters
-let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+
 
 async function load(){
  const paths=await fetch('/attack-paths').then(r=>r.json());
  const alerts=await fetch('/alerts').then(r=>r.json());
 
- const arcs=[];
-
- counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+ let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+ let arcs=[];
+ document.getElementById("attackCount").innerText=paths.length;
 
  alerts.forEach(a=>{
-  ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
+   ticker.innerHTML=`⚠ ${a.severity} • ${a.technique}`;
  });
 
  paths.forEach(p=>{
-  const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
-  const sev=levels[Math.floor(Math.random()*4)];
+   const levels=["LOW","MEDIUM","HIGH","CRITICAL"];
+   const sev=levels[Math.floor(Math.random()*4)];
+   counts[sev]++;
 
-  counts[sev]++;
+   if(sev==="CRITICAL"){
+      document.getElementById("banner").style.display="block";
+      setTimeout(()=>document.getElementById("banner").style.display="none",1200);
+      globe.pointOfView({lat:p.to[0],lng:p.to[1],altitude:1.2},1500);
+   }
 
-  if(FEATURES.heatMap){
    const key=p.from.toString();
    heatMap[key]=(heatMap[key]||0)+1;
-   
+
    globe.pointsData([
     ...globe.pointsData(),
     {lat:p.from[0],lng:p.from[1],size:0.35*heatMap[key]}
    ]).pointColor(()=>"#ff0033");
-  }
+   
 
-  if(FEATURES.impactGlow){
+
+
    globe.pointsData([
     ...globe.pointsData(),
     {lat:p.to[0],lng:p.to[1],size:1.6}
    ]).pointColor(()=>"#ff0033");
-  }
 
-  arcs.push({
-   startLat:p.from[0],
-   startLng:p.from[1],
-   endLat:p.to[0],
-   endLng:p.to[1],
-   color:colors[sev],
-   stroke: sev==="CRITICAL"?2.6:1.2
-  });
+
+   arcs.push({
+     startLat:p.from[0],
+     startLng:p.from[1],
+     endLat:p.to[0],
+     endLng:p.to[1],
+     color:colors[sev],
+     stroke: sev==="CRITICAL"?2.6:1.2
+   });
  });
 
  globe.arcsData(arcs);
