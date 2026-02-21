@@ -131,6 +131,32 @@ techniques = [
 ]
 
 # =========================================================
+# TRAINING MODE + RED vs BLUE STATE
+# =========================================================
+
+training_mode = False
+red_count = 0
+blue_blocks = 0
+
+# =========================================================
+# SURGE DETECTION (for grid overlay)
+# =========================================================
+
+recent_alerts = []
+SURGE_WINDOW = 10   # seconds
+SURGE_THRESHOLD = 20  # alerts in window
+
+from datetime import timedelta
+
+def detect_surge():
+    now = datetime.utcnow()
+
+    while recent_alerts and now - recent_alerts[0] > timedelta(seconds=SURGE_WINDOW):
+        recent_alerts.pop(0)
+
+    return len(recent_alerts) >= SURGE_THRESHOLD
+
+# =========================================================
 # WEBSOCKET HUB
 # =========================================================
 
@@ -213,6 +239,10 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.close()
 
 
+       # track surge activity
+    recent_alerts.append(datetime.utcnow())
+    surge = detect_surge()
+
     payload = {
         "severity": severity,
         "technique": technique,
@@ -220,7 +250,12 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "latitude": lat,
         "longitude": lon,
         "country_code": country,
-        "shockwave": shockwave_flag == "true"
+        "shockwave": shockwave_flag == "true",
+
+        # SAFE ADDITIONS (do not break dashboard)
+        "training": training_mode,
+        "team": "red",
+        "surge": surge
     }
 
     await broadcast(payload)
@@ -237,6 +272,53 @@ def alerts():
 @app.get("/attack-paths")
 def attack_paths():
     return []
+
+# =========================================================
+# TRAINING MODE CONTROL
+# =========================================================
+
+@app.post("/training/on")
+def training_on():
+    global training_mode
+    training_mode = True
+    return {"training": True}
+
+@app.post("/training/off")
+def training_off():
+    global training_mode
+    training_mode = False
+    return {"training": False}
+
+# =========================================================
+# RED vs BLUE SIMULATION
+# =========================================================
+
+@app.post("/simulate")
+async def simulate(source_ip: str, team: str = "red"):
+
+    global red_count, blue_blocks
+
+    origin_label, lat, lon, country = geo_lookup_ip(source_ip)
+
+    if team == "red":
+        red_count += 1
+    else:
+        blue_blocks += 1
+
+    payload = {
+        "severity": "HIGH",
+        "technique": "Simulation",
+        "origin_label": origin_label,
+        "latitude": lat,
+        "longitude": lon,
+        "country_code": country,
+        "shockwave": False,
+        "training": True,
+        "team": team
+    }
+
+    await broadcast(payload)
+    return {"simulated": True}
 
 # =========================================================
 # DASHBOARD ROUTE
