@@ -450,9 +450,10 @@ function render(){
    .pathDashLength(0.4)
    .pathDashAnimateTime(600);
 
- globe.hexPolygonsData(heat)
-   .hexPolygonColor(d=>d.color)
-   .hexPolygonAltitude(d=>d.alt);
+globe.hexPolygonsData(heat)
+   .hexPolygonGeoJsonGeometry(d => d)
+   .hexPolygonColor(d => d.color)
+   .hexPolygonAltitude(d => d.alt);
 }
 
 /* ---------- ADD ALERT ---------- */
