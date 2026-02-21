@@ -4,14 +4,30 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List
-import uuid
-import secrets
-import os
-import random
-import asyncio
+import uuid, secrets, os, random, asyncio
+import geoip2.database
 
 from sqlalchemy import create_engine, Column, String, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+# =========================================================
+# GEOIP CONFIG
+# =========================================================
+
+GEOIP_DB = os.getenv("GEOIP_DB", "geoip/GeoLite2-City.mmdb")
+
+def geo_lookup_ip(ip):
+    try:
+        with geoip2.database.Reader(GEOIP_DB) as reader:
+            r = reader.city(ip)
+            return (
+                f"{r.city.name}, {r.country.name}",
+                r.location.latitude,
+                r.location.longitude,
+                r.country.iso_code
+            )
+    except:
+        return ("Unknown", 0, 0, "")
 
 # =========================================================
 # DATABASE CONFIG
@@ -51,16 +67,21 @@ class Alert(Base):
     technique = Column(String)
     timestamp = Column(String)
 
-    # 🌍 origin intelligence
+
     origin_label = Column(String)
     latitude = Column(String)
     longitude = Column(String)
+    country_code = Column(String)   # NEW (safe)
 
-    # 🔥 CRITICAL pulse trigger
+
+
+
+
+
     shockwave = Column(String)
 
 # =========================================================
-# SAFE SCHEMA CHECK (NO TABLE DROPS)
+# SAFE SCHEMA UPDATE (NO DATA LOSS)
 # =========================================================
 
 inspector = inspect(engine)
@@ -75,6 +96,8 @@ if "alerts" in inspector.get_table_names():
             conn.execute(text("ALTER TABLE alerts ADD COLUMN latitude VARCHAR"))
         if "longitude" not in existing_cols:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN longitude VARCHAR"))
+        if "country_code" not in existing_cols:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN country_code VARCHAR"))
         if "shockwave" not in existing_cols:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN shockwave VARCHAR"))
 
@@ -92,26 +115,6 @@ class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
 
-# =========================================================
-# GEOLOCATION (SIMULATED)
-# =========================================================
-
-def geo_lookup():
-    locations = [
-        ("Tokyo, Japan", 35.68, 139.69),
-        ("London, UK", 51.50, -0.12),
-        ("São Paulo, Brazil", -23.55, -46.63),
-        ("Berlin, Germany", 52.52, 13.40),
-        ("Toronto, Canada", 43.65, -79.38),
-        ("Sydney, Australia", -33.86, 151.20),
-        ("San Francisco, USA", 37.77, -122.41),
-        ("Des Moines, USA", 41.59, -93.62),
-    ]
-    return random.choice(locations)
-
-# =========================================================
-# MITRE TECHNIQUES (SIMULATION)
-# =========================================================
 
 techniques = [
     "T1110 Brute Force",
@@ -127,10 +130,7 @@ techniques = [
 
 @app.post("/register")
 def register(agent: AgentRegistration):
-    return {
-        "agent_id": str(uuid.uuid4()),
-        "api_key": secrets.token_hex(16)
-    }
+    return {"agent_id": str(uuid.uuid4()), "api_key": secrets.token_hex(16)}
 
 @app.post("/report")
 def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
@@ -148,7 +148,9 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     else:
         severity = "LOW"
 
-    origin_label, lat, lon = geo_lookup()
+    # 🌍 GeoIP lookup
+    ip_addr = report.devices[0].get("ip", "8.8.8.8")
+    origin_label, lat, lon, country = geo_lookup_ip(ip_addr)
 
     shockwave_flag = "true" if severity == "CRITICAL" else "false"
 
@@ -164,6 +166,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         origin_label=origin_label,
         latitude=str(lat),
         longitude=str(lon),
+        country_code=country,
         shockwave=shockwave_flag
     )
 
@@ -171,13 +174,14 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.commit()
     db.close()
 
-    # 🔴 Real-time broadcast
+
     payload = {
         "severity": severity,
         "technique": technique,
         "origin_label": origin_label,
         "latitude": lat,
         "longitude": lon,
+        "country_code": country,
         "shockwave": shockwave_flag == "true"
     }
 
@@ -199,16 +203,7 @@ def alerts():
     db.close()
     return data
 
-@app.get("/attack-paths")
-def attack_paths():
 
-    return [
-        {"from":[55.75,37.61], "to":[41.59,-93.62]},
-        {"from":[35.68,139.69], "to":[41.59,-93.62]},
-        {"from":[51.50,-0.12], "to":[41.59,-93.62]},
-        {"from":[-23.55,-46.63], "to":[41.59,-93.62]},
-        {"from":[37.77,-122.41], "to":[41.59,-93.62]}
-    ]
 
 # =========================================================
 # WEBSOCKET HUB
@@ -220,8 +215,7 @@ connections = set()
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
-
-
+    
     try:
         while True:
             await ws.receive_text()
@@ -229,194 +223,20 @@ async def ws_endpoint(ws: WebSocket):
         connections.remove(ws)
 
 # =========================================================
-# DASHBOARD (EMBEDDED — FIXES ERROR)
+# EMBEDDED DASHBOARD (SAFE)
 # =========================================================
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-<title>LayerSeven SOC Command Center</title>
-<script src="https://unpkg.com/globe.gl"></script>
+    return open("static/dashboard.html", encoding="utf-8").read()
 
-<style>
-body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:monospace;}
-#globeViz { width:100vw; height:100vh; }
+# =========================================================
+# HEALTH CHECK
+# =========================================================
 
-.panel {
- position:absolute;
- background:rgba(0,10,25,.85);
- padding:8px;
- border:1px solid #00ffff55;
- border-radius:6px;
- font-size:12px;
-}
-
-#legend { left:10px; top:10px; width:180px; }
-#intel { right:10px; top:10px; width:230px; }
-#controls { left:10px; bottom:10px; }
-#ticker { bottom:0; width:100%; text-align:center; }
-
-
-#banner {
- position:absolute;
- top:40%;
- width:100%;
- text-align:center;
- font-size:48px;
- color:#ff0033;
- display:none;
- text-shadow:0 0 25px #ff0033;
-}
-</style>
-</head>
-<body>
-
-<div id="globeViz"></div>
-<div id="banner">CRITICAL THREAT</div>
-
-<div id="legend" class="panel">
-<b>Threat Levels</b><br>
-LOW: <span id="lowCount">0</span><br>
-MEDIUM: <span id="medCount">0</span><br>
-HIGH: <span id="highCount">0</span><br>
-CRITICAL: <span id="critCount">0</span>
-</div>
-
-<div id="intel" class="panel">
-<b>Live Alerts</b>
-<div id="intelFeed">Waiting for threats...</div>
-</div>
-
-<div id="controls" class="panel">
-<button onclick="toggleTraining()">Training Mode</button>
-<button onclick="simulateBattle()">Red vs Blue</button>
-</div>
-
-<div id="ticker" class="panel"></div>
-
-<script>
-
-const globe = Globe()(document.getElementById('globeViz'))
-.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-
-.arcAltitudeAutoScale(0.35)
-.arcsTransitionDuration(600);
-
-globe.controls().autoRotate = true;
-
-const banner=document.getElementById("banner");
-const ticker=document.getElementById("ticker");
-const intelFeed=document.getElementById("intelFeed");
-
-const colors={
- LOW:"#00ffff",
- MEDIUM:"#ffaa00",
- HIGH:"#ff5500",
- CRITICAL:"#ff0033"
-};
-
-let arcs=[];
-let points=[];
-let counts={LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
-
-function updateLegend(){
- document.getElementById("lowCount").innerText = counts.LOW;
- document.getElementById("medCount").innerText = counts.MEDIUM;
- document.getElementById("highCount").innerText = counts.HIGH;
- document.getElementById("critCount").innerText = counts.CRITICAL;
-}
-
-function render(){
- globe.arcsData(arcs);
- globe.pointsData(points)
-      .pointAltitude(0.01)
-      .pointRadius('size')
-      .pointColor('color');
-}
-
-/* 🎯 TRAINING MODE */
-let training=false;
-function toggleTraining(){
- training=!training;
- ticker.innerHTML = training
-   ? "🎯 TRAINING MODE ACTIVE"
-   : "LIVE OPERATIONS MODE";
- document.body.style.background = training ? "#001a22" : "black";
-}
-
-/* ⚔ RED VS BLUE */
-function simulateBattle(){
- ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
- document.body.style.background="#220000";
- setTimeout(()=>document.body.style.background="black",800);
-}
-
-/* Load existing alerts */
-async function loadExisting(){
- const alerts=await fetch('/alerts').then(r=>r.json());
-
- alerts.forEach(addAlertVisual);
- render();
- updateLegend();
-}
-
-/* Add alert visuals */
-function addAlertVisual(alert){
-
- const severity = alert.severity;
- const color = colors[severity] || "#ffffff";
-
- counts[severity]++;
-
- const lat = parseFloat(alert.latitude);
- const lng = parseFloat(alert.longitude);
-
- // origin point
- points.push({
-   lat: lat,
-   lng: lng,
-   size: 0.4,
-   color: color
- });
-
- // arc to SOC center (Des Moines)
- arcs.push({
-   startLat: lat,
-   startLng: lng,
-   endLat: 41.59,
-   endLng: -93.62,
-   color: color,
-   stroke: severity==="CRITICAL" ? 2.6 : 1.2
- });
-
- if(severity === "CRITICAL"){
-   banner.style.display="block";
-   setTimeout(()=>banner.style.display="none",1400);
-   globe.pointOfView({lat:lat,lng:lng,altitude:1.3},1600);
- }
-
- ticker.innerHTML = `⚠ ${severity} • ${alert.technique}`;
- intelFeed.innerHTML = `${alert.origin_label} — ${alert.technique}`;
-}
-
-/* WebSocket Live Stream */
-const ws = new WebSocket(`wss://${location.host}/ws`);
-
-ws.onmessage = (event) => {
- const alert = JSON.parse(event.data);
- addAlertVisual(alert);
- render();
- updateLegend();
-};
-
-loadExisting();
-</script>
-</body>
-</html>
-"""
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 
