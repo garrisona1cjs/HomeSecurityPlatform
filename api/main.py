@@ -252,7 +252,7 @@ def dashboard():
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
-body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:monospace;}
+body { margin:0; background:black; overflow:hidden; font-family:monospace;}
 #globeViz { width:100vw; height:100vh; }
 
 .panel {
@@ -262,11 +262,12 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
  border:1px solid #00ffff55;
  border-radius:6px;
  font-size:12px;
+ color:#00ffff;
 }
 
-#legend { left:10px; top:10px; width:180px; }
+#legend { left:10px; top:10px; }
 #intel { right:10px; top:10px; width:230px; }
-#controls { left:10px; bottom:10px; }
+
 #ticker { bottom:0; width:100%; text-align:center; }
 
 #banner {
@@ -277,7 +278,7 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
  font-size:48px;
  color:#ff0033;
  display:none;
- text-shadow:0 0 25px #ff0033;
+ text-shadow:0 0 30px #ff0033;
 }
 </style>
 </head>
@@ -287,21 +288,15 @@ body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:m
 <div id="banner">CRITICAL THREAT</div>
 
 <div id="legend" class="panel">
-<b>Threat Levels</b><br>
-LOW: <span id="lowCount">0</span><br>
-MEDIUM: <span id="medCount">0</span><br>
-HIGH: <span id="highCount">0</span><br>
-CRITICAL: <span id="critCount">0</span>
+LOW <span id="low">0</span><br>
+MED <span id="med">0</span><br>
+HIGH <span id="high">0</span><br>
+CRIT <span id="crit">0</span>
 </div>
 
 <div id="intel" class="panel">
-<b>Live Alerts</b>
-<div id="intelFeed">Monitoring...</div>
-</div>
-
-<div id="controls" class="panel">
-<button onclick="toggleTraining()">Training Mode</button>
-<button onclick="simulateBattle()">Red vs Blue</button>
+<b>Live Intel</b>
+<div id="feed">Monitoring…</div>
 </div>
 
 <div id="ticker" class="panel"></div>
@@ -310,193 +305,158 @@ CRITICAL: <span id="critCount">0</span>
 
 const globe = Globe()(document.getElementById('globeViz'))
 .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-.arcAltitudeAutoScale(0.4)
-.arcsTransitionDuration(0);   // allow animation
+.arcAltitudeAutoScale(0.45)
+.arcsTransitionDuration(0);
 
 globe.controls().autoRotate = true;
 globe.controls().autoRotateSpeed = 0.35;
 
 const banner = document.getElementById("banner");
+const feed = document.getElementById("feed");
 const ticker = document.getElementById("ticker");
-const intelFeed = document.getElementById("intelFeed");
 
-const colors = {
+let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[];
+let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+
+const colors={
  LOW:"#00ffff",
  MEDIUM:"#ffaa00",
  HIGH:"#ff5500",
  CRITICAL:"#ff0033"
 };
 
-let arcs = [];
-let points = [];
-let rings = [];
-let labels = [];
-let counts = {LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
-let recentThreats = [];
-
-/* ---------- UTIL ---------- */
-
-function updateLegend(){
- document.getElementById("lowCount").innerText = counts.LOW;
- document.getElementById("medCount").innerText = counts.MEDIUM;
- document.getElementById("highCount").innerText = counts.HIGH;
- document.getElementById("critCount").innerText = counts.CRITICAL;
-}
+/* ---------- RENDER ---------- */
 
 function render(){
  globe.arcsData(arcs)
-      .arcDashLength(0.35)
-      .arcDashGap(0.15)
-      .arcDashAnimateTime(1400);
+   .arcStroke('stroke')
+   .arcColor('color')
+   .arcDashLength(0.3)
+   .arcDashGap(0.08)
+   .arcDashAnimateTime(900);
 
  globe.pointsData(points)
-      .pointAltitude(0.02)
-      .pointRadius('size')
-      .pointColor('color');
+   .pointRadius('size')
+   .pointColor('color')
+   .pointAltitude(0.02);
 
  globe.ringsData(rings)
-      .ringMaxRadius('maxR')
-      .ringPropagationSpeed(2)
-      .ringRepeatPeriod(900);
+   .ringMaxRadius('maxR')
+   .ringPropagationSpeed(3)
+   .ringRepeatPeriod(900);
 
  globe.labelsData(labels)
-      .labelText('text')
-      .labelSize(1.2)
-      .labelDotRadius(0.25)
-      .labelColor(() => '#ffffff');
+   .labelText('text')
+   .labelColor(()=>"#ffffff")
+   .labelDotRadius(0.3);
+
+ globe.pathsData(packets)
+   .pathPoints('points')
+   .pathColor(()=>"#00ffff")
+   .pathDashLength(0.4)
+   .pathDashAnimateTime(600);
+
+ globe.hexPolygonsData(heat)
+   .hexPolygonColor(d=>d.color)
+   .hexPolygonAltitude(d=>d.alt);
 }
 
-/* ---------- MODES ---------- */
-
-let training=false;
-function toggleTraining(){
- training=!training;
- ticker.innerHTML = training
-   ? "🎯 TRAINING MODE ACTIVE"
-   : "LIVE OPERATIONS MODE";
- document.body.style.background = training ? "#001a22" : "black";
-}
-
-
-function simulateBattle(){
- ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
- document.body.style.background="#220000";
- setTimeout(()=>document.body.style.background="black",900);
-}
-
-/* ---------- SURGE DETECTION ---------- */
-
-function detectSurge(){
- const now = Date.now();
- recentThreats = recentThreats.filter(t => now - t < 10000);
-
- if(recentThreats.length >= 6){
-   ticker.innerHTML = "⚠ THREAT SURGE DETECTED";
-   document.body.style.background="#220000";
-   setTimeout(()=>document.body.style.background="black",900);
- }
-}
-
-/* ---------- ALERT VISUAL ---------- */
+/* ---------- ADD ALERT ---------- */
 
 function addAlert(alert){
 
- const severity = alert.severity;
- const color = colors[severity] || "#ffffff";
+ const lat=parseFloat(alert.latitude);
+ const lng=parseFloat(alert.longitude);
+ if(isNaN(lat)||isNaN(lng)) return;
 
+ const sev=alert.severity;
+ const color=colors[sev];
 
- const lat = parseFloat(alert.latitude);
- const lng = parseFloat(alert.longitude);
+ counts[sev]++;
 
- if(isNaN(lat) || isNaN(lng)) return;
+ // glowing origin
+ points.push({lat,lng,size:0.5,color});
 
- counts[severity]++;
- recentThreats.push(Date.now());
-
- // glowing origin pulse
- points.push({ lat, lng, size: 0.5, color });
-
- // animated arc
+ // neon beam trail
  arcs.push({
-   startLat: lat,
-   startLng: lng,
-   endLat: 41.59,
-   endLng: -93.62,
-   color: color,
-   stroke: severity==="CRITICAL"?2.6:1.2
+   startLat:lat,startLng:lng,
+   endLat:41.59,endLng:-93.62,
+   color:[color,color],
+   stroke: sev==="CRITICAL"?3:1.5
  });
 
- // shockwave rings (CRITICAL only)
- if(severity === "CRITICAL"){
-   rings.push({
-     lat: lat,
-     lng: lng,
-     maxR: 6,
-     propagationSpeed: 3,
-     repeatPeriod: 700
-   });
- }
+ // impact flash at SOC
+ rings.push({lat:41.59,lng:-93.62,maxR:5});
+
+ // packet tracer animation
+ packets.push({
+   points:[
+     [lat,lng],
+     [41.59,-93.62]
+   ]
+ });
+
+ // heatmap intensity
+ heat.push({
+   polygon:[[lat,lng]],
+   color:color,
+   alt:0.03
+ });
 
  // country flag
  if(alert.country_code){
    labels.push({
-     lat: lat,
-     lng: lng,
-     text: String.fromCodePoint(...[...alert.country_code.toUpperCase()]
-       .map(c => 127397 + c.charCodeAt()))
+     lat,lng,
+     text:String.fromCodePoint(...[...alert.country_code]
+       .map(c=>127397+c.charCodeAt()))
    });
  }
 
- // cinematic zoom
- if(severity === "CRITICAL"){
+ // CRITICAL shockwave & zoom
+ if(sev==="CRITICAL"){
    banner.style.display="block";
    setTimeout(()=>banner.style.display="none",1500);
 
+   rings.push({lat,lng,maxR:8});
 
+   globe.controls().autoRotate=false;
+   globe.pointOfView({lat,lng,altitude:0.6},1800);
 
-   globe.controls().autoRotate = false;
-
-
-   globe.pointOfView(
-      { lat: lat, lng: lng, altitude: 0.55 },
-      2000
-   );
-
-   // zoom back out
-   setTimeout(() => {
-      globe.pointOfView({ altitude: 2.2 }, 2500);
-      globe.controls().autoRotate = true;
-   }, 4200);
+   setTimeout(()=>{
+     globe.pointOfView({altitude:2.3},2500);
+     globe.controls().autoRotate=true;
+   },3500);
  }
 
- ticker.innerHTML = `⚠ ${severity} • ${alert.technique}`;
- intelFeed.innerHTML = `${alert.origin_label} — ${alert.technique}`;
+ feed.innerHTML = alert.origin_label;
+ ticker.innerHTML = sev + " • " + alert.technique;
 
- detectSurge();
+ render();
 }
 
-/* ---------- LOAD EXISTING ---------- */
+/* ---------- RADAR SWEEP ---------- */
 
-async function loadExisting(){
- const alerts = await fetch('/alerts').then(r=>r.json());
- alerts.forEach(addAlert);
- render();
- updateLegend();
+let sweepAngle=0;
+setInterval(()=>{
+ sweepAngle+=0.05;
+ globe.pointOfView({
+   lat: Math.sin(sweepAngle)*30,
+   lng: sweepAngle*40,
+   altitude:2.3
+ }, 4000);
+},9000);
+
+/* ---------- LOAD & LIVE ---------- */
+
+async function load(){
+ const data=await fetch('/alerts').then(r=>r.json());
+ data.forEach(addAlert);
 }
 
-/* ---------- LIVE STREAM ---------- */
+const ws=new WebSocket(`wss://${location.host}/ws`);
+ws.onmessage=e=>addAlert(JSON.parse(e.data));
 
-const ws = new WebSocket(`wss://${location.host}/ws`);
-
-ws.onmessage = (event) => {
- const alert = JSON.parse(event.data);
- addAlert(alert);
- render();
- updateLegend();
-};
-
-loadExisting();
-
+load();
 </script>
 
 </body>
