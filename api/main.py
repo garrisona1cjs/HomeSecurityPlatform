@@ -20,14 +20,26 @@ def geo_lookup_ip(ip):
     try:
         with geoip2.database.Reader(GEOIP_DB) as reader:
             r = reader.city(ip)
-            return (
-                f"{r.city.name}, {r.country.name}",
-                r.location.latitude,
-                r.location.longitude,
-                r.country.iso_code
+
+            lat = r.location.latitude
+            lon = r.location.longitude
+            country = r.country.iso_code
+            city = r.city.name
+            country_name = r.country.name
+
+            # fallback protections
+            if lat is None or lon is None:
+                return ("Unknown Location", 0, 0, country or "")
+
+            label = (
+                f"{city}, {country_name}"
+                if city else country_name
             )
-    except:
-        return ("Unknown", 0, 0, "")
+
+            return (label, lat, lon, country or "")
+
+    except Exception:
+        return ("Unknown Location", 0, 0, "")
 
 # =========================================================
 # DATABASE CONFIG
@@ -116,6 +128,7 @@ class DeviceReport(BaseModel):
     devices: List[dict]
 
 
+
 techniques = [
     "T1110 Brute Force",
     "T1078 Valid Accounts",
@@ -185,13 +198,17 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "shockwave": shockwave_flag == "true"
     }
 
-    for ws in connections.copy():
+async def broadcast(payload):
+    dead = []
+    for ws in connections:
         try:
-            asyncio.create_task(ws.send_json(payload))
+            await ws.send_json(payload)
         except:
-            pass
+            dead.append(ws)
+    for ws in dead:
+        connections.remove(ws)
 
-    return {"risk_score": risk, "severity": severity}
+asyncio.create_task(broadcast(payload))
 
 
 
@@ -215,7 +232,7 @@ connections = set()
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     connections.add(ws)
-    
+
     try:
         while True:
             await ws.receive_text()
