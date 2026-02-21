@@ -456,6 +456,11 @@ function addAlert(alert){
 
  counts[sev]++;
 
+document.getElementById("low").textContent = counts.LOW;
+document.getElementById("med").textContent = counts.MEDIUM;
+document.getElementById("high").textContent = counts.HIGH;
+document.getElementById("crit").textContent = counts.CRITICAL;
+
  // glowing origin
  points.push({lat,lng,size:0.5,color});
 
