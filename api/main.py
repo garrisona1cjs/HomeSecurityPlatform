@@ -314,6 +314,7 @@ const globe = Globe()(document.getElementById('globeViz'))
 .arcsTransitionDuration(600);
 
 globe.controls().autoRotate = true;
+globe.controls().autoRotateSpeed = 0.4;
 
 const banner=document.getElementById("banner");
 const ticker=document.getElementById("ticker");
@@ -362,18 +363,19 @@ function simulateBattle(){
  setTimeout(()=>document.body.style.background="black",800);
 }
 
-/* add alert visuals */
+/* ADD ALERT VISUALS */
 function addAlert(alert){
 
  const severity = alert.severity;
  const color = colors[severity] || "#ffffff";
 
- counts[severity]++;
 
  const lat = parseFloat(alert.latitude);
  const lng = parseFloat(alert.longitude);
 
  if(isNaN(lat) || isNaN(lng)) return;
+
+ counts[severity]++;
 
  points.push({ lat: lat, lng: lng, size: 0.45, color: color });
 
@@ -386,17 +388,32 @@ function addAlert(alert){
    stroke: severity==="CRITICAL" ? 2.6 : 1.2
  });
 
+ // 🚨 CRITICAL ZOOM FIX
  if(severity === "CRITICAL"){
+
    banner.style.display="block";
    setTimeout(()=>banner.style.display="none",1400);
-   globe.pointOfView({lat:lat,lng:lng,altitude:1.3},1600);
+
+   // pause rotation
+   globe.controls().autoRotate = false;
+
+   // dramatic zoom
+   globe.pointOfView(
+      { lat: lat, lng: lng, altitude: 0.55 },
+      2200
+   );
+
+   // restore rotation
+   setTimeout(() => {
+      globe.controls().autoRotate = true;
+   }, 3500);
  }
 
  ticker.innerHTML = `⚠ ${severity} • ${alert.technique}`;
  intelFeed.innerHTML = `${alert.origin_label} — ${alert.technique}`;
 }
 
-/* load existing alerts */
+/* LOAD EXISTING ALERTS */
 async function loadExisting(){
  const alerts=await fetch('/alerts').then(r=>r.json());
  alerts.forEach(addAlert);
@@ -404,7 +421,7 @@ async function loadExisting(){
  updateLegend();
 }
 
-/* live websocket alerts */
+/* LIVE STREAM */
 const ws = new WebSocket(`wss://${location.host}/ws`);
 
 ws.onmessage = (event) => {
