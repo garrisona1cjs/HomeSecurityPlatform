@@ -2,7 +2,7 @@ from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 import uuid
 import secrets
@@ -376,6 +376,17 @@ HIGH <span id="high">0</span><br>
 CRIT <span id="crit">0</span>
 </div>
 
+<div id="surgeMeter" class="panel" style="left:10px; top:120px; width:140px;">
+<b>Threat Surge</b>
+<div id="surgeBar" style="
+height:10px;
+background:#00ffff;
+margin-top:6px;
+width:0%;
+transition:width .4s ease;
+"></div>
+</div>
+
 <div id="intel" class="panel">
 <b>Live Intel</b>
 <div id="feed">Monitoring…</div>
@@ -399,6 +410,7 @@ const ticker = document.getElementById("ticker");
 
 let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[];
 let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+let surgeLevel = 0;
 
 const colors={
  LOW:"#00ffff",
@@ -524,6 +536,26 @@ heat.push({
 
  feed.innerHTML = alert.origin_label;
  ticker.innerHTML = sev + " • " + alert.technique;
+
+ // ===== SURGE METER =====
+if(alert.surge){
+    surgeLevel = Math.min(100, surgeLevel + 20);
+} else {
+    surgeLevel = Math.max(0, surgeLevel - 2);
+}
+
+const bar = document.getElementById("surgeBar");
+bar.style.width = surgeLevel + "%";
+
+if(surgeLevel > 70){
+    bar.style.background = "#ff0033";
+}
+else if(surgeLevel > 40){
+    bar.style.background = "#ffaa00";
+}
+else{
+    bar.style.background = "#00ffff";
+}
 
  render();
 }
