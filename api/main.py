@@ -25,21 +25,18 @@ def geo_lookup_ip(ip):
         with geoip2.database.Reader(GEOIP_DB) as reader:
             r = reader.city(ip)
 
+            city = r.city.name or ""
+            country = r.country.name or ""
             lat = r.location.latitude
             lon = r.location.longitude
-            country = r.country.iso_code
-            city = r.city.name
-            country_name = r.country.name
+            code = r.country.iso_code or ""
 
+            label = f"{city}, {country}".strip(", ")
 
-            if lat is None or lon is None:
-                return ("Unknown Location", 0, 0, country or "")
+            return (label, lat, lon, code)
 
-            label = f"{city}, {country_name}" if city else country_name
-            return (label, lat, lon, country or "")
-
-    except Exception:
-        return ("Unknown Location", 0, 0, "")
+    except:
+        return ("Unknown", 0, 0, "")
 
 # =========================================================
 # DATABASE CONFIG
@@ -86,7 +83,9 @@ class Alert(Base):
     country_code = Column(String)
     shockwave = Column(String)
 
-# ---- SAFE AUTO COLUMN ADD ----
+# =========================================================
+# SAFE SCHEMA UPDATE
+# =========================================================
 
 inspector = inspect(engine)
 
@@ -120,7 +119,7 @@ class DeviceReport(BaseModel):
     devices: List[dict]
 
 # =========================================================
-# MITRE TECHNIQUES (SIMULATION)
+# MITRE TECHNIQUES
 # =========================================================
 
 techniques = [
@@ -137,6 +136,16 @@ techniques = [
 
 connections = set()
 
+async def broadcast(payload):
+    dead = []
+    for ws in connections:
+        try:
+            await ws.send_json(payload)
+        except:
+            dead.append(ws)
+    for ws in dead:
+        connections.remove(ws)
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
@@ -147,15 +156,6 @@ async def ws_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         connections.remove(ws)
 
-async def broadcast(payload):
-    dead = []
-    for ws in connections:
-        try:
-            await ws.send_json(payload)
-        except:
-            dead.append(ws)
-    for ws in dead:
-        connections.remove(ws)
 
 # =========================================================
 # API ROUTES
@@ -169,7 +169,8 @@ def register(agent: AgentRegistration):
     }
 
 @app.post("/report")
-def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
+async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
+
     db = SessionLocal()
 
 
@@ -186,11 +187,12 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
 
     ip_addr = report.devices[0].get("ip", "8.8.8.8")
+
     origin_label, lat, lon, country = geo_lookup_ip(ip_addr)
 
+    technique = random.choice(techniques)
     shockwave_flag = "true" if severity == "CRITICAL" else "false"
 
-    technique = random.choice(techniques)
 
     alert = Alert(
         id=str(uuid.uuid4()),
@@ -209,8 +211,8 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.add(alert)
     db.commit()
     db.close()
+    
 
-    # broadcast live alert
     payload = {
         "severity": severity,
         "technique": technique,
@@ -221,7 +223,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "shockwave": shockwave_flag == "true"
     }
 
-    asyncio.create_task(broadcast(payload))
+    await broadcast(payload)
 
     return {"risk_score": risk, "severity": severity}
 
@@ -237,12 +239,20 @@ def attack_paths():
     return []
 
 # =========================================================
-# DASHBOARD
+# DASHBOARD ROUTE
 # =========================================================
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     return open("static/dashboard.html", encoding="utf-8").read()
+
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 
