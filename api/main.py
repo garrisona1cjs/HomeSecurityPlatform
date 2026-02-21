@@ -479,11 +479,18 @@ function addAlert(alert){
  });
 
  // heatmap intensity
- heat.push({
-   polygon:[[lat,lng]],
-   color:color,
-   alt:0.03
- });
+heat.push({
+  type: "Polygon",
+  coordinates: [[
+    [lng, lat],
+    [lng + 0.4, lat],
+    [lng + 0.4, lat + 0.4],
+    [lng, lat + 0.4],
+    [lng, lat]
+  ]],
+  color: color,
+  alt: 0.03
+});
 
  // country flag
  if(alert.country_code){
