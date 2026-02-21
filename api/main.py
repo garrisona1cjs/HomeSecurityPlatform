@@ -296,7 +296,7 @@ CRITICAL: <span id="critCount">0</span>
 
 <div id="intel" class="panel">
 <b>Live Alerts</b>
-<div id="intelFeed">Waiting for threats...</div>
+<div id="intelFeed">Monitoring...</div>
 </div>
 
 <div id="controls" class="panel">
@@ -310,26 +310,31 @@ CRITICAL: <span id="critCount">0</span>
 
 const globe = Globe()(document.getElementById('globeViz'))
 .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-.arcAltitudeAutoScale(0.35)
-.arcsTransitionDuration(600);
+.arcAltitudeAutoScale(0.4)
+.arcsTransitionDuration(0);   // allow animation
 
 globe.controls().autoRotate = true;
-globe.controls().autoRotateSpeed = 0.4;
+globe.controls().autoRotateSpeed = 0.35;
 
-const banner=document.getElementById("banner");
-const ticker=document.getElementById("ticker");
-const intelFeed=document.getElementById("intelFeed");
+const banner = document.getElementById("banner");
+const ticker = document.getElementById("ticker");
+const intelFeed = document.getElementById("intelFeed");
 
-const colors={
+const colors = {
  LOW:"#00ffff",
  MEDIUM:"#ffaa00",
  HIGH:"#ff5500",
  CRITICAL:"#ff0033"
 };
 
-let arcs=[];
-let points=[];
-let counts={LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
+let arcs = [];
+let points = [];
+let rings = [];
+let labels = [];
+let counts = {LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
+let recentThreats = [];
+
+/* ---------- UTIL ---------- */
 
 function updateLegend(){
  document.getElementById("lowCount").innerText = counts.LOW;
@@ -339,14 +344,30 @@ function updateLegend(){
 }
 
 function render(){
- globe.arcsData(arcs);
+ globe.arcsData(arcs)
+      .arcDashLength(0.35)
+      .arcDashGap(0.15)
+      .arcDashAnimateTime(1400);
+
  globe.pointsData(points)
-      .pointAltitude(0.01)
+      .pointAltitude(0.02)
       .pointRadius('size')
       .pointColor('color');
+
+ globe.ringsData(rings)
+      .ringMaxRadius('maxR')
+      .ringPropagationSpeed(2)
+      .ringRepeatPeriod(900);
+
+ globe.labelsData(labels)
+      .labelText('text')
+      .labelSize(1.2)
+      .labelDotRadius(0.25)
+      .labelColor(() => '#ffffff');
 }
 
-/* TRAINING MODE */
+/* ---------- MODES ---------- */
+
 let training=false;
 function toggleTraining(){
  training=!training;
@@ -356,14 +377,28 @@ function toggleTraining(){
  document.body.style.background = training ? "#001a22" : "black";
 }
 
-/* RED VS BLUE */
+
 function simulateBattle(){
  ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
  document.body.style.background="#220000";
- setTimeout(()=>document.body.style.background="black",800);
+ setTimeout(()=>document.body.style.background="black",900);
 }
 
-/* ADD ALERT VISUALS */
+/* ---------- SURGE DETECTION ---------- */
+
+function detectSurge(){
+ const now = Date.now();
+ recentThreats = recentThreats.filter(t => now - t < 10000);
+
+ if(recentThreats.length >= 6){
+   ticker.innerHTML = "⚠ THREAT SURGE DETECTED";
+   document.body.style.background="#220000";
+   setTimeout(()=>document.body.style.background="black",900);
+ }
+}
+
+/* ---------- ALERT VISUAL ---------- */
+
 function addAlert(alert){
 
  const severity = alert.severity;
@@ -376,52 +411,81 @@ function addAlert(alert){
  if(isNaN(lat) || isNaN(lng)) return;
 
  counts[severity]++;
+ recentThreats.push(Date.now());
 
- points.push({ lat: lat, lng: lng, size: 0.45, color: color });
+ // glowing origin pulse
+ points.push({ lat, lng, size: 0.5, color });
 
+ // animated arc
  arcs.push({
    startLat: lat,
    startLng: lng,
    endLat: 41.59,
    endLng: -93.62,
    color: color,
-   stroke: severity==="CRITICAL" ? 2.6 : 1.2
+   stroke: severity==="CRITICAL"?2.6:1.2
  });
 
- // 🚨 CRITICAL ZOOM FIX
+ // shockwave rings (CRITICAL only)
  if(severity === "CRITICAL"){
+   rings.push({
+     lat: lat,
+     lng: lng,
+     maxR: 6,
+     propagationSpeed: 3,
+     repeatPeriod: 700
+   });
+ }
 
+ // country flag
+ if(alert.country_code){
+   labels.push({
+     lat: lat,
+     lng: lng,
+     text: String.fromCodePoint(...[...alert.country_code.toUpperCase()]
+       .map(c => 127397 + c.charCodeAt()))
+   });
+ }
+
+ // cinematic zoom
+ if(severity === "CRITICAL"){
    banner.style.display="block";
-   setTimeout(()=>banner.style.display="none",1400);
+   setTimeout(()=>banner.style.display="none",1500);
 
-   // pause rotation
+
+
    globe.controls().autoRotate = false;
 
-   // dramatic zoom
+
    globe.pointOfView(
       { lat: lat, lng: lng, altitude: 0.55 },
-      2200
+      2000
    );
 
-   // restore rotation
+   // zoom back out
    setTimeout(() => {
+      globe.pointOfView({ altitude: 2.2 }, 2500);
       globe.controls().autoRotate = true;
-   }, 3500);
+   }, 4200);
  }
 
  ticker.innerHTML = `⚠ ${severity} • ${alert.technique}`;
  intelFeed.innerHTML = `${alert.origin_label} — ${alert.technique}`;
+
+ detectSurge();
 }
 
-/* LOAD EXISTING ALERTS */
+/* ---------- LOAD EXISTING ---------- */
+
 async function loadExisting(){
- const alerts=await fetch('/alerts').then(r=>r.json());
+ const alerts = await fetch('/alerts').then(r=>r.json());
  alerts.forEach(addAlert);
  render();
  updateLegend();
 }
 
-/* LIVE STREAM */
+/* ---------- LIVE STREAM ---------- */
+
 const ws = new WebSocket(`wss://${location.host}/ws`);
 
 ws.onmessage = (event) => {
