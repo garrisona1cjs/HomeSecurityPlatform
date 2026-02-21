@@ -211,7 +211,7 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.add(alert)
     db.commit()
     db.close()
-    
+
 
     payload = {
         "severity": severity,
@@ -244,7 +244,32 @@ def attack_paths():
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
-    return open("static/dashboard.html", encoding="utf-8").read()
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<title>LayerSeven SOC Command Center</title>
+<script src="https://unpkg.com/globe.gl"></script>
+
+<style>
+body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:monospace;}
+#globeViz { width:100vw; height:100vh; }
+</style>
+</head>
+<body>
+
+<div id="globeViz"></div>
+
+<script>
+const globe = Globe()(document.getElementById('globeViz'))
+  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
+
+globe.controls().autoRotate = true;
+</script>
+
+</body>
+</html>
+"""
 
 # =========================================================
 # HEALTH CHECK
