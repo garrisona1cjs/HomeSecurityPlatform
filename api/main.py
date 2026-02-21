@@ -254,17 +254,168 @@ def dashboard():
 <style>
 body { margin:0; background:black; overflow:hidden; color:#00ffff; font-family:monospace;}
 #globeViz { width:100vw; height:100vh; }
+
+.panel {
+ position:absolute;
+ background:rgba(0,10,25,.85);
+ padding:8px;
+ border:1px solid #00ffff55;
+ border-radius:6px;
+ font-size:12px;
+}
+
+#legend { left:10px; top:10px; width:180px; }
+#intel { right:10px; top:10px; width:230px; }
+#controls { left:10px; bottom:10px; }
+#ticker { bottom:0; width:100%; text-align:center; }
+
+#banner {
+ position:absolute;
+ top:40%;
+ width:100%;
+ text-align:center;
+ font-size:48px;
+ color:#ff0033;
+ display:none;
+ text-shadow:0 0 25px #ff0033;
+}
 </style>
 </head>
 <body>
 
 <div id="globeViz"></div>
+<div id="banner">CRITICAL THREAT</div>
+
+<div id="legend" class="panel">
+<b>Threat Levels</b><br>
+LOW: <span id="lowCount">0</span><br>
+MEDIUM: <span id="medCount">0</span><br>
+HIGH: <span id="highCount">0</span><br>
+CRITICAL: <span id="critCount">0</span>
+</div>
+
+<div id="intel" class="panel">
+<b>Live Alerts</b>
+<div id="intelFeed">Waiting for threats...</div>
+</div>
+
+<div id="controls" class="panel">
+<button onclick="toggleTraining()">Training Mode</button>
+<button onclick="simulateBattle()">Red vs Blue</button>
+</div>
+
+<div id="ticker" class="panel"></div>
 
 <script>
+
 const globe = Globe()(document.getElementById('globeViz'))
-  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg');
+.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+.arcAltitudeAutoScale(0.35)
+.arcsTransitionDuration(600);
 
 globe.controls().autoRotate = true;
+
+const banner=document.getElementById("banner");
+const ticker=document.getElementById("ticker");
+const intelFeed=document.getElementById("intelFeed");
+
+const colors={
+ LOW:"#00ffff",
+ MEDIUM:"#ffaa00",
+ HIGH:"#ff5500",
+ CRITICAL:"#ff0033"
+};
+
+let arcs=[];
+let points=[];
+let counts={LOW:0, MEDIUM:0, HIGH:0, CRITICAL:0};
+
+function updateLegend(){
+ document.getElementById("lowCount").innerText = counts.LOW;
+ document.getElementById("medCount").innerText = counts.MEDIUM;
+ document.getElementById("highCount").innerText = counts.HIGH;
+ document.getElementById("critCount").innerText = counts.CRITICAL;
+}
+
+function render(){
+ globe.arcsData(arcs);
+ globe.pointsData(points)
+      .pointAltitude(0.01)
+      .pointRadius('size')
+      .pointColor('color');
+}
+
+/* TRAINING MODE */
+let training=false;
+function toggleTraining(){
+ training=!training;
+ ticker.innerHTML = training
+   ? "🎯 TRAINING MODE ACTIVE"
+   : "LIVE OPERATIONS MODE";
+ document.body.style.background = training ? "#001a22" : "black";
+}
+
+/* RED VS BLUE */
+function simulateBattle(){
+ ticker.innerHTML="⚔ RED vs BLUE ENGAGEMENT";
+ document.body.style.background="#220000";
+ setTimeout(()=>document.body.style.background="black",800);
+}
+
+/* add alert visuals */
+function addAlert(alert){
+
+ const severity = alert.severity;
+ const color = colors[severity] || "#ffffff";
+
+ counts[severity]++;
+
+ const lat = parseFloat(alert.latitude);
+ const lng = parseFloat(alert.longitude);
+
+ if(isNaN(lat) || isNaN(lng)) return;
+
+ points.push({ lat: lat, lng: lng, size: 0.45, color: color });
+
+ arcs.push({
+   startLat: lat,
+   startLng: lng,
+   endLat: 41.59,
+   endLng: -93.62,
+   color: color,
+   stroke: severity==="CRITICAL" ? 2.6 : 1.2
+ });
+
+ if(severity === "CRITICAL"){
+   banner.style.display="block";
+   setTimeout(()=>banner.style.display="none",1400);
+   globe.pointOfView({lat:lat,lng:lng,altitude:1.3},1600);
+ }
+
+ ticker.innerHTML = `⚠ ${severity} • ${alert.technique}`;
+ intelFeed.innerHTML = `${alert.origin_label} — ${alert.technique}`;
+}
+
+/* load existing alerts */
+async function loadExisting(){
+ const alerts=await fetch('/alerts').then(r=>r.json());
+ alerts.forEach(addAlert);
+ render();
+ updateLegend();
+}
+
+/* live websocket alerts */
+const ws = new WebSocket(`wss://${location.host}/ws`);
+
+ws.onmessage = (event) => {
+ const alert = JSON.parse(event.data);
+ addAlert(alert);
+ render();
+ updateLegend();
+};
+
+loadExisting();
+
 </script>
 
 </body>
