@@ -4,7 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List
-import uuid, secrets, os, random, asyncio
+import uuid
+import secrets
+import os
+import random
+import asyncio
 import geoip2.database
 
 from sqlalchemy import create_engine, Column, String, inspect, text
@@ -27,15 +31,11 @@ def geo_lookup_ip(ip):
             city = r.city.name
             country_name = r.country.name
 
-            # fallback protections
+
             if lat is None or lon is None:
                 return ("Unknown Location", 0, 0, country or "")
 
-            label = (
-                f"{city}, {country_name}"
-                if city else country_name
-            )
-
+            label = f"{city}, {country_name}" if city else country_name
             return (label, lat, lon, country or "")
 
     except Exception:
@@ -83,34 +83,26 @@ class Alert(Base):
     origin_label = Column(String)
     latitude = Column(String)
     longitude = Column(String)
-    country_code = Column(String)   # NEW (safe)
-
-
-
-
-
-
+    country_code = Column(String)
     shockwave = Column(String)
 
-# =========================================================
-# SAFE SCHEMA UPDATE (NO DATA LOSS)
-# =========================================================
+# ---- SAFE AUTO COLUMN ADD ----
 
 inspector = inspect(engine)
 
 if "alerts" in inspector.get_table_names():
-    existing_cols = [c["name"] for c in inspector.get_columns("alerts")]
+    existing = [c["name"] for c in inspector.get_columns("alerts")]
 
     with engine.connect() as conn:
-        if "origin_label" not in existing_cols:
+        if "origin_label" not in existing:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN origin_label VARCHAR"))
-        if "latitude" not in existing_cols:
+        if "latitude" not in existing:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN latitude VARCHAR"))
-        if "longitude" not in existing_cols:
+        if "longitude" not in existing:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN longitude VARCHAR"))
-        if "country_code" not in existing_cols:
+        if "country_code" not in existing:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN country_code VARCHAR"))
-        if "shockwave" not in existing_cols:
+        if "shockwave" not in existing:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN shockwave VARCHAR"))
 
 Base.metadata.create_all(bind=engine)
@@ -127,7 +119,9 @@ class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
 
-
+# =========================================================
+# MITRE TECHNIQUES (SIMULATION)
+# =========================================================
 
 techniques = [
     "T1110 Brute Force",
@@ -138,12 +132,41 @@ techniques = [
 ]
 
 # =========================================================
+# WEBSOCKET HUB
+# =========================================================
+
+connections = set()
+
+@app.websocket("/ws")
+async def ws_endpoint(ws: WebSocket):
+    await ws.accept()
+    connections.add(ws)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        connections.remove(ws)
+
+async def broadcast(payload):
+    dead = []
+    for ws in connections:
+        try:
+            await ws.send_json(payload)
+        except:
+            dead.append(ws)
+    for ws in dead:
+        connections.remove(ws)
+
+# =========================================================
 # API ROUTES
 # =========================================================
 
 @app.post("/register")
 def register(agent: AgentRegistration):
-    return {"agent_id": str(uuid.uuid4()), "api_key": secrets.token_hex(16)}
+    return {
+        "agent_id": str(uuid.uuid4()),
+        "api_key": secrets.token_hex(16)
+    }
 
 @app.post("/report")
 def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
@@ -161,7 +184,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     else:
         severity = "LOW"
 
-    # 🌍 GeoIP lookup
+
     ip_addr = report.devices[0].get("ip", "8.8.8.8")
     origin_label, lat, lon, country = geo_lookup_ip(ip_addr)
 
@@ -187,7 +210,7 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     db.commit()
     db.close()
 
-
+    # broadcast live alert
     payload = {
         "severity": severity,
         "technique": technique,
@@ -198,20 +221,9 @@ def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "shockwave": shockwave_flag == "true"
     }
 
-async def broadcast(payload):
-    dead = []
-    for ws in connections:
-        try:
-            await ws.send_json(payload)
-        except:
-            dead.append(ws)
-    for ws in dead:
-        connections.remove(ws)
+    asyncio.create_task(broadcast(payload))
 
-asyncio.create_task(broadcast(payload))
-
-
-
+    return {"risk_score": risk, "severity": severity}
 
 @app.get("/alerts")
 def alerts():
@@ -220,40 +232,22 @@ def alerts():
     db.close()
     return data
 
-
-
-# =========================================================
-# WEBSOCKET HUB
-# =========================================================
-
-connections = set()
-
-@app.websocket("/ws")
-async def ws_endpoint(ws: WebSocket):
-    await ws.accept()
-    connections.add(ws)
-
-    try:
-        while True:
-            await ws.receive_text()
-    except WebSocketDisconnect:
-        connections.remove(ws)
+@app.get("/attack-paths")
+def attack_paths():
+    return []
 
 # =========================================================
-# EMBEDDED DASHBOARD (SAFE)
+# DASHBOARD
 # =========================================================
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     return open("static/dashboard.html", encoding="utf-8").read()
 
-# =========================================================
-# HEALTH CHECK
-# =========================================================
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+
+
+
 
 
 
