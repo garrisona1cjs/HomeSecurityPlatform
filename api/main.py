@@ -399,7 +399,15 @@ transition:width .4s ease;
 const globe = Globe()(document.getElementById('globeViz'))
 .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
 .arcAltitudeAutoScale(0.45)
-.arcsTransitionDuration(0);
+.arcsTransitionDuration(0)
+
+/* 🔥 Neon Beam Enhancement */
+.arcDashLength(0.35)
+.arcDashGap(0.06)
+.arcDashInitialGap(() => Math.random())
+.arcDashAnimateTime(900)
+.arcAltitude(0.18)
+.arcStroke(() => 1.5);
 
 globe.controls().autoRotate = true;
 globe.controls().autoRotateSpeed = 0.35;
@@ -427,7 +435,12 @@ function render(){
    .arcColor('color')
    .arcDashLength(0.3)
    .arcDashGap(0.08)
-   .arcDashAnimateTime(900);
+   .arcDashAnimateTime(900)
+   .arcDashInitialGap(() => Math.random())
+   .arcDashGap(0.06)
+   .arcDashLength(0.35)
+   .arcColor(d => d.color)
+   .arcAltitude(d => 0.18);
 
  globe.pointsData(points)
    .pointRadius('size')
@@ -469,10 +482,10 @@ function addAlert(alert){
 
  counts[sev]++;
 
-document.getElementById("low").textContent = counts.LOW;
-document.getElementById("med").textContent = counts.MEDIUM;
-document.getElementById("high").textContent = counts.HIGH;
-document.getElementById("crit").textContent = counts.CRITICAL;
+ document.getElementById("low").textContent = counts.LOW;
+ document.getElementById("med").textContent = counts.MEDIUM;
+ document.getElementById("high").textContent = counts.HIGH;
+ document.getElementById("crit").textContent = counts.CRITICAL;
 
  // glowing origin
  points.push({lat,lng,size:0.5,color});
@@ -482,11 +495,17 @@ document.getElementById("crit").textContent = counts.CRITICAL;
    startLat:lat,startLng:lng,
    endLat:41.59,endLng:-93.62,
    color:[color,color],
-   stroke: sev==="CRITICAL"?3:1.5
+   stroke:
+    sev==="CRITICAL"?4:
+    sev==="HIGH"?3:
+    sev==="MEDIUM"?2:
+    1.2
  });
 
  // impact flash at SOC
  rings.push({lat:41.59,lng:-93.62,maxR:5});
+ rings.push({lat:41.59,lng:-93.62,maxR:7});
+ rings.push({lat:41.59,lng:-93.62,maxR:9});
 
  // packet tracer animation
  packets.push({
@@ -525,6 +544,8 @@ heat.push({
    setTimeout(()=>banner.style.display="none",1500);
 
    rings.push({lat,lng,maxR:8});
+   rings.push({lat,lng,maxR:11});
+   rings.push({lat,lng,maxR:14});
 
    globe.controls().autoRotate=false;
    globe.pointOfView({lat,lng,altitude:0.6},1800);
