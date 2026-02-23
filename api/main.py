@@ -553,11 +553,14 @@ function render(){
    .labelColor(()=>"#ffffff")
    .labelDotRadius(0.3);
 
- globe.pathsData(packets)
-   .pathPoints('points')
-   .pathColor(()=>"#00ffff")
-   .pathDashLength(0.4)
-   .pathDashAnimateTime(600);
+// fade old packet trails
+packets = packets.filter(p => Date.now() - p.created < 8000);
+
+globe.pathsData(packets)
+  .pathPoints('points')
+  .pathColor(()=>"#00ffff")
+  .pathDashLength(0.4)
+  .pathDashAnimateTime(600);
 
 globe.hexPolygonsData(heat)
    .hexPolygonGeoJsonGeometry(d => d)
@@ -584,7 +587,16 @@ function addAlert(alert){
  document.getElementById("crit").textContent = counts.CRITICAL;
 
 // glowing origin
-points.push({lat,lng,size:0.5,color});
+points.push({
+  lat,
+  lng,
+  size:
+    sev==="CRITICAL" ? 1.0 :
+    sev==="HIGH" ? 0.8 :
+    sev==="MEDIUM" ? 0.6 :
+    0.45,
+  color
+});
 
 // swarm clustering
 clusterAttack(lat, lng, sev);
@@ -602,17 +614,24 @@ clusterAttack(lat, lng, sev);
  });
 
  // impact flash at SOC
- rings.push({lat:41.59,lng:-93.62,maxR:5});
- rings.push({lat:41.59,lng:-93.62,maxR:7});
- rings.push({lat:41.59,lng:-93.62,maxR:9});
+rings.push({
+  lat:41.59,
+  lng:-93.62,
+  maxR:
+    sev==="CRITICAL" ? 12 :
+    sev==="HIGH" ? 9 :
+    sev==="MEDIUM" ? 6 :
+    4
+});
 
  // packet tracer animation
- packets.push({
-   points:[
-     [lat,lng],
-     [41.59,-93.62]
-   ]
- });
+packets.push({
+  points:[
+    [lat,lng],
+    [41.59,-93.62]
+  ],
+  created: Date.now()
+});
 
  // heatmap intensity
 heat.push({
