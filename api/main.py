@@ -703,17 +703,26 @@ if(sev === "CRITICAL" && !cameraBusy){
 
   }, 3500);
 
-  // restart rotation AFTER camera settles
-  setTimeout(()=>{
+// restart rotation AFTER camera settles
+setTimeout(()=>{
 
-    globe.controls().autoRotate = true;
-    globe.controls().autoRotateSpeed = 0.7;
+  globe.controls().autoRotate = true;
 
-    recoveringCamera = false;
-    cameraBusy = false;
+  // smooth ramp-up
+  globe.controls().autoRotateSpeed = 0.2;
 
-  }, 6000);
-}
+  const ramp = setInterval(()=>{
+    globe.controls().autoRotateSpeed += 0.05;
+    if(globe.controls().autoRotateSpeed >= 0.55){
+      globe.controls().autoRotateSpeed = 0.55;
+      clearInterval(ramp);
+    }
+  }, 60);
+
+  recoveringCamera = false;
+  cameraBusy = false;
+
+}, 6000);
 
 feed.innerHTML = alert.origin_label;
 ticker.innerHTML = sev + " • " + alert.technique;
