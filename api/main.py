@@ -497,6 +497,7 @@ let clusters = [];
 let countryCounts = {};
 let alertTimes = [];
 let lastVelocity = 0;
+let cameraBusy = false;
 
 function clusterAttack(lat, lng, severity){
 
@@ -668,22 +669,31 @@ heat.push({
  }
 
  // CRITICAL shockwave & zoom
- if(sev==="CRITICAL"){
-   banner.style.display="block";
-   setTimeout(()=>banner.style.display="none",1500);
+if(sev === "CRITICAL" && !cameraBusy){
 
-   rings.push({lat,lng,maxR:8});
-   rings.push({lat,lng,maxR:11});
-   rings.push({lat,lng,maxR:14});
+  cameraBusy = true;
 
-   globe.controls().autoRotate=false;
-   globe.pointOfView({lat,lng,altitude:0.6},1800);
+  banner.style.display = "block";
+  setTimeout(()=> banner.style.display="none",1500);
 
-   setTimeout(()=>{
-     globe.pointOfView({altitude:2.3},2500);
-     globe.controls().autoRotate=true;
-   },3500);
- }
+  rings.push({lat,lng,maxR:8});
+  rings.push({lat,lng,maxR:11});
+  rings.push({lat,lng,maxR:14});
+
+  globe.controls().autoRotate = false;
+
+  globe.pointOfView({lat, lng, altitude:0.6}, 1800);
+
+  setTimeout(()=>{
+    globe.pointOfView({altitude:2.3}, 2500);
+    globe.controls().autoRotate = true;
+  }, 3500);
+
+  // allow next zoom after reset
+  setTimeout(()=>{
+    cameraBusy = false;
+  }, 4500);
+}
 
 feed.innerHTML = alert.origin_label;
 ticker.innerHTML = sev + " • " + alert.technique;
