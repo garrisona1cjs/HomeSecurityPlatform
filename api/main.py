@@ -422,6 +422,8 @@ const globe = Globe()(document.getElementById('globeViz'))
 
 globe.controls().autoRotate = true;
 globe.controls().autoRotateSpeed = 0.35;
+globe.controls().enableDamping = true;
+globe.controls().dampingFactor = 0.05;
 
 // 🌍 animated atmospheric glow
 const atmosphere = document.createElement('div');
@@ -498,6 +500,7 @@ let countryCounts = {};
 let alertTimes = [];
 let lastVelocity = 0;
 let cameraBusy = false;
+let recoveringCamera = false;   // ✅ add this line
 
 function clusterAttack(lat, lng, severity){
 
@@ -668,42 +671,50 @@ heat.push({
    });
  }
 
- // CRITICAL shockwave & zoom
+ 
+// CRITICAL shockwave & cinematic zoom
 if(sev === "CRITICAL" && !cameraBusy){
 
   cameraBusy = true;
+  recoveringCamera = true;
 
   banner.style.display = "block";
   setTimeout(()=> banner.style.display="none",1500);
 
+  // impact shockwaves
   rings.push({lat,lng,maxR:8});
   rings.push({lat,lng,maxR:11});
   rings.push({lat,lng,maxR:14});
 
+  // stop rotation
   globe.controls().autoRotate = false;
 
+  // cinematic zoom to origin
   globe.pointOfView({lat, lng, altitude:0.6}, 1800);
 
- setTimeout(()=>{
-
-  // restore neutral globe orientation
-  globe.pointOfView({
-    lat: 20,
-    lng: 0,
-    altitude: 2.3
-  }, 2000);
-
-}, 3500);
-
-// restart rotation AFTER camera settles
-setTimeout(()=>{
-  globe.controls().autoRotate = true;
-}, 6000);
-
-  // allow next zoom after reset
   setTimeout(()=>{
-    cameraBusy = false;
-  }, 4500);
+
+    // restore neutral orientation
+    globe.pointOfView({
+      lat: 20,
+      lng: 0,
+      altitude: 2.3
+    }, 2200);
+
+  }, 3500);
+
+  // restart rotation AFTER camera settles
+  setTimeout(()=>{
+
+    globe.controls().autoRotate = true;
+    globe.controls().autoRotateSpeed = 0.35;
+
+    recoveringCamera = false;
+    cameraBusy = false;.
+
+
+
+  }, 6000);
 }
 
 feed.innerHTML = alert.origin_label;
@@ -789,7 +800,7 @@ else{
 
 let sweepAngle=0;
 setInterval(()=>{
-  if(!cameraBusy){   // prevent conflict during zoom
+if(!cameraBusy && !recoveringCamera && !globe.controls().autoRotate){
     sweepAngle += 0.05;
 
     globe.pointOfView({
@@ -797,8 +808,7 @@ setInterval(()=>{
       lng: sweepAngle * 40,
       altitude: 2.3
     }, 4000);
-  }
-}, 9000);
+}
 
 // animate radar sweep cone
 setInterval(()=>{
