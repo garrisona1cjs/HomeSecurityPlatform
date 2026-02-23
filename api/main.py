@@ -457,18 +457,29 @@ surgeOverlay.style.background =
 surgeOverlay.style.backgroundSize="60px 60px";
 document.body.appendChild(surgeOverlay);
 
-// 📡 radar sweep cone
+// 📡 radar sweep cone (soft radar beam)
 const sweepCone = document.createElement("div");
 sweepCone.style.position = "absolute";
 sweepCone.style.width = "0";
 sweepCone.style.height = "0";
-sweepCone.style.borderLeft = "220px solid transparent";
-sweepCone.style.borderRight = "220px solid transparent";
-sweepCone.style.borderTop = "420px solid rgba(0,255,255,0.05)";
+
+/* cone shape */
+sweepCone.style.borderLeft = "180px solid transparent";
+sweepCone.style.borderRight = "180px solid transparent";
+sweepCone.style.borderTop = "340px solid rgba(0,255,255,0.035)";
+
+/* soften & blend */
+sweepCone.style.filter = "blur(12px)";
+sweepCone.style.mixBlendMode = "screen";
+
+/* center on globe */
 sweepCone.style.left = "50%";
 sweepCone.style.top = "50%";
+sweepCone.style.transform = "translate(-50%, -50%)";
 sweepCone.style.transformOrigin = "top center";
+
 sweepCone.style.pointerEvents = "none";
+
 document.body.appendChild(sweepCone);
 
 
@@ -767,8 +778,10 @@ setInterval(()=>{
 
 // animate radar sweep cone
 setInterval(()=>{
-  sweepCone.style.transform =
-    "rotate(" + (Date.now()*0.02 % 360) + "deg)";
+sweepCone.style.transform =
+  "translate(-50%, -50%) rotate(" +
+  (Date.now()*0.02 % 360) +
+  "deg)";
 }, 60);
 
 /* ---------- LOAD & LIVE ---------- */
