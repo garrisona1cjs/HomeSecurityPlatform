@@ -684,10 +684,21 @@ if(sev === "CRITICAL" && !cameraBusy){
 
   globe.pointOfView({lat, lng, altitude:0.6}, 1800);
 
-  setTimeout(()=>{
-    globe.pointOfView({altitude:2.3}, 2500);
-    globe.controls().autoRotate = true;
-  }, 3500);
+ setTimeout(()=>{
+
+  // restore neutral globe orientation
+  globe.pointOfView({
+    lat: 20,
+    lng: 0,
+    altitude: 2.3
+  }, 2000);
+
+}, 3500);
+
+// restart rotation AFTER camera settles
+setTimeout(()=>{
+  globe.controls().autoRotate = true;
+}, 6000);
 
   // allow next zoom after reset
   setTimeout(()=>{
@@ -778,13 +789,16 @@ else{
 
 let sweepAngle=0;
 setInterval(()=>{
- sweepAngle+=0.05;
- globe.pointOfView({
-   lat: Math.sin(sweepAngle)*30,
-   lng: sweepAngle*40,
-   altitude:2.3
- }, 4000);
-},9000);
+  if(!cameraBusy){   // prevent conflict during zoom
+    sweepAngle += 0.05;
+
+    globe.pointOfView({
+      lat: Math.sin(sweepAngle) * 30,
+      lng: sweepAngle * 40,
+      altitude: 2.3
+    }, 4000);
+  }
+}, 9000);
 
 // animate radar sweep cone
 setInterval(()=>{
