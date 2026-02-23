@@ -499,12 +499,15 @@ function clusterAttack(lat, lng, severity){
       found = true;
 
       // grow cluster glow
-      points.push({
-        lat: c.lat,
-        lng: c.lng,
-        size: 0.6 + c.count * 0.08,
-        color: "#ff0033"
-      });
+points.push({
+  lat: c.lat,
+  lng: c.lng,
+  size: 0.6 + c.count * 0.15,
+  color:
+    c.count > 5 ? "#ff0033" :
+    c.count > 3 ? "#ff5500" :
+    "#ffaa00"
+        });
     }
   });
 
@@ -703,6 +706,13 @@ bar.style.width = surgeLevel + "%";
 
 // 🚨 toggle surge grid
 surgeOverlay.style.opacity = surgeLevel > 60 ? 1 : 0;
+
+// 🚨 surge alert flash
+if(surgeLevel > 80){
+  banner.innerHTML = "SURGE EVENT";
+  banner.style.display="block";
+  setTimeout(()=>banner.style.display="none",1000);
+}
 
 // 🔥 pulse grid during surge
 if(surgeLevel > 60){
