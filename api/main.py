@@ -500,7 +500,7 @@ let countryCounts = {};
 let alertTimes = [];
 let lastVelocity = 0;
 let cameraBusy = false;
-let recoveringCamera = false;   // ✅ add this line
+let recoveringCamera = false;  
 
 function clusterAttack(lat, lng, severity){
 
@@ -710,9 +710,7 @@ if(sev === "CRITICAL" && !cameraBusy){
     globe.controls().autoRotateSpeed = 0.35;
 
     recoveringCamera = false;
-    cameraBusy = false;.
-
-
+    cameraBusy = false;
 
   }, 6000);
 }
@@ -798,9 +796,16 @@ else{
 
 /* ---------- RADAR SWEEP ---------- */
 
-let sweepAngle=0;
+let sweepAngle = 0;
+
 setInterval(()=>{
-if(!cameraBusy && !recoveringCamera && !globe.controls().autoRotate){
+
+  // prevent conflict during zoom or recovery
+  if(cameraBusy || recoveringCamera) return;
+
+  // ONLY sweep when autoRotate is OFF
+  if(!globe.controls().autoRotate){
+
     sweepAngle += 0.05;
 
     globe.pointOfView({
@@ -808,7 +813,9 @@ if(!cameraBusy && !recoveringCamera && !globe.controls().autoRotate){
       lng: sweepAngle * 40,
       altitude: 2.3
     }, 4000);
-}
+  }
+
+}, 9000);
 
 // animate radar sweep cone
 setInterval(()=>{
