@@ -707,7 +707,7 @@ if(sev === "CRITICAL" && !cameraBusy){
   setTimeout(()=>{
 
     globe.controls().autoRotate = true;
-    globe.controls().autoRotateSpeed = 0.5;
+    globe.controls().autoRotateSpeed = 0.7;
 
     recoveringCamera = false;
     cameraBusy = false;
