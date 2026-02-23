@@ -1,3 +1,4 @@
+# TEST Change
 from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -387,6 +388,16 @@ transition:width .4s ease;
 "></div>
 </div>
 
+<div id="countryPanel" class="panel" style="left:10px; top:250px; width:170px;">
+<b>Top Origins</b>
+<div id="countries"></div>
+</div>
+
+<div id="velocityPanel" class="panel" style="left:10px; top:340px; width:170px;">
+<b>Threat Velocity</b>
+<div id="velocity">0 / min</div>
+</div>
+
 <div id="intel" class="panel">
 <b>Live Intel</b>
 <div id="feed">Monitoring…</div>
@@ -412,6 +423,56 @@ const globe = Globe()(document.getElementById('globeViz'))
 globe.controls().autoRotate = true;
 globe.controls().autoRotateSpeed = 0.35;
 
+// 🌍 animated atmospheric glow
+const atmosphere = document.createElement('div');
+atmosphere.style.position="absolute";
+atmosphere.style.top=0;
+atmosphere.style.left=0;
+atmosphere.style.right=0;
+atmosphere.style.bottom=0;
+atmosphere.style.pointerEvents="none";
+atmosphere.style.boxShadow="inset 0 0 120px rgba(0,150,255,0.08)";
+document.body.appendChild(atmosphere);
+
+// subtle breathing motion
+setInterval(()=>{
+  atmosphere.style.boxShadow =
+    "inset 0 0 " +
+    (100 + Math.sin(Date.now()*0.002)*40) +
+    "px rgba(0,150,255,0.08)";
+}, 60);
+
+// 🚨 surge grid overlay
+const surgeOverlay = document.createElement("div");
+surgeOverlay.style.position="absolute";
+surgeOverlay.style.top=0;
+surgeOverlay.style.left=0;
+surgeOverlay.style.right=0;
+surgeOverlay.style.bottom=0;
+surgeOverlay.style.pointerEvents="none";
+surgeOverlay.style.opacity="0";
+surgeOverlay.style.background =
+"linear-gradient(rgba(255,0,50,0.08) 1px, transparent 1px)," +
+"linear-gradient(90deg, rgba(255,0,50,0.08) 1px, transparent 1px)";
+surgeOverlay.style.backgroundSize="60px 60px";
+document.body.appendChild(surgeOverlay);
+
+// 📡 radar sweep cone
+const sweepCone = document.createElement("div");
+sweepCone.style.position = "absolute";
+sweepCone.style.width = "0";
+sweepCone.style.height = "0";
+sweepCone.style.borderLeft = "220px solid transparent";
+sweepCone.style.borderRight = "220px solid transparent";
+sweepCone.style.borderTop = "420px solid rgba(0,255,255,0.05)";
+sweepCone.style.left = "50%";
+sweepCone.style.top = "50%";
+sweepCone.style.transformOrigin = "top center";
+sweepCone.style.pointerEvents = "none";
+document.body.appendChild(sweepCone);
+
+
+
 const banner = document.getElementById("banner");
 const feed = document.getElementById("feed");
 const ticker = document.getElementById("ticker");
@@ -419,6 +480,38 @@ const ticker = document.getElementById("ticker");
 let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[];
 let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
 let surgeLevel = 0;
+
+// intelligence & analytics
+let clusters = [];
+let countryCounts = {};
+let alertTimes = [];
+let lastVelocity = 0;
+
+function clusterAttack(lat, lng, severity){
+
+  const radius = 3; // degrees
+  let found = false;
+
+  clusters.forEach(c => {
+    const d = Math.hypot(c.lat - lat, c.lng - lng);
+    if(d < radius){
+      c.count++;
+      found = true;
+
+      // grow cluster glow
+      points.push({
+        lat: c.lat,
+        lng: c.lng,
+        size: 0.6 + c.count * 0.08,
+        color: "#ff0033"
+      });
+    }
+  });
+
+  if(!found){
+    clusters.push({ lat, lng, count: 1 });
+  }
+}
 
 const colors={
  LOW:"#00ffff",
@@ -487,8 +580,11 @@ function addAlert(alert){
  document.getElementById("high").textContent = counts.HIGH;
  document.getElementById("crit").textContent = counts.CRITICAL;
 
- // glowing origin
- points.push({lat,lng,size:0.5,color});
+// glowing origin
+points.push({lat,lng,size:0.5,color});
+
+// swarm clustering
+clusterAttack(lat, lng, sev);
 
  // neon beam trail
  arcs.push({
@@ -556,8 +652,44 @@ heat.push({
    },3500);
  }
 
- feed.innerHTML = alert.origin_label;
- ticker.innerHTML = sev + " • " + alert.technique;
+feed.innerHTML = alert.origin_label;
+ticker.innerHTML = sev + " • " + alert.technique;
+
+// 🌎 track top attacking countries
+if(alert.country_code){
+  countryCounts[alert.country_code] =
+    (countryCounts[alert.country_code] || 0) + 1;
+
+  const sorted = Object.entries(countryCounts)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,5);
+
+  document.getElementById("countries").innerHTML =
+    sorted.map(c => `${c[0]} : ${c[1]}`).join("<br>");
+}
+
+// ⚡ threat velocity tracking
+const now = Date.now();
+alertTimes.push(now);
+
+// keep last 60 seconds
+alertTimes = alertTimes.filter(t => now - t < 60000);
+
+const velocityDiv = document.getElementById("velocity");
+if(velocityDiv){
+  velocityDiv.textContent = alertTimes.length + " / min";
+}
+
+// 🚨 anomaly spike detection
+const currentVelocity = alertTimes.length;
+
+if(currentVelocity > lastVelocity + 6){
+  banner.innerHTML = "ANOMALOUS TRAFFIC";
+  banner.style.display="block";
+  setTimeout(()=>banner.style.display="none",1200);
+}
+
+lastVelocity = currentVelocity;
 
  // ===== SURGE METER =====
 if(alert.surge){
@@ -568,6 +700,16 @@ if(alert.surge){
 
 const bar = document.getElementById("surgeBar");
 bar.style.width = surgeLevel + "%";
+
+// 🚨 toggle surge grid
+surgeOverlay.style.opacity = surgeLevel > 60 ? 1 : 0;
+
+// 🔥 pulse grid during surge
+if(surgeLevel > 60){
+  surgeOverlay.style.backgroundSize =
+    (60 + Math.sin(Date.now()*0.01)*8) + "px " +
+    (60 + Math.sin(Date.now()*0.01)*8) + "px";
+}
 
 if(surgeLevel > 70){
     bar.style.background = "#ff0033";
@@ -593,6 +735,12 @@ setInterval(()=>{
    altitude:2.3
  }, 4000);
 },9000);
+
+// animate radar sweep cone
+setInterval(()=>{
+  sweepCone.style.transform =
+    "rotate(" + (Date.now()*0.02 % 360) + "deg)";
+}, 60);
 
 /* ---------- LOAD & LIVE ---------- */
 
