@@ -1,43 +1,57 @@
-# TEST Change
+# =========================================================
+# IMPORTS
+# =========================================================
+
 from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List
-import uuid
-import secrets
-import os
-import random
-import asyncio
+import uuid, secrets, os, random, asyncio
 import geoip2.database
 
 from sqlalchemy import create_engine, Column, String, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+from ipwhois import IPWhois
 
 # =========================================================
 # GEOIP CONFIG
 # =========================================================
 
 GEOIP_DB = os.getenv("GEOIP_DB", "geoip/GeoLite2-City.mmdb")
+reader = geoip2.database.Reader(GEOIP_DB)
 
 def geo_lookup_ip(ip):
+
     try:
-        with geoip2.database.Reader(GEOIP_DB) as reader:
-            r = reader.city(ip)
+        geo = reader.city(ip)
 
-            city = r.city.name or ""
-            country = r.country.name or ""
-            lat = r.location.latitude
-            lon = r.location.longitude
-            code = r.country.iso_code or ""
+        city = geo.city.name or "Unknown"
+        country = geo.country.iso_code or "??"
+        lat = geo.location.latitude or 0
+        lon = geo.location.longitude or 0
 
-            label = f"{city}, {country}".strip(", ")
-
-            return (label, lat, lon, code)
+        origin_label = f"{city}, {country}"
 
     except:
-        return ("Unknown", 0, 0, "")
+        origin_label, lat, lon, country = "Unknown", 0, 0, "??"
+
+    # ASN + ISP lookup
+    try:
+        obj = IPWhois(ip)
+        res = obj.lookup_rdap()
+
+        asn = res.get("asn", "N/A")
+        isp = res.get("network", {}).get("name", "Unknown")
+
+    except:
+        asn = "N/A"
+        isp = "Unknown"
+
+    return origin_label, lat, lon, country, isp, asn
+
 
 # =========================================================
 # DATABASE CONFIG
@@ -76,7 +90,6 @@ class Alert(Base):
     severity = Column(String)
     technique = Column(String)
     timestamp = Column(String)
-
 
     origin_label = Column(String)
     latitude = Column(String)
@@ -120,34 +133,17 @@ class DeviceReport(BaseModel):
     devices: List[dict]
 
 # =========================================================
-# MITRE TECHNIQUES
-# =========================================================
-
-techniques = [
-    "T1110 Brute Force",
-    "T1078 Valid Accounts",
-    "T1046 Network Scannin",
-    "T1059 Command Exec",
-    "T1566 Phishing"
-]
-
-# =========================================================
-# TRAINING MODE + RED vs BLUE STATE
+# TRAINING + SURGE DETECTION
 # =========================================================
 
 training_mode = False
-red_count = 0
-blue_blocks = 0
 
-# =========================================================
-# SURGE DETECTION (for grid overlay)
-# =========================================================
+
+
 
 recent_alerts = []
-SURGE_WINDOW = 10   # seconds
-SURGE_THRESHOLD = 20  # alerts in window
-
-from datetime import timedelta
+SURGE_WINDOW = 10
+SURGE_THRESHOLD = 20
 
 def detect_surge():
     now = datetime.utcnow()
@@ -185,7 +181,7 @@ async def ws_endpoint(ws: WebSocket):
 
 
 # =========================================================
-# API ROUTES
+# REGISTER
 # =========================================================
 
 @app.post("/register")
@@ -194,6 +190,10 @@ def register(agent: AgentRegistration):
         "agent_id": str(uuid.uuid4()),
         "api_key": secrets.token_hex(16)
     }
+
+# =========================================================
+# REPORT DEVICES
+# =========================================================
 
 @app.post("/report")
 async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
@@ -215,11 +215,17 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     ip_addr = report.devices[0].get("ip", "8.8.8.8")
 
-    origin_label, lat, lon, country = geo_lookup_ip(ip_addr)
+    origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(ip_addr)
 
-    technique = random.choice(techniques)
-    shockwave_flag = "true" if severity == "CRITICAL" else "false"
+    technique = random.choice([
+        "T1110 Brute Force",
+        "T1078 Valid Accounts",
+        "T1046 Network Scan",
+        "T1059 Command Exec",
+        "T1566 Phishing"
+    ])
 
+    shockwave_flag = severity == "CRITICAL"
 
     alert = Alert(
         id=str(uuid.uuid4()),
@@ -232,15 +238,14 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         latitude=str(lat),
         longitude=str(lon),
         country_code=country,
-        shockwave=shockwave_flag
+        shockwave=str(shockwave_flag)
     )
 
     db.add(alert)
     db.commit()
     db.close()
 
-
-       # track surge activity
+    # surge tracking
     recent_alerts.append(datetime.utcnow())
     surge = detect_surge()
 
@@ -251,9 +256,10 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "latitude": lat,
         "longitude": lon,
         "country_code": country,
-        "shockwave": shockwave_flag == "true",
-
-        # SAFE ADDITIONS (do not break dashboard)
+        "source_ip": ip_addr,
+        "isp": isp_name,
+        "asn": asn,
+        "shockwave": shockwave_flag,
         "training": training_mode,
         "team": "red",
         "surge": surge
@@ -263,48 +269,16 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     return {"risk_score": risk, "severity": severity}
 
-@app.get("/alerts")
-def alerts():
-    db = SessionLocal()
-    data = db.query(Alert).order_by(Alert.timestamp.desc()).all()
-    db.close()
-    return data
 
-@app.get("/attack-paths")
-def attack_paths():
-    return []
 
 # =========================================================
-# TRAINING MODE CONTROL
-# =========================================================
-
-@app.post("/training/on")
-def training_on():
-    global training_mode
-    training_mode = True
-    return {"training": True}
-
-@app.post("/training/off")
-def training_off():
-    global training_mode
-    training_mode = False
-    return {"training": False}
-
-# =========================================================
-# RED vs BLUE SIMULATION
+# SIMULATION
 # =========================================================
 
 @app.post("/simulate")
 async def simulate(source_ip: str, team: str = "red"):
 
-    global red_count, blue_blocks
-
-    origin_label, lat, lon, country = geo_lookup_ip(source_ip)
-
-    if team == "red":
-        red_count += 1
-    else:
-        blue_blocks += 1
+    origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(source_ip)
 
     payload = {
         "severity": "HIGH",
@@ -313,6 +287,9 @@ async def simulate(source_ip: str, team: str = "red"):
         "latitude": lat,
         "longitude": lon,
         "country_code": country,
+        "source_ip": source_ip,
+        "isp": isp_name,
+        "asn": asn,
         "shockwave": False,
         "training": True,
         "team": team
@@ -322,8 +299,15 @@ async def simulate(source_ip: str, team: str = "red"):
     return {"simulated": True}
 
 # =========================================================
-# DASHBOARD ROUTE
+# ALERT HISTORY
 # =========================================================
+
+@app.get("/alerts")
+def alerts():
+    db = SessionLocal()
+    data = db.query(Alert).order_by(Alert.timestamp.desc()).all()
+    db.close()
+    return data
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
@@ -663,8 +647,7 @@ function createPulse(lat, lng, severity){
 }
 
 // 🎯 Precision investigation zoom
-function investigateLocation(lat, lng, label, country){
-
+function investigateLocation(lat, lng, intel){
 
   if(cameraBusy || recoveringCamera) return;
 
@@ -673,15 +656,34 @@ function investigateLocation(lat, lng, label, country){
 
   globe.controls().autoRotate = false;
 
-  // show location HUD
-  geoHUD.style.display = "block";
-  geoHUD.innerHTML =
-    "📍 " + (label || "Unknown Origin") +
-    "<br>Lat: " + lat.toFixed(2) +
-    " | Lng: " + lng.toFixed(2) +
-    (country ? "<br>" + country : "");
+  const flag = intel.country
+    ? String.fromCodePoint(...[...intel.country]
+        .map(c => 127397 + c.charCodeAt()))
+    : "";
 
-  // zoom to location
+  // build intelligence display
+  geoHUD.style.display = "block";
+  geoHUD.innerHTML = `
+    <div style="font-size:16px; color:#00ffff;">
+      📍 ${intel.label || "Unknown Origin"} ${flag}
+    </div>
+
+    <div style="margin-top:4px;">
+      Lat ${lat.toFixed(2)} | Lng ${lng.toFixed(2)}
+    </div>
+
+    ${intel.ip ? `<div>IP: ${intel.ip}</div>` : ""}
+
+    ${intel.isp ? `<div>ISP: ${intel.isp}</div>` : ""}
+
+    <div style="color:${intel.color}; font-weight:bold;">
+      ${intel.severity} • ${intel.technique}
+    </div>
+
+    ${intel.training ? `<div style="color:#ffaa00;">TRAINING EVENT</div>` : ""}
+  `;
+
+  // zoom to origin
   globe.pointOfView({ lat, lng, altitude: 0.9 }, 1400);
 
   // return to neutral
@@ -691,7 +693,7 @@ function investigateLocation(lat, lng, label, country){
 
   }, 1800);
 
-  // hide HUD + restore rotation
+  // restore rotation & hide HUD
   setTimeout(()=>{
 
     geoHUD.style.display = "none";
@@ -941,12 +943,16 @@ if (sev === "HIGH") {
   targetRotateSpeed = baseRotateSpeed + 0.12;
 
   // 🎯 zoom to investigate attack origin
-  investigateLocation(
-  lat,
-  lng,
-  alert.origin_label,
-  alert.country_code
-);
+investigateLocation(lat, lng, {
+  label: alert.origin_label,
+  country: alert.country_code,
+  ip: alert.source_ip,
+  isp: alert.isp,
+  severity: sev,
+  technique: alert.technique,
+  training: alert.training,
+  color: colors[sev]
+});
 }
 
 if (sev === "CRITICAL") {
