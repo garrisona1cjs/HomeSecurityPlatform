@@ -421,7 +421,7 @@ const globe = Globe()(document.getElementById('globeViz'))
 .arcStroke(() => 1.5);
 
 globe.controls().autoRotate = true;
-globe.controls().autoRotateSpeed = 0.35;
+globe.controls().autoRotateSpeed = 0.65;
 globe.controls().enableDamping = true;
 globe.controls().dampingFactor = 0.05;
 
@@ -501,6 +501,23 @@ let alertTimes = [];
 let lastVelocity = 0;
 let cameraBusy = false;
 let recoveringCamera = false;  
+
+// ===== Dynamic Rotation System =====
+let baseRotateSpeed = 0.65;
+let targetRotateSpeed = 0.65;
+let currentRotateSpeed = 0.65;
+
+// Smooth rotation controller
+setInterval(()=>{
+
+  if(cameraBusy || recoveringCamera) return;
+
+  // ease toward target speed
+  currentRotateSpeed += (targetRotateSpeed - currentRotateSpeed) * 0.08;
+
+  globe.controls().autoRotateSpeed = currentRotateSpeed;
+
+}, 40);
 
 function clusterAttack(lat, lng, severity){
 
@@ -593,6 +610,12 @@ function addAlert(alert){
 
  const sev=alert.severity;
  const color=colors[sev];
+
+ // adjust rotation intensity by severity
+if(sev === "LOW") targetRotateSpeed = baseRotateSpeed;
+if(sev === "MEDIUM") targetRotateSpeed = baseRotateSpeed + 0.05;
+if(sev === "HIGH") targetRotateSpeed = baseRotateSpeed + 0.12;
+if(sev === "CRITICAL") targetRotateSpeed = baseRotateSpeed + 0.22;
 
  counts[sev]++;
 
@@ -707,17 +730,21 @@ if(sev === "CRITICAL" && !cameraBusy){
 setTimeout(()=>{
 
   globe.controls().autoRotate = true;
+  targetRotateSpeed = baseRotateSpeed;
 
   // smooth ramp-up
+ // smooth ramp-up
   globe.controls().autoRotateSpeed = 0.2;
 
-  const ramp = setInterval(()=>{
+  if(window.rotationRamp) clearInterval(window.rotationRamp);
+
+  window.rotationRamp = setInterval(()=>{
     globe.controls().autoRotateSpeed += 0.05;
     if(globe.controls().autoRotateSpeed >= 0.65){
-      globe.controls().autoRotateSpeed = 0.65;
-      clearInterval(ramp);
-    }
-  }, 60);
+    globe.controls().autoRotateSpeed = 0.65;
+    clearInterval(window.rotationRamp);
+  }
+}, 60);
 
   recoveringCamera = false;
   cameraBusy = false;
@@ -772,6 +799,10 @@ if(alert.surge){
     surgeLevel = Math.max(0, surgeLevel - 2);
 }
 
+if(alert.surge){
+  targetRotateSpeed = baseRotateSpeed + 0.35;
+}
+
 const bar = document.getElementById("surgeBar");
 bar.style.width = surgeLevel + "%";
 
@@ -801,6 +832,11 @@ else if(surgeLevel > 40){
 else{
     bar.style.background = "#00ffff";
 }
+
+// gradually return to base speed after activity
+setTimeout(()=>{
+  targetRotateSpeed = baseRotateSpeed;
+}, 4000);
 
  render();
 }
