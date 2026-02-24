@@ -436,12 +436,38 @@ atmosphere.style.pointerEvents="none";
 atmosphere.style.boxShadow="inset 0 0 120px rgba(0,150,255,0.08)";
 document.body.appendChild(atmosphere);
 
+// 🛡 magnetic planetary shield layer
+const shield = document.createElement("div");
+shield.style.position = "absolute";
+shield.style.top = 0;
+shield.style.left = 0;
+shield.style.right = 0;
+shield.style.bottom = 0;
+shield.style.pointerEvents = "none";
+shield.style.opacity = "0.25";
+shield.style.mixBlendMode = "screen";
+shield.style.background =
+  "radial-gradient(circle at center, rgba(0,255,255,0.08), rgba(0,0,0,0) 60%)";
+document.body.appendChild(shield);
+
 // subtle breathing motion
 setInterval(()=>{
   atmosphere.style.boxShadow =
     "inset 0 0 " +
     (100 + Math.sin(Date.now()*0.002)*40) +
     "px rgba(0,150,255,0.08)";
+}, 60);
+
+// subtle magnetic flow shimmer
+setInterval(()=>{
+
+  const energy = 0.05 + Math.sin(Date.now()*0.002) * 0.02;
+
+  shield.style.background =
+    `radial-gradient(circle at center,
+      rgba(0,255,255,${energy}),
+      rgba(0,0,0,0) 60%)`;
+
 }, 60);
 
 // 🚨 surge grid overlay
@@ -925,6 +951,13 @@ if(sev === "CRITICAL" && !cameraBusy){
   rings.push({lat,lng,maxR:11});
   rings.push({lat,lng,maxR:14});
 
+ // planetary shield ripple pulse
+rings.push({
+  lat: 0,
+  lng: 0,
+  maxR: 120
+}); 
+
   // satellite pulse response
 satellites.forEach(s => {
   rings.push({
@@ -1004,45 +1037,68 @@ alertTimes.push(now);
 alertTimes = alertTimes.filter(t => now - t < 60000);
 
 const velocityDiv = document.getElementById("velocity");
-if(velocityDiv){
+if (velocityDiv) {
   velocityDiv.textContent = alertTimes.length + " / min";
 }
 
 // 🚨 anomaly spike detection
 const currentVelocity = alertTimes.length;
 
-if(currentVelocity > lastVelocity + 6){
+if (currentVelocity > lastVelocity + 6) {
   banner.innerHTML = "ANOMALOUS TRAFFIC";
-  banner.style.display="block";
-  setTimeout(()=>banner.style.display="none",1200);
+  banner.style.display = "block";
+  setTimeout(() => banner.style.display = "none", 1200);
 }
 
 lastVelocity = currentVelocity;
 
- // ===== SURGE METER =====
-if(alert.surge){
-    surgeLevel = Math.min(100, surgeLevel + 20);
+// ===== SURGE METER =====
+if (alert.surge) {
+  surgeLevel = Math.min(100, surgeLevel + 20);
 } else {
-    surgeLevel = Math.max(0, surgeLevel - 2);
+  surgeLevel = Math.max(0, surgeLevel - 2);
 }
 
-if(alert.surge){
+if (alert.surge) {
   targetRotateSpeed = baseRotateSpeed + 0.35;
 }
 
 const bar = document.getElementById("surgeBar");
 bar.style.width = surgeLevel + "%";
 
+// 🛡 shield strengthens with surge
+shield.style.opacity = Math.min(0.65, 0.25 + surgeLevel * 0.004);
+
 // 🚨 toggle surge grid
 surgeOverlay.style.opacity = surgeLevel > 60 ? 1 : 0;
 
-// 🚨 surge alert flash
-if(surgeLevel > 80){
+// 🚨 SURGE ALERT FLASH + SHIELD OVERLOAD
+if (surgeLevel > 80) {
+
+  shield.style.background =
+    "radial-gradient(circle at center, rgba(255,0,80,0.25), rgba(0,0,0,0) 65%)";
+
   banner.innerHTML = "SURGE EVENT";
-  banner.style.display="block";
-  setTimeout(()=>banner.style.display="none",1000);
+  banner.style.display = "block";
+
+  setTimeout(() => banner.style.display = "none", 1000);
+
+} else {
+
+  shield.style.background =
+    "radial-gradient(circle at center, rgba(0,255,255,0.08), rgba(0,0,0,0) 60%)";
 }
 
+// 🎚 SURGE BAR COLOR LOGIC
+if (surgeLevel > 70) {
+  bar.style.background = "#ff0033";
+}
+else if (surgeLevel > 40) {
+  bar.style.background = "#ffaa00";
+}
+else {
+  bar.style.background = "#00ffff";
+}
 // 🔥 pulse grid during surge
 if(surgeLevel > 60){
   surgeOverlay.style.backgroundSize =
