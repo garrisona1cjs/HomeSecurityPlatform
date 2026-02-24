@@ -405,6 +405,16 @@ transition:width .4s ease;
 
 <div id="ticker" class="panel"></div>
 
+<div id="geoHUD" class="panel" style="
+left:50%;
+bottom:50px;
+transform:translateX(-50%);
+font-size:14px;
+padding:6px 14px;
+display:none;
+text-align:center;">
+</div>
+
 <script>
 
 const globe = Globe()(document.getElementById('globeViz'))
@@ -570,6 +580,7 @@ animateStars();
 const banner = document.getElementById("banner");
 const feed = document.getElementById("feed");
 const ticker = document.getElementById("ticker");
+const geoHUD = document.getElementById("geoHUD");
 
 let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[], satellites=[], orbitRings=[];
 let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
@@ -652,17 +663,25 @@ function createPulse(lat, lng, severity){
 }
 
 // 🎯 Precision investigation zoom
-function investigateLocation(lat, lng){
+function investigateLocation(lat, lng, label, country){
 
-  // prevent conflict with cinematic zoom
+
   if(cameraBusy || recoveringCamera) return;
 
   cameraBusy = true;
 
-  // pause rotation
+
   globe.controls().autoRotate = false;
 
-  // zoom to origin
+  // show location HUD
+  geoHUD.style.display = "block";
+  geoHUD.innerHTML =
+    "📍 " + (label || "Unknown Origin") +
+    "<br>Lat: " + lat.toFixed(2) +
+    " | Lng: " + lng.toFixed(2) +
+    (country ? "<br>" + country : "");
+
+  // zoom to location
   globe.pointOfView({ lat, lng, altitude: 0.9 }, 1400);
 
   // return to neutral
@@ -672,8 +691,10 @@ function investigateLocation(lat, lng){
 
   }, 1800);
 
-  // smoothly restore rotation
+  // hide HUD + restore rotation
   setTimeout(()=>{
+
+    geoHUD.style.display = "none";
 
     globe.controls().autoRotate = true;
 
@@ -881,7 +902,7 @@ function addAlert(alert){
  if(isNaN(lat)||isNaN(lng)) return;
 
  const sev=alert.severity;
- 
+
 const color = colors[sev];
 
 
@@ -920,7 +941,12 @@ if (sev === "HIGH") {
   targetRotateSpeed = baseRotateSpeed + 0.12;
 
   // 🎯 zoom to investigate attack origin
-  investigateLocation(lat, lng);
+  investigateLocation(
+  lat,
+  lng,
+  alert.origin_label,
+  alert.country_code
+);
 }
 
 if (sev === "CRITICAL") {
