@@ -545,7 +545,7 @@ const banner = document.getElementById("banner");
 const feed = document.getElementById("feed");
 const ticker = document.getElementById("ticker");
 
-let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[];
+let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[];
 let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
 let surgeLevel = 0;
 
@@ -623,7 +623,42 @@ function createPulse(lat, lng, severity){
     pulses.splice(0,1);
   }, 2200);
 
+}
+
+  // 🌍 Threat Territory Zone Builder
+function updateTerritory(lat, lng, severity){
+
+  const radius = 5; // zone size
+  let found = false;
+
+  territories.forEach(zone => {
+
+    const d = Math.hypot(zone.lat - lat, zone.lng - lng);
+
+    if(d < radius){
+      zone.intensity +=
+        severity === "CRITICAL" ? 3 :
+        severity === "HIGH" ? 2 :
+        severity === "MEDIUM" ? 1 :
+        0.5;
+
+      found = true;
+    }
+  });
+
+  if(!found){
+    territories.push({
+      lat,
+      lng,
+      intensity: 1
+    });
   }
+
+  // decay over time
+  setTimeout(()=>{
+    territories.forEach(z => z.intensity *= 0.85);
+  }, 3000);
+}
 
 
 
@@ -650,10 +685,22 @@ function render(){
    .arcColor(d => d.color)
    .arcAltitude(d => 0.18);
 
- globe.pointsData(points)
-   .pointRadius('size')
-   .pointColor('color')
-   .pointAltitude(0.02);
+// 🌍 territory danger zones
+const zonePoints = territories.map(z => ({
+  lat: z.lat,
+  lng: z.lng,
+  size: Math.min(2.5, z.intensity * 0.4),
+  color:
+    z.intensity > 6 ? "#ff0033" :
+    z.intensity > 3 ? "#ff5500" :
+    "#ffaa00"
+}));
+
+// combine normal points + territory zones
+globe.pointsData(points.concat(zonePoints))
+  .pointRadius('size')
+  .pointColor('color')
+  .pointAltitude(0.02);
 
  globe.ringsData(rings.concat(pulses))
    .ringMaxRadius('maxR')
@@ -714,6 +761,7 @@ points.push({
 
 // swarm clustering
 clusterAttack(lat, lng, sev);
+updateTerritory(lat, lng, sev);
 
 // pulse wave expansion
 createPulse(lat, lng, sev);
@@ -802,30 +850,28 @@ if(sev === "CRITICAL" && !cameraBusy){
 
   }, 3500);
 
-// restart rotation AFTER camera settles
-setTimeout(()=>{
+  // restart rotation AFTER camera settles
+  setTimeout(()=>{
 
-  globe.controls().autoRotate = true;
-  targetRotateSpeed = baseRotateSpeed;
-  
+    globe.controls().autoRotate = true;
+    targetRotateSpeed = baseRotateSpeed;
 
-  globe.controls().autoRotateSpeed = 0.2;
+    globe.controls().autoRotateSpeed = 0.2;
 
-  if(window.rotationRamp) clearInterval(window.rotationRamp);
+    if(window.rotationRamp) clearInterval(window.rotationRamp);
 
-  window.rotationRamp = setInterval(()=>{
-    globe.controls().autoRotateSpeed += 0.05;
-    if(globe.controls().autoRotateSpeed >= 0.65){
-      globe.controls().autoRotateSpeed = 0.65;
-      clearInterval(window.rotationRamp);
-    }
-  }, 60);
+    window.rotationRamp = setInterval(()=>{
+      globe.controls().autoRotateSpeed += 0.05;
+      if(globe.controls().autoRotateSpeed >= 0.65){
+        globe.controls().autoRotateSpeed = 0.65;
+        clearInterval(window.rotationRamp);
+      }
+    }, 60);
 
-  recoveringCamera = false;
-  cameraBusy = false;
+    recoveringCamera = false;
+    cameraBusy = false;
 
-}, 6000);
-
+  }, 6000);
 }
 
 feed.innerHTML = alert.origin_label;
