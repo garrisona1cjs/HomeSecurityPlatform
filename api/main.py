@@ -580,30 +580,34 @@ setInterval(()=>{
 }, 40);
 
 function clusterAttack(lat, lng, severity){
-
-  const radius = 3; // degrees
+  const radius = 3;
   let found = false;
 
   clusters.forEach(c => {
     const d = Math.hypot(c.lat - lat, c.lng - lng);
+    
     if(d < radius){
       c.count++;
       found = true;
 
-      // grow cluster glow
-points.push({
-  lat: c.lat,
-  lng: c.lng,
-  size: 0.6 + c.count * 0.15,
-  color:
-    c.count > 5 ? "#ff0033" :
-    c.count > 3 ? "#ff5500" :
-    "#ffaa00"
-        });
+      points.push({
+        lat: c.lat,
+        lng: c.lng,
+        size: 0.6 + c.count * 0.15,
+        color:
+          c.count > 5 ? "#ff0033" :
+          c.count > 3 ? "#ff5500" :
+          "#ffaa00"
+      });
     }
   });
 
-  // 🌍 Threat Pulse Wave Generator
+  if(!found){
+    clusters.push({ lat, lng, count: 1 });
+  }
+}
+
+// 🌍 Threat Pulse Wave Generator
 function createPulse(lat, lng, severity){
 
   const strength =
@@ -612,22 +616,15 @@ function createPulse(lat, lng, severity){
     severity === "MEDIUM" ? 10 :
     6;
 
-  pulses.push({
-    lat,
-    lng,
-    maxR: strength
-  });
+  pulses.push({ lat, lng, maxR: strength });
 
-  // remove after animation completes
+
   setTimeout(()=>{
-    pulses.shift();
+    pulses.splice(0,1);
   }, 2200);
-}
 
-  if(!found){
-    clusters.push({ lat, lng, count: 1 });
-  }
-}
+
+
 
 const colors={
  LOW:"#00ffff",
@@ -656,7 +653,7 @@ function render(){
    .pointColor('color')
    .pointAltitude(0.02);
 
- globe.ringsData(rings.concat(pulses));
+ globe.ringsData(rings.concat(pulses))
    .ringMaxRadius('maxR')
    .ringPropagationSpeed(3)
    .ringRepeatPeriod(900);
@@ -709,29 +706,24 @@ if(sev === "CRITICAL") targetRotateSpeed = baseRotateSpeed + 0.22;
 points.push({
   lat,
   lng,
-  size:
-    sev==="CRITICAL" ? 1.0 :
-    sev==="HIGH" ? 0.8 :
-    sev==="MEDIUM" ? 0.6 :
-    0.45,
+  size: 0.8,
   color
 });
 
 // swarm clustering
 clusterAttack(lat, lng, sev);
+
+// pulse wave expansion
 createPulse(lat, lng, sev);
 
- // neon beam trail
- arcs.push({
-   startLat:lat,startLng:lng,
-   endLat:41.59,endLng:-93.62,
-   color:[color,color],
-   stroke:
-    sev==="CRITICAL"?4:
-    sev==="HIGH"?3:
-    sev==="MEDIUM"?2:
-    1.2
- });
+// neon beam trail
+arcs.push({
+  startLat: lat,
+  startLng: lng,
+  endLat: 41.59,
+  endLng: -93.62,
+  color: [color, color]
+});
 
  // impact flash at SOC
 rings.push({
