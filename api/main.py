@@ -545,7 +545,7 @@ const banner = document.getElementById("banner");
 const feed = document.getElementById("feed");
 const ticker = document.getElementById("ticker");
 
-let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[];
+let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[];
 let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
 let surgeLevel = 0;
 
@@ -572,7 +572,7 @@ setInterval(()=>{
 
   // subtle starfield parallax shift
   stars.forEach(s => {
-  s.x -= currentRotateSpeed * 0.15 * s.depth;
+  s.x -= currentRotateSpeed * 0.05 * s.depth;
 });
 
   globe.controls().autoRotateSpeed = currentRotateSpeed;
@@ -602,6 +602,27 @@ points.push({
         });
     }
   });
+
+  // 🌍 Threat Pulse Wave Generator
+function createPulse(lat, lng, severity){
+
+  const strength =
+    severity === "CRITICAL" ? 18 :
+    severity === "HIGH" ? 14 :
+    severity === "MEDIUM" ? 10 :
+    6;
+
+  pulses.push({
+    lat,
+    lng,
+    maxR: strength
+  });
+
+  // remove after animation completes
+  setTimeout(()=>{
+    pulses.shift();
+  }, 2200);
+}
 
   if(!found){
     clusters.push({ lat, lng, count: 1 });
@@ -635,7 +656,7 @@ function render(){
    .pointColor('color')
    .pointAltitude(0.02);
 
- globe.ringsData(rings)
+ globe.ringsData(rings.concat(pulses));
    .ringMaxRadius('maxR')
    .ringPropagationSpeed(3)
    .ringRepeatPeriod(900);
@@ -698,6 +719,7 @@ points.push({
 
 // swarm clustering
 clusterAttack(lat, lng, sev);
+createPulse(lat, lng, sev);
 
  // neon beam trail
  arcs.push({
