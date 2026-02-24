@@ -724,6 +724,8 @@ setTimeout(()=>{
 
 }, 6000);
 
+}
+
 feed.innerHTML = alert.origin_label;
 ticker.innerHTML = sev + " • " + alert.technique;
 
