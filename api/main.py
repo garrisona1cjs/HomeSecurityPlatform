@@ -585,7 +585,7 @@ function clusterAttack(lat, lng, severity){
 
   clusters.forEach(c => {
     const d = Math.hypot(c.lat - lat, c.lng - lng);
-    
+
     if(d < radius){
       c.count++;
       found = true;
@@ -622,6 +622,8 @@ function createPulse(lat, lng, severity){
   setTimeout(()=>{
     pulses.splice(0,1);
   }, 2200);
+
+  }
 
 
 
@@ -805,9 +807,8 @@ setTimeout(()=>{
 
   globe.controls().autoRotate = true;
   targetRotateSpeed = baseRotateSpeed;
+  
 
-  // smooth ramp-up
- // smooth ramp-up
   globe.controls().autoRotateSpeed = 0.2;
 
   if(window.rotationRamp) clearInterval(window.rotationRamp);
@@ -815,10 +816,10 @@ setTimeout(()=>{
   window.rotationRamp = setInterval(()=>{
     globe.controls().autoRotateSpeed += 0.05;
     if(globe.controls().autoRotateSpeed >= 0.65){
-    globe.controls().autoRotateSpeed = 0.65;
-    clearInterval(window.rotationRamp);
-  }
-}, 60);
+      globe.controls().autoRotateSpeed = 0.65;
+      clearInterval(window.rotationRamp);
+    }
+  }, 60);
 
   recoveringCamera = false;
   cameraBusy = false;
