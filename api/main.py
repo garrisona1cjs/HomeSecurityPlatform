@@ -484,7 +484,62 @@ sweepCone.style.pointerEvents = "none";
 
 document.body.appendChild(sweepCone);
 
+// 🌌 PARALLAX STARFIELD BACKGROUND
+const starCanvas = document.createElement("canvas");
+starCanvas.style.position = "absolute";
+starCanvas.style.top = 0;
+starCanvas.style.left = 0;
+starCanvas.style.pointerEvents = "none";
+starCanvas.style.zIndex = "-1";
+document.body.appendChild(starCanvas);
 
+const starCtx = starCanvas.getContext("2d");
+
+function resizeStars(){
+  starCanvas.width = window.innerWidth;
+  starCanvas.height = window.innerHeight;
+}
+resizeStars();
+window.addEventListener("resize", resizeStars);
+
+const stars = [];
+const STAR_COUNT = 260;
+
+for(let i=0;i<STAR_COUNT;i++){
+  stars.push({
+    x: Math.random()*window.innerWidth,
+    y: Math.random()*window.innerHeight,
+    size: Math.random()*1.6,
+    depth: Math.random()*0.8 + 0.2,
+    twinkle: Math.random()*Math.PI
+  });
+}
+
+function animateStars(){
+  starCtx.clearRect(0,0,starCanvas.width,starCanvas.height);
+
+  const drift = Date.now() * 0.00002;
+
+  stars.forEach(s => {
+
+    // parallax drift
+    s.x -= drift * s.depth;
+
+    if(s.x < 0) s.x = starCanvas.width;
+
+    // twinkle brightness
+    const brightness = 0.6 + Math.sin(Date.now()*0.002 + s.twinkle)*0.4;
+
+    starCtx.beginPath();
+    starCtx.arc(s.x, s.y, s.size, 0, Math.PI*2);
+    starCtx.fillStyle = `rgba(180,220,255,${brightness})`;
+    starCtx.fill();
+  });
+
+  requestAnimationFrame(animateStars);
+}
+
+animateStars();
 
 const banner = document.getElementById("banner");
 const feed = document.getElementById("feed");
@@ -514,6 +569,11 @@ setInterval(()=>{
 
   // ease toward target speed
   currentRotateSpeed += (targetRotateSpeed - currentRotateSpeed) * 0.08;
+
+  // subtle starfield parallax shift
+  stars.forEach(s => {
+  s.x -= currentRotateSpeed * 0.15 * s.depth;
+});
 
   globe.controls().autoRotateSpeed = currentRotateSpeed;
 
