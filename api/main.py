@@ -713,8 +713,8 @@ setTimeout(()=>{
 
   const ramp = setInterval(()=>{
     globe.controls().autoRotateSpeed += 0.05;
-    if(globe.controls().autoRotateSpeed >= 0.55){
-      globe.controls().autoRotateSpeed = 0.55;
+    if(globe.controls().autoRotateSpeed >= 0.65){
+      globe.controls().autoRotateSpeed = 0.65;
       clearInterval(ramp);
     }
   }, 60);
