@@ -545,7 +545,7 @@ const banner = document.getElementById("banner");
 const feed = document.getElementById("feed");
 const ticker = document.getElementById("ticker");
 
-let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[];
+let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[], satellites=[];
 let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
 let surgeLevel = 0;
 
@@ -660,6 +660,23 @@ function updateTerritory(lat, lng, severity){
   }, 3000);
 }
 
+// 🛰 orbital satellite network
+function initSatellites(){
+
+  const ORBIT_COUNT = 6;
+
+  for(let i=0;i<ORBIT_COUNT;i++){
+    satellites.push({
+      angle: Math.random() * Math.PI * 2,
+      altitude: 1.35 + Math.random()*0.25,
+      speed: 0.002 + Math.random()*0.002,
+      latOffset: Math.random()*40 - 20
+    });
+  }
+}
+
+initSatellites();
+
 
 
 
@@ -696,8 +713,22 @@ const zonePoints = territories.map(z => ({
     "#ffaa00"
 }));
 
-// combine normal points + territory zones
-globe.pointsData(points.concat(zonePoints))
+
+// 🛰 update satellite positions
+const satellitePoints = satellites.map(s => {
+
+  s.angle += s.speed;
+
+  return {
+    lat: Math.sin(s.angle) * 50 + s.latOffset,
+    lng: s.angle * 57.3,
+    size: 0.35,
+    color: "#00ffff"
+  };
+});
+
+// combine all points
+globe.pointsData(points.concat(zonePoints, satellitePoints))
   .pointRadius('size')
   .pointColor('color')
   .pointAltitude(0.02);
@@ -737,6 +768,14 @@ function addAlert(alert){
 
  const sev=alert.severity;
  const color=colors[sev];
+
+ // 🛰 satellites react to threats
+satellites.forEach(s => {
+  s.speed += sev === "CRITICAL" ? 0.004 :
+             sev === "HIGH" ? 0.002 : 0;
+
+  setTimeout(()=> s.speed *= 0.98, 2000);
+});
 
  // adjust rotation intensity by severity
 if(sev === "LOW") targetRotateSpeed = baseRotateSpeed;
@@ -832,6 +871,15 @@ if(sev === "CRITICAL" && !cameraBusy){
   rings.push({lat,lng,maxR:8});
   rings.push({lat,lng,maxR:11});
   rings.push({lat,lng,maxR:14});
+
+  // satellite pulse response
+satellites.forEach(s => {
+  rings.push({
+    lat: Math.sin(s.angle)*50 + s.latOffset,
+    lng: s.angle * 57.3,
+    maxR: 5
+  });
+});
 
   // stop rotation
   globe.controls().autoRotate = false;
