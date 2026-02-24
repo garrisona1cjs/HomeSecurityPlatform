@@ -545,7 +545,7 @@ const banner = document.getElementById("banner");
 const feed = document.getElementById("feed");
 const ticker = document.getElementById("ticker");
 
-let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[], satellites=[];
+let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[], satellites=[], orbitRings=[];
 let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
 let surgeLevel = 0;
 
@@ -677,6 +677,25 @@ function initSatellites(){
 
 initSatellites();
 
+// 🛰 create orbital defense rings
+function initOrbitRings(){
+
+  const ringCount = 3;
+
+  for(let i=0;i<ringCount;i++){
+    orbitRings.push({
+      angle: Math.random() * Math.PI * 2,
+      tilt: Math.random() * 60 - 30,
+      altitude: 1.15 + i * 0.1,
+      speed: 0.0008 + i * 0.0003
+    });
+  }
+}
+
+initOrbitRings();
+
+
+
 
 
 
@@ -713,6 +732,29 @@ const zonePoints = territories.map(z => ({
     "#ffaa00"
 }));
 
+// 🛰 orbital defense rings
+const ringPaths = orbitRings.map(r => {
+
+  r.angle += r.speed;
+
+  const points = [];
+
+  for(let a=0; a<=360; a+=5){
+    const rad = (a + r.angle * 57) * Math.PI / 180;
+
+    points.push([
+      Math.sin(rad) * (90 - r.tilt),
+      a,
+      r.altitude
+    ]);
+  }
+
+  return {
+    points,
+    color: "rgba(0,255,255,0.55)"
+  };
+});
+
 
 // 🛰 update satellite positions
 const satellitePoints = satellites.map(s => {
@@ -746,9 +788,12 @@ globe.pointsData(points.concat(zonePoints, satellitePoints))
 // fade old packet trails
 packets = packets.filter(p => Date.now() - p.created < 8000);
 
-globe.pathsData(packets)
+globe.pathsData([
+  ...packets,
+  ...ringPaths
+])
   .pathPoints('points')
-  .pathColor(()=>"#00ffff")
+  .pathColor(d => d.color || "#00ffff")
   .pathDashLength(0.4)
   .pathDashAnimateTime(600);
 
@@ -775,6 +820,14 @@ satellites.forEach(s => {
              sev === "HIGH" ? 0.002 : 0;
 
   setTimeout(()=> s.speed *= 0.98, 2000);
+});
+
+// 🛰 defense rings react to attacks
+orbitRings.forEach(r => {
+  r.speed += sev === "CRITICAL" ? 0.002 :
+             sev === "HIGH" ? 0.001 : 0;
+
+  setTimeout(()=> r.speed *= 0.9, 2500);
 });
 
  // adjust rotation intensity by severity
@@ -879,6 +932,11 @@ satellites.forEach(s => {
     lng: s.angle * 57.3,
     maxR: 5
   });
+});
+
+// shield flash effect
+orbitRings.forEach(r => {
+  r.speed += 0.004;
 });
 
   // stop rotation
