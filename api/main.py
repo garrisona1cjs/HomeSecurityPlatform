@@ -651,6 +651,49 @@ function createPulse(lat, lng, severity){
 
 }
 
+// 🎯 Precision investigation zoom
+function investigateLocation(lat, lng){
+
+  // prevent conflict with cinematic zoom
+  if(cameraBusy || recoveringCamera) return;
+
+  cameraBusy = true;
+
+  // pause rotation
+  globe.controls().autoRotate = false;
+
+  // zoom to origin
+  globe.pointOfView({ lat, lng, altitude: 0.9 }, 1400);
+
+  // return to neutral
+  setTimeout(()=>{
+
+    globe.pointOfView({ lat: 20, lng: 0, altitude: 2.3 }, 1800);
+
+  }, 1800);
+
+  // smoothly restore rotation
+  setTimeout(()=>{
+
+    globe.controls().autoRotate = true;
+
+    globe.controls().autoRotateSpeed = 0.2;
+
+    if(window.rotationRamp) clearInterval(window.rotationRamp);
+
+    window.rotationRamp = setInterval(()=>{
+      globe.controls().autoRotateSpeed += 0.05;
+      if(globe.controls().autoRotateSpeed >= baseRotateSpeed){
+        globe.controls().autoRotateSpeed = baseRotateSpeed;
+        clearInterval(window.rotationRamp);
+      }
+    }, 60);
+
+    cameraBusy = false;
+
+  }, 3600);
+}
+
   // 🌍 Threat Territory Zone Builder
 function updateTerritory(lat, lng, severity){
 
@@ -838,14 +881,16 @@ function addAlert(alert){
  if(isNaN(lat)||isNaN(lng)) return;
 
  const sev=alert.severity;
- const color=colors[sev];
+ 
+const color = colors[sev];
 
- // 🛰 satellites react to threats
+
+// 🛰 satellites react to threats
 satellites.forEach(s => {
   s.speed += sev === "CRITICAL" ? 0.004 :
              sev === "HIGH" ? 0.002 : 0;
 
-  setTimeout(()=> s.speed *= 0.98, 2000);
+  setTimeout(() => s.speed *= 0.98, 2000);
 });
 
 // 🛰 defense rings react to attacks
@@ -853,15 +898,35 @@ orbitRings.forEach(r => {
   r.speed += sev === "CRITICAL" ? 0.002 :
              sev === "HIGH" ? 0.001 : 0;
 
-  setTimeout(()=> r.speed *= 0.9, 2500);
+  setTimeout(() => r.speed *= 0.9, 2500);
 });
 
- // adjust rotation intensity by severity
-if(sev === "LOW") targetRotateSpeed = baseRotateSpeed;
-if(sev === "MEDIUM") targetRotateSpeed = baseRotateSpeed + 0.05;
-if(sev === "HIGH") targetRotateSpeed = baseRotateSpeed + 0.12;
-if(sev === "CRITICAL") targetRotateSpeed = baseRotateSpeed + 0.22;
 
+// 🎛 rotation intensity + investigation logic
+if (sev === "LOW") {
+  targetRotateSpeed = baseRotateSpeed;
+}
+
+if (sev === "MEDIUM") {
+  targetRotateSpeed = baseRotateSpeed + 0.05;
+
+  // occasional investigation zoom
+  if (Math.random() < 0.35) {
+    investigateLocation(lat, lng);
+  }
+}
+
+if (sev === "HIGH") {
+  targetRotateSpeed = baseRotateSpeed + 0.12;
+
+  // 🎯 zoom to investigate attack origin
+  investigateLocation(lat, lng);
+}
+
+if (sev === "CRITICAL") {
+  targetRotateSpeed = baseRotateSpeed + 0.22;
+  // cinematic zoom handled later
+}
  counts[sev]++;
 
  document.getElementById("low").textContent = counts.LOW;
