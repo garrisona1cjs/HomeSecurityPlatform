@@ -8,4 +8,6 @@ psycopg2-binary
 sqlalchemy
 mac-vendor-lookup
 geoip2
+ipwhois
+websockets
 
