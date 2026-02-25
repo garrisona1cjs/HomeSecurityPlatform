@@ -15,11 +15,13 @@ const severityColors = {
 
 
 let originIntensity = {};
-
+let activeOrigins = {};
 let attackCount = 0;
 let defensePressure = 0;
 let heatZones = {};
-let shieldDomeLayer = null;
+let recentTargets = [];
+let lastDrawTime = 0;
+let escalationLevel = 0;
 
 
 // ================================
@@ -57,6 +59,14 @@ function updateAttackCounter() {
     }
 
     counter.innerHTML = "⚡ ATTACKS: " + attackCount;
+}
+
+function updateEscalationLevel() {
+
+    if (attackCount > 50) escalationLevel = 3;
+    else if (attackCount > 20) escalationLevel = 2;
+    else if (attackCount > 8) escalationLevel = 1;
+
 }
 
 
@@ -221,7 +231,7 @@ function createShieldRipple(map, location, severity) {
 // ⚡ INTERCEPT BEAM
 // ================================
 function createInterceptBeam(map, from, to, severity) {
-    
+
 
 
     const beam = L.polyline([from, to], {
@@ -324,6 +334,13 @@ function globalDefensePulse(map){
 // ================================
 function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
 
+    // ================================
+    // ⚡ PERFORMANCE THROTTLE
+    // ================================
+    const now = Date.now();
+    if (now - lastDrawTime < 60) return;
+    lastDrawTime = now;
+
 
     if (!window.shieldDomeInitialized) {
         shieldDomeLayer = L.circle(toCoords,{
@@ -343,13 +360,48 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     attackCount++;
     defensePressure++;
     updateAttackCounter();
+    updateEscalationLevel();
+
+    // ================================
+    // ⭐ CINEMATIC ESCALATION LEVEL
+    // ================================
+    if (defensePressure > 12) escalationLevel = 3;
+    else if (defensePressure > 6) escalationLevel = 2;
+    else escalationLevel = 1;
 
 
     createOriginPulse(map, fromCoords);
     createCountryAura(map, fromCoords);
     updateHeatZone(map, fromCoords);
+    detectThreatCluster(map, fromCoords);
+
+    // ================================
+    // 🌍 THREAT CLUSTER DETECTION
+    // ================================
+    function detectThreatCluster(map, location) {
+
+        const key = location.toString();
+
+        if (heatZones[key] >= 4) {
+
+            const cluster = L.circle(location, {
+                radius: 120000,
+                color: "#ff3300",
+                weight: 1,
+                opacity: 0.4,
+                fillColor: "#ff3300",
+                fillOpacity: 0.15
+            }).addTo(map);
+
+            setTimeout(() => map.removeLayer(cluster), 2500);
+        }
+    }
 
     const color = severityColors[severity] || "#00ffff";
+
+    // track recent targets
+    recentTargets.push(toCoords);
+    if (recentTargets.length > 5) recentTargets.shift();
 
     const beam = L.polyline([fromCoords,toCoords],{
         color,
@@ -368,6 +420,17 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
             }
         }
 
+        // ================================
+        // ⭐ ESCALATION VISUAL RESPONSE
+        // ================================
+        if (escalationLevel >= 2) {
+            orbitalPulse(map, toCoords);
+        }
+
+        if (escalationLevel === 3) {
+            globalDefensePulse(map);
+        }
+
         createImpactFlash(map, fromCoords, "#ff0033");
 
         if (!window.lastGlobalPulse || Date.now()-window.lastGlobalPulse>1500){
@@ -379,10 +442,39 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
         orbitalPulse(map,toCoords);
         satelliteLock(map,toCoords);
 
-        if(shieldDomeLayer){
-            const domeCenter = shieldDomeLayer.getLatLng();
-            createInterceptBeam(map,domeCenter,toCoords,severity);
-        }
+        defenseResponseDelay(() => {
+        multiIntercept(map, recentTargets, severity);
+        }, severity);
+    }
+
+    // ================================
+    // 🤖 AI RESPONSE DELAY
+    // ================================
+    function defenseResponseDelay(callback, severity) {
+
+        const delay =
+            severity === "critical" ? 80 :
+            severity === "high" ? 160 :
+            severity === "medium" ? 260 :
+            340;
+
+        setTimeout(callback, delay);
+    }
+
+    // ================================
+    // 🛰 MULTI TARGET INTERCEPTION
+    // ================================
+    function multiIntercept(map, targets, severity) {
+
+        if (!shieldDomeLayer) return;
+
+        const domeCenter = shieldDomeLayer.getLatLng();
+
+        targets.forEach((target, i) => {
+            setTimeout(() => {
+                createInterceptBeam(map, domeCenter, target, severity);
+            }, i * 120); // stagger fire
+        });
     }
 
     animatePacket(map, fromCoords, toCoords, color);
