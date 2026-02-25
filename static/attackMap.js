@@ -279,6 +279,37 @@ function createShieldDome(map, location) {
     pulse();
 }
 
+// ================================
+// 🛡️ DOME INTENSITY RESPONSE
+// ================================
+function intensifyShieldDome(severity) {
+
+    if (!shieldDomeLayer) return;
+
+    let glowBoost = 0.12;
+    let weightBoost = 1;
+
+    if (severity === "critical") {
+        glowBoost = 0.35;
+        weightBoost = 3;
+    }
+
+    shieldDomeLayer.setStyle({
+        opacity: shieldDomeLayer.baseOpacity + glowBoost,
+        fillOpacity: shieldDomeLayer.baseFill + glowBoost,
+        weight: shieldDomeLayer.baseWeight + weightBoost
+    });
+
+    // return to normal after pulse
+    setTimeout(() => {
+        shieldDomeLayer.setStyle({
+            opacity: shieldDomeLayer.baseOpacity,
+            fillOpacity: shieldDomeLayer.baseFill,
+            weight: shieldDomeLayer.baseWeight
+        });
+    }, severity === "critical" ? 1400 : 700);
+}
+
 
 // ================================
 // ⚠️ CRITICAL PULSE
@@ -316,6 +347,8 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
 
     attackCount++;
     updateAttackCounter();
+    // 🛡 dome reacts to incoming attack
+    intensifyShieldDome(severity);
 
     createOriginPulse(map, fromCoords);
     createCountryAura(map, fromCoords);
