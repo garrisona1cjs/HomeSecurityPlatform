@@ -266,6 +266,12 @@ function pulseBeam(line) {
 // ================================
 function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
 
+    // 🛡 Ensure protected zone dome exists
+    if (!window.shieldDomeInitialized) {
+        createShieldDome(map, toCoords);
+        window.shieldDomeInitialized = true;
+    }
+
     const color = severityColors[severity] || "#00ffff";
 
     attackCount++;
@@ -338,3 +344,4 @@ if (severity === "critical" && soundEnabled) {
 createBeamTrail(map, fromCoords, toCoords, color);
 
 }
+
