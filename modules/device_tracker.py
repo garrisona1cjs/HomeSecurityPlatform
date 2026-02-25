@@ -117,7 +117,16 @@ def detect_new_devices(current_devices: list[dict]) -> list[dict]:
                 stored["vendor_warned"] = True
                 changed = True
 
-        stored["risk_score"] = calculate_risk(stored, correlated)
+        risk_score, threat_tags = calculate_risk(stored, correlated)
+
+        stored["risk_score"] = risk_score
+        stored["threat_tags"] = threat_tags
+
+        # Escalate incident for malicious infrastructure
+        if "malicious_asn" in threat_tags and not stored.get("malicious_flagged"):
+             open_incident(ip, "CRITICAL", "Malicious ASN detected")
+             add_event(ip, "Incident opened (malicious ASN)")
+             stored["malicious_flagged"] = True
 
         if not is_safe_mode():
             record_risk_snapshot(ip, stored["risk_score"])
