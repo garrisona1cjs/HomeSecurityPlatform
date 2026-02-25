@@ -170,6 +170,39 @@ function createShieldImpact(map, location) {
     animate();
 }
 
+// ================================
+// 🛡️ SHIELD ENERGY RIPPLE
+// ================================
+function createShieldRipple(map, location, severity) {
+
+    const ripple = L.circle(location, {
+        radius: 20000,
+        color: "#00e6ff",
+        weight: severity === "critical" ? 3 : 2,
+        opacity: 0.6,
+        fillOpacity: 0
+    }).addTo(map);
+
+    let radius = 20000;
+    let opacity = 0.6;
+
+    function animate() {
+        radius += severity === "critical" ? 26000 : 18000;
+        opacity -= 0.05;
+
+        ripple.setRadius(radius);
+        ripple.setStyle({ opacity });
+
+        if (opacity > 0) {
+            requestAnimationFrame(animate);
+        } else {
+            map.removeLayer(ripple);
+        }
+    }
+
+    animate();
+}
+
 
 // ================================
 // ⚡ PACKET MOVEMENT
@@ -353,8 +386,8 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     createOriginPulse(map, fromCoords);
     createCountryAura(map, fromCoords);
 
- // rate-limit critical alert sound
-if (severity === "critical" && soundEnabled) {
+    // rate-limit critical alert sound
+    if (severity === "critical" && soundEnabled) {
 
     const now = Date.now();
 
@@ -414,7 +447,7 @@ if (severity === "critical" && soundEnabled) {
     createShieldImpact(map, toCoords);
 }
 
-createBeamTrail(map, fromCoords, toCoords, color);
+    createBeamTrail(map, fromCoords, toCoords, color);
 
 }
 
