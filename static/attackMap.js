@@ -227,6 +227,36 @@ function createShieldRipple(map, location, severity) {
     animate();
 }
 
+// ================================
+// ⚡ DEFENSE INTERCEPT BEAM
+// ================================
+function createInterceptBeam(map, from, to, severity) {
+
+    const color = severity === "critical" ? "#00ffff" : "#66ffff";
+
+    const beam = L.polyline([from, to], {
+        color: color,
+        weight: severity === "critical" ? 3 : 2,
+        opacity: 0.9,
+        dashArray: "6,8"
+    }).addTo(map);
+
+    let opacity = 0.9;
+
+    function fade() {
+        opacity -= 0.05;
+        beam.setStyle({ opacity });
+
+        if (opacity > 0) {
+            requestAnimationFrame(fade);
+        } else {
+            map.removeLayer(beam);
+        }
+    }
+
+    fade();
+}
+
 
 // ================================
 // ⚡ PACKET MOVEMENT
@@ -469,7 +499,14 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
 
     // 🛡️ Shield reacts to critical impacts
     if (severity === "critical") {
-    createShieldImpact(map, toCoords);
+        createShieldImpact(map, toCoords);
+        orbitalPulse(map, toCoords);
+
+        // ⚡ defensive intercept beam from dome
+        if (shieldDomeLayer) {
+            const domeCenter = shieldDomeLayer.getLatLng();
+            createInterceptBeam(map, domeCenter, toCoords, severity);
+    }
 }
     // 🛡 energy ripple through defense grid
     createShieldRipple(map, toCoords, severity);
@@ -478,4 +515,12 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     createBeamTrail(map, fromCoords, toCoords, color);
 
 }
+
+
+
+
+
+
+
+
 
