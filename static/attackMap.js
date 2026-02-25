@@ -13,11 +13,13 @@ const severityColors = {
     low: "#00ccff"
 };
 
-// track origin activity intensity
+
 let originIntensity = {};
-let activeOrigins = {};
+
 let attackCount = 0;
+let defensePressure = 0;
 let heatZones = {};
+let shieldDomeLayer = null;
 
 
 // ================================
@@ -28,14 +30,8 @@ criticalSound.volume = 0.3;
 
 let soundEnabled = false;
 
-// enable audio after first user interaction
-document.addEventListener("click", () => {
-    soundEnabled = true;
-}, { once: true });
-
-document.addEventListener("keydown", () => {
-    soundEnabled = true;
-}, { once: true });
+document.addEventListener("click", () => soundEnabled = true, { once: true });
+document.addEventListener("keydown", () => soundEnabled = true, { once: true });
 
 
 // ================================
@@ -48,15 +44,15 @@ function updateAttackCounter() {
     if (!counter) {
         counter = document.createElement("div");
         counter.id = "attackCounter";
-
-        counter.style.position = "absolute";
-        counter.style.top = "10px";
-        counter.style.right = "15px";
-        counter.style.color = "#00ffff";
-        counter.style.fontFamily = "monospace";
-        counter.style.fontSize = "18px";
-        counter.style.zIndex = "999";
-
+        counter.style.cssText = `
+            position:absolute;
+            top:10px;
+            right:15px;
+            color:#00ffff;
+            font-family:monospace;
+            font-size:18px;
+            z-index:999;
+        `;
         document.body.appendChild(counter);
     }
 
@@ -70,9 +66,7 @@ function updateAttackCounter() {
 function createOriginPulse(map, location) {
 
     const key = location.toString();
-
-    if (!originIntensity[key]) originIntensity[key] = 1;
-    else originIntensity[key]++;
+    originIntensity[key] = (originIntensity[key] || 0) + 1;
 
     const intensity = Math.min(originIntensity[key], 8);
 
@@ -91,7 +85,7 @@ function createOriginPulse(map, location) {
 
 
 // ================================
-// 🌍 COUNTRY AURA EFFECT
+// 🌍 COUNTRY AURA
 // ================================
 function createCountryAura(map, location) {
 
@@ -106,15 +100,14 @@ function createCountryAura(map, location) {
     setTimeout(() => map.removeLayer(aura), 2000);
 }
 
+
 // ================================
-// 🌍 HEATMAP ENERGY GRID
+// 🌍 HEAT ZONE
 // ================================
 function updateHeatZone(map, location) {
 
     const key = location.toString();
-
-    if (!heatZones[key]) heatZones[key] = 1;
-    else heatZones[key]++;
+    heatZones[key] = (heatZones[key] || 0) + 1;
 
     const intensity = Math.min(heatZones[key], 6);
 
@@ -137,31 +130,32 @@ function createImpactFlash(map, location, color) {
 
     const ring = L.circle(location, {
         radius: 20000,
-        color: color,
+        color,
         weight: 2,
         opacity: 0.7,
         fillOpacity: 0
     }).addTo(map);
 
     let radius = 20000;
+    let opacity = 0.7;
 
     function animate() {
         radius += 16000;
-        ring.setRadius(radius);
-        ring.setStyle({ opacity: ring.options.opacity - 0.05 });
+        opacity -= 0.05;
 
-        if (ring.options.opacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            map.removeLayer(ring);
-        }
+        ring.setRadius(radius);
+        ring.setStyle({ opacity });
+
+        if (opacity > 0) requestAnimationFrame(animate);
+        else map.removeLayer(ring);
     }
 
     animate();
 }
 
+
 // ================================
-// 🛡️ DEFENSIVE SHIELD REACTION
+// 🛡 SHIELD IMPACT
 // ================================
 function createShieldImpact(map, location) {
 
@@ -184,18 +178,16 @@ function createShieldImpact(map, location) {
         shield.setRadius(radius);
         shield.setStyle({ opacity });
 
-        if (opacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            map.removeLayer(shield);
-        }
+        if (opacity > 0) requestAnimationFrame(animate);
+        else map.removeLayer(shield);
     }
 
     animate();
 }
 
+
 // ================================
-// 🛡️ SHIELD ENERGY RIPPLE
+// 🛡 SHIELD RIPPLE
 // ================================
 function createShieldRipple(map, location, severity) {
 
@@ -217,25 +209,23 @@ function createShieldRipple(map, location, severity) {
         ripple.setRadius(radius);
         ripple.setStyle({ opacity });
 
-        if (opacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            map.removeLayer(ripple);
-        }
+        if (opacity > 0) requestAnimationFrame(animate);
+        else map.removeLayer(ripple);
     }
 
     animate();
 }
 
+
 // ================================
-// ⚡ DEFENSE INTERCEPT BEAM
+// ⚡ INTERCEPT BEAM
 // ================================
 function createInterceptBeam(map, from, to, severity) {
+    
 
-    const color = severity === "critical" ? "#00ffff" : "#66ffff";
 
     const beam = L.polyline([from, to], {
-        color: color,
+        color: "#00ffff",
         weight: severity === "critical" ? 3 : 2,
         opacity: 0.9,
         dashArray: "6,8"
@@ -246,12 +236,8 @@ function createInterceptBeam(map, from, to, severity) {
     function fade() {
         opacity -= 0.05;
         beam.setStyle({ opacity });
-
-        if (opacity > 0) {
-            requestAnimationFrame(fade);
-        } else {
-            map.removeLayer(beam);
-        }
+        if (opacity > 0) requestAnimationFrame(fade);
+        else map.removeLayer(beam);
     }
 
     fade();
@@ -259,262 +245,165 @@ function createInterceptBeam(map, from, to, severity) {
 
 
 // ================================
-// ⚡ PACKET MOVEMENT
+// ⚡ TRAJECTORY PROJECTION
 // ================================
-function animatePacket(map, from, to, color) {
+function drawThreatTrajectory(map, from, to) {
+    const lat = to[0] + (to[0] - from[0]) * 0.25;
+    const lng = to[1] + (to[1] - from[1]) * 0.25;
 
-    let progress = 0;
-
-    const packet = L.circleMarker(from, {
-        radius: 3,
-        color: color,
-        fillColor: color,
-        fillOpacity: 1
+    const line = L.polyline([to, [lat, lng]], {
+        color: "#00ffff",
+        weight: 1,
+        opacity: 0.35,
+        dashArray: "2,10"
     }).addTo(map);
 
-    function move() {
-        progress += 0.02;
-
-        const lat = from[0] + (to[0] - from[0]) * progress;
-        const lng = from[1] + (to[1] - from[1]) * progress;
-
-        packet.setLatLng([lat, lng]);
-
-        if (progress < 1) requestAnimationFrame(move);
-        else {
-            map.removeLayer(packet);
-            createImpactFlash(map, to, color);
-        }
-    }
-
-    move();
+    setTimeout(() => map.removeLayer(line), 900);
 }
 
 
 // ================================
-// 🌊 FLOWING TRAFFIC STREAM
+// 🛰 SATELLITE LOCK
 // ================================
-function createBeamTrail(map, from, to, color) {
-
-    const particles = 8;
-
-    for (let i = 0; i < particles; i++) {
-
-        let progress = Math.random();
-
-        function animate() {
-
-            progress += 0.015;
-            if (progress > 1) progress = 0;
-
-            const lat = from[0] + (to[0] - from[0]) * progress;
-            const lng = from[1] + (to[1] - from[1]) * progress;
-
-            const dot = L.circleMarker([lat, lng], {
-                radius: 1.5,
-                color: color,
-                fillColor: color,
-                fillOpacity: 0.8,
-                interactive: false
-            }).addTo(map);
-
-            setTimeout(() => map.removeLayer(dot), 180);
-            requestAnimationFrame(animate);
-        }
-
-        animate();
-    }
-}
-
-// ================================
-// 🛡️ PROTECTED ZONE SHIELD DOME
-// ================================
-let shieldDomeLayer = null;
-
-function createShieldDome(map, location) {
-
-    if (shieldDomeLayer) return; // only create once
-
-    shieldDomeLayer = L.circle(location, {
-        radius: 180000,
-        color: "#00ccff",
-        weight: 2,
-        opacity: 0.45,
-        fillColor: "#00ccff",
-        fillOpacity: 0.08
-    }).addTo(map);
-
-    // store base values for dynamic intensity
-    shieldDomeLayer.baseOpacity = 0.45;
-    shieldDomeLayer.baseWeight = 2;
-    shieldDomeLayer.baseFill = 0.08;
-
-    // subtle pulse animation
-    let growing = true;
-    let radius = 180000;
-
-    function pulse() {
-        radius += growing ? 1200 : -1200;
-
-        if (radius > 200000) growing = false;
-        if (radius < 170000) growing = true;
-
-        shieldDomeLayer.setRadius(radius);
-        requestAnimationFrame(pulse);
-    }
-
-    pulse();
-}
-
-// ================================
-// 🛡️ DOME INTENSITY RESPONSE
-// ================================
-function intensifyShieldDome(severity) {
-
-    if (!shieldDomeLayer) return;
-
-    let glowBoost = 0.12;
-    let weightBoost = 1;
-
-    if (severity === "critical") {
-        glowBoost = 0.35;
-        weightBoost = 3;
-    }
-
-    shieldDomeLayer.setStyle({
-        opacity: shieldDomeLayer.baseOpacity + glowBoost,
-        fillOpacity: shieldDomeLayer.baseFill + glowBoost,
-        weight: shieldDomeLayer.baseWeight + weightBoost
+function satelliteLock(map, location) {
+    const offsets = [[0.4,0.4],[-0.4,0.4],[0.4,-0.4]];
+    offsets.forEach(offset => {
+        const marker = L.circle(
+            [location[0]+offset[0], location[1]+offset[1]],
+            { radius:6000, color:"#66ffff", weight:1, opacity:0.6, fillOpacity:0 }
+        ).addTo(map);
+        setTimeout(()=>map.removeLayer(marker),800);
     });
-
-    // return to normal after pulse
-    setTimeout(() => {
-        shieldDomeLayer.setStyle({
-            opacity: shieldDomeLayer.baseOpacity,
-            fillOpacity: shieldDomeLayer.baseFill,
-            weight: shieldDomeLayer.baseWeight
-        });
-    }, severity === "critical" ? 1400 : 700);
 }
 
 
 // ================================
-// ⚠️ CRITICAL PULSE
+// 🛰 ORBITAL DEFENSE PULSE
 // ================================
-function pulseBeam(line) {
+function orbitalPulse(map, location) {
+    const pulse = L.circle(location,{
+        radius:30000,
+        color:"#00ffff",
+        weight:2,
+        opacity:0.6,
+        fillOpacity:0
+    }).addTo(map);
 
-    let opacity = 0.2;
-    let grow = true;
+    let radius=30000, opacity=0.6;
 
-    function animate() {
-        opacity += grow ? 0.02 : -0.02;
-        if (opacity >= 0.4) grow = false;
-        if (opacity <= 0.15) grow = true;
-
-        line.setStyle({ opacity });
-        requestAnimationFrame(animate);
+    function animate(){
+        radius+=20000;
+        opacity-=0.05;
+        pulse.setRadius(radius);
+        pulse.setStyle({opacity});
+        if(opacity>0) requestAnimationFrame(animate);
+        else map.removeLayer(pulse);
     }
-
     animate();
 }
 
 
 // ================================
-// 🔥 DRAW ADVANCED BEAM
+// 🌍 GLOBAL DEFENSE PULSE
+// ================================
+function globalDefensePulse(map){
+    const grid=L.circle([20,0],{
+        radius:9000000,
+        color:"#00ffff",
+        weight:1,
+        opacity:0.08,
+        fillOpacity:0
+    }).addTo(map);
+
+    setTimeout(()=>map.removeLayer(grid),1200);
+}
+
+
+// ================================
+// 🔥 DRAW ATTACK BEAM
 // ================================
 function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
 
-    // 🛡 Ensure protected zone dome exists
+
     if (!window.shieldDomeInitialized) {
-        createShieldDome(map, toCoords);
+        shieldDomeLayer = L.circle(toCoords,{
+            radius:180000,
+            color:"#00ccff",
+            weight:2,
+            opacity:0.45,
+            fillColor:"#00ccff",
+            fillOpacity:0.08
+        }).addTo(map);
+
         window.shieldDomeInitialized = true;
     }
 
-    const color = severityColors[severity] || "#00ffff";
+
 
     attackCount++;
+    defensePressure++;
     updateAttackCounter();
-    // 🛡 dome reacts to incoming attack
-    intensifyShieldDome(severity);
+
 
     createOriginPulse(map, fromCoords);
     createCountryAura(map, fromCoords);
     updateHeatZone(map, fromCoords);
 
-    // rate-limit critical alert sound
-    if (severity === "critical" && soundEnabled) {
+    const color = severityColors[severity] || "#00ffff";
 
-    const now = Date.now();
-
-    if (!window.lastSoundTime) {
-        window.lastSoundTime = 0;
-    }
-
-    if (now - window.lastSoundTime > 800) {  // 800ms throttle
-        criticalSound.currentTime = 0;
-        criticalSound.play().catch(()=>{});
-        window.lastSoundTime = now;
-    }
-}
-
-    const glow = L.polyline([fromCoords, toCoords], {
-        color: color,
-        weight: severity === "critical" ? 4 : 2,
-        opacity: severity === "critical" ? 0.18 : 0.10
+    const beam = L.polyline([fromCoords,toCoords],{
+        color,
+        weight: severity==="critical"?4:2,
+        opacity: severity==="critical"?0.18:0.10
     }).addTo(map);
 
-    const segments = 14;
+    if (severity === "critical") {
 
-    for (let i = 0; i < segments; i++) {
+        if(soundEnabled){
+            const now=Date.now();
+            if(!window.lastSoundTime||now-window.lastSoundTime>800){
+                criticalSound.currentTime=0;
+                criticalSound.play().catch(()=>{});
+                window.lastSoundTime=now;
+            }
+        }
 
-        const startLat = fromCoords[0] + (toCoords[0] - fromCoords[0]) * (i / segments);
-        const startLng = fromCoords[1] + (toCoords[1] - fromCoords[1]) * (i / segments);
+        createImpactFlash(map, fromCoords, "#ff0033");
 
-        const endLat = fromCoords[0] + (toCoords[0] - fromCoords[0]) * ((i+1) / segments);
-        const endLng = fromCoords[1] + (toCoords[1] - fromCoords[1]) * ((i+1) / segments);
+        if (!window.lastGlobalPulse || Date.now()-window.lastGlobalPulse>1500){
+            globalDefensePulse(map);
+            window.lastGlobalPulse=Date.now();
+        }
 
-        const opacity = 0.15 + (i / segments) * 0.85;
+        createShieldImpact(map,toCoords);
+        orbitalPulse(map,toCoords);
+        satelliteLock(map,toCoords);
 
-        L.polyline([[startLat,startLng],[endLat,endLng]], {
-            color: color,
-            weight: 1,
-            opacity: opacity,
-            interactive: false
-        }).addTo(map);
+        if(shieldDomeLayer){
+            const domeCenter = shieldDomeLayer.getLatLng();
+            createInterceptBeam(map,domeCenter,toCoords,severity);
+        }
     }
-
-  if (severity === "critical") {
-    pulseBeam(glow);
-
-    // 🔥 Strong origin shockwave
-    createImpactFlash(map, fromCoords, "#ff0033");
-
-    // 🔥 Extra origin glow burst
-    for (let i = 0; i < 2; i++) {
-        setTimeout(() => createOriginPulse(map, fromCoords), i * 150);
-    }
-}
 
     animatePacket(map, fromCoords, toCoords, color);
-
-    // 🛡️ Shield reacts to critical impacts
-    if (severity === "critical") {
-        createShieldImpact(map, toCoords);
-        orbitalPulse(map, toCoords);
-
-        // ⚡ defensive intercept beam from dome
-        if (shieldDomeLayer) {
-            const domeCenter = shieldDomeLayer.getLatLng();
-            createInterceptBeam(map, domeCenter, toCoords, severity);
-    }
-}
-    // 🛡 energy ripple through defense grid
+    drawThreatTrajectory(map, fromCoords, toCoords);
     createShieldRipple(map, toCoords, severity);
-
-
-    createBeamTrail(map, fromCoords, toCoords, color);
-
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
