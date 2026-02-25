@@ -446,6 +446,9 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     if (severity === "critical") {
     createShieldImpact(map, toCoords);
 }
+    // 🛡 energy ripple through defense grid
+    createShieldRipple(map, toCoords, severity);
+
 
     createBeamTrail(map, fromCoords, toCoords, color);
 
