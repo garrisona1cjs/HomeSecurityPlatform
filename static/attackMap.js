@@ -282,9 +282,17 @@ if (severity === "critical" && soundEnabled) {
         }).addTo(map);
     }
 
-    if (severity === "critical") {
-        pulseBeam(glow);
+  if (severity === "critical") {
+    pulseBeam(glow);
+
+    // 🔥 Strong origin shockwave
+    createImpactFlash(map, fromCoords, "#ff0033");
+
+    // 🔥 Extra origin glow burst
+    for (let i = 0; i < 2; i++) {
+        setTimeout(() => createOriginPulse(map, fromCoords), i * 150);
     }
+}
 
     animatePacket(map, fromCoords, toCoords, color);
     createBeamTrail(map, fromCoords, toCoords, color);
