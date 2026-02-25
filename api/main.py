@@ -21,12 +21,17 @@ from ipwhois import IPWhois
 # =========================================================
 
 GEOIP_DB = os.getenv("GEOIP_DB", "geoip/GeoLite2-City.mmdb")
-reader = geoip2.database.Reader(GEOIP_DB)
+reader = None
+if os.path.exists(GEOIP_DB):
+    reader = geoip2.database.Reader(GEOIP_DB)
 
 def geo_lookup_ip(ip):
 
     try:
-        geo = reader.city(ip)
+        if reader:
+          geo = reader.city(ip)
+        else:
+         raise Exception()
 
         city = geo.city.name or "Unknown"
         country = geo.country.iso_code or "??"
@@ -41,7 +46,7 @@ def geo_lookup_ip(ip):
     # ASN + ISP lookup
     try:
         obj = IPWhois(ip)
-        res = obj.lookup_rdap()
+        res = obj.lookup_rdap(depth=1)
 
         asn = res.get("asn", "N/A")
         isp = res.get("network", {}).get("name", "Unknown")
@@ -312,6 +317,8 @@ def alerts():
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     return """
+
+    
 <!DOCTYPE html>
 <html>
 <head>
@@ -676,6 +683,8 @@ function investigateLocation(lat, lng, intel){
 
     ${intel.isp ? `<div>ISP: ${intel.isp}</div>` : ""}
 
+    ${intel.asn ? `<div>ASN: ${intel.asn}</div>` : ""}
+
     <div style="color:${intel.color}; font-weight:bold;">
       ${intel.severity} • ${intel.technique}
     </div>
@@ -948,6 +957,7 @@ investigateLocation(lat, lng, {
   country: alert.country_code,
   ip: alert.source_ip,
   isp: alert.isp,
+  asn: alert.asn,
   severity: sev,
   technique: alert.technique,
   training: alert.training,
@@ -1110,7 +1120,10 @@ orbitRings.forEach(r => {
   }, 6000);
 }
 
-feed.innerHTML = alert.origin_label;
+feed.innerHTML =
+  alert.origin_label +
+  (alert.isp ? "<br>ISP: " + alert.isp : "") +
+  (alert.asn ? "<br>ASN: " + alert.asn : "");
 ticker.innerHTML = sev + " • " + alert.technique;
 
 // 🌎 track top attacking countries
