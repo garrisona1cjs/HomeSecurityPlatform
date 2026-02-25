@@ -136,6 +136,40 @@ function createImpactFlash(map, location, color) {
     animate();
 }
 
+// ================================
+// 🛡️ DEFENSIVE SHIELD REACTION
+// ================================
+function createShieldImpact(map, location) {
+
+    const shield = L.circle(location, {
+        radius: 15000,
+        color: "#00ccff",
+        weight: 3,
+        opacity: 0.9,
+        fillColor: "#00ccff",
+        fillOpacity: 0.15
+    }).addTo(map);
+
+    let radius = 15000;
+    let opacity = 0.9;
+
+    function animate() {
+        radius += 18000;
+        opacity -= 0.05;
+
+        shield.setRadius(radius);
+        shield.setStyle({ opacity });
+
+        if (opacity > 0) {
+            requestAnimationFrame(animate);
+        } else {
+            map.removeLayer(shield);
+        }
+    }
+
+    animate();
+}
+
 
 // ================================
 // ⚡ PACKET MOVEMENT
@@ -295,5 +329,12 @@ if (severity === "critical" && soundEnabled) {
 }
 
     animatePacket(map, fromCoords, toCoords, color);
-    createBeamTrail(map, fromCoords, toCoords, color);
+
+    // 🛡️ Shield reacts to critical impacts
+    if (severity === "critical") {
+    createShieldImpact(map, toCoords);
+}
+
+createBeamTrail(map, fromCoords, toCoords, color);
+
 }
