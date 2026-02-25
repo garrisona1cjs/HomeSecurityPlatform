@@ -17,6 +17,7 @@ const severityColors = {
 let originIntensity = {};
 let activeOrigins = {};
 let attackCount = 0;
+let heatZones = {};
 
 
 // ================================
@@ -103,6 +104,29 @@ function createCountryAura(map, location) {
     }).addTo(map);
 
     setTimeout(() => map.removeLayer(aura), 2000);
+}
+
+// ================================
+// 🌍 HEATMAP ENERGY GRID
+// ================================
+function updateHeatZone(map, location) {
+
+    const key = location.toString();
+
+    if (!heatZones[key]) heatZones[key] = 1;
+    else heatZones[key]++;
+
+    const intensity = Math.min(heatZones[key], 6);
+
+    const heat = L.circle(location, {
+        radius: 40000 + intensity * 12000,
+        color: "rgba(255,80,80,0.2)",
+        weight: 0,
+        fillColor: "rgba(255,80,80,0.2)",
+        fillOpacity: 0.15
+    }).addTo(map);
+
+    setTimeout(() => map.removeLayer(heat), 2000);
 }
 
 
@@ -385,6 +409,7 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
 
     createOriginPulse(map, fromCoords);
     createCountryAura(map, fromCoords);
+    updateHeatZone(map, fromCoords);
 
     // rate-limit critical alert sound
     if (severity === "critical" && soundEnabled) {
