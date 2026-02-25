@@ -239,6 +239,46 @@ function createBeamTrail(map, from, to, color) {
     }
 }
 
+// ================================
+// 🛡️ PROTECTED ZONE SHIELD DOME
+// ================================
+let shieldDomeLayer = null;
+
+function createShieldDome(map, location) {
+
+    if (shieldDomeLayer) return; // only create once
+
+    shieldDomeLayer = L.circle(location, {
+        radius: 180000,
+        color: "#00ccff",
+        weight: 2,
+        opacity: 0.45,
+        fillColor: "#00ccff",
+        fillOpacity: 0.08
+    }).addTo(map);
+
+    // store base values for dynamic intensity
+    shieldDomeLayer.baseOpacity = 0.45;
+    shieldDomeLayer.baseWeight = 2;
+    shieldDomeLayer.baseFill = 0.08;
+
+    // subtle pulse animation
+    let growing = true;
+    let radius = 180000;
+
+    function pulse() {
+        radius += growing ? 1200 : -1200;
+
+        if (radius > 200000) growing = false;
+        if (radius < 170000) growing = true;
+
+        shieldDomeLayer.setRadius(radius);
+        requestAnimationFrame(pulse);
+    }
+
+    pulse();
+}
+
 
 // ================================
 // ⚠️ CRITICAL PULSE
