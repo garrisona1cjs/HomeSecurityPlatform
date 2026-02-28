@@ -19,9 +19,16 @@ let activeOrigins = {};
 let attackCount = 0;
 let defensePressure = 0;
 let heatZones = {};
+let defenseLoad = 0;
+const MAX_DEFENSE_LOAD = 25;
+let crisisMode = false;
 let recentTargets = [];
 let lastDrawTime = 0;
 let escalationLevel = 1;
+let shieldDomeLayer = null
+let lastGlobalPulse = 0;
+
+
 
 
 // ================================
@@ -159,6 +166,28 @@ function updateHeatZone(map, location) {
     setTimeout(() => map.removeLayer(heat), 2000);
 }
 
+// ================================
+// 🌍 THREAT CLUSTER DETECTION
+// ================================
+function detectThreatCluster(map, location) {
+
+    const key = location.toString();
+
+    if (heatZones[key] >= 4) {
+
+        const cluster = L.circle(location, {
+            radius: 120000,
+            color: "#ff3300",
+            weight: 1,
+            opacity: 0.4,
+            fillColor: "#ff3300",
+            fillOpacity: 0.15
+        }).addTo(map);
+
+        setTimeout(() => map.removeLayer(cluster), 2500);
+    }
+}
+
 
 // ================================
 // 💥 IMPACT FLASH
@@ -280,6 +309,38 @@ function createInterceptBeam(map, from, to, severity) {
     fade();
 }
 
+// ================================
+// ⚡ PACKET MOVEMENT
+// ================================
+function animatePacket(map, from, to, color) {
+
+    let progress = 0;
+
+    const packet = L.circleMarker(from, {
+        radius: 3,
+        color: color,
+        fillColor: color,
+        fillOpacity: 1
+    }).addTo(map);
+
+    function move() {
+        progress += 0.02;
+
+        const lat = from[0] + (to[0] - from[0]) * progress;
+        const lng = from[1] + (to[1] - from[1]) * progress;
+
+        packet.setLatLng([lat, lng]);
+
+        if (progress < 1) requestAnimationFrame(move);
+        else {
+            map.removeLayer(packet);
+            createImpactFlash(map, to, color);
+        }
+    }
+
+    move();
+}
+
 
 // ================================
 // ⚡ TRAJECTORY PROJECTION
@@ -357,9 +418,72 @@ function globalDefensePulse(map){
 
 
 // ================================
+// 🛡 DOME INTENSITY PULSE
+// ================================
+function pulseShieldDome() {
+
+    if (!shieldDomeLayer) return;
+
+    shieldDomeLayer.setStyle({
+        opacity: 0.7,
+        fillOpacity: 0.2,
+        weight: 4
+    });
+
+    setTimeout(() => {
+        shieldDomeLayer.setStyle({
+            opacity: 0.45,
+            fillOpacity: 0.08,
+            weight: 2
+        });
+    }, 400);
+}
+
+// ================================
+// 🚨 EMERGENCY LOCKDOWN MODE
+// ================================
+function emergencyLockdown(map) {
+
+    const lockdown = L.circle([20,0], {
+        radius: 9500000,
+        color: "#ff0033",
+        weight: 2,
+        opacity: 0.25,
+        fillColor: "#ff0033",
+        fillOpacity: 0.05
+    }).addTo(map);
+
+    setTimeout(() => map.removeLayer(lockdown), 1500);
+}
+
+// ================================
+// 🌈 CRISIS COLOR SHIFT
+// ================================
+function updateCrisisMode(map) {
+
+    if (defensePressure > 15 && !window.lockdownActive) {
+        emergencyLockdown(map);
+        crisisMode = true;
+        window.lockdownActive = true;
+        setTimeout(()=> window.lockdownActive=false, 2000);
+    }
+
+    if (defensePressure < 6 && crisisMode) {
+        crisisMode = false;
+        document.body.style.background = "";
+    }
+}
+
+
+// ================================
 // 🔥 DRAW ATTACK BEAM
 // ================================
 function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
+
+    // 🛡 defense saturation protection
+    if (defenseLoad > MAX_DEFENSE_LOAD) return;
+    defenseLoad++;
+    setTimeout(() => defenseLoad--, 800);
 
     // ================================
     // ⚡ PERFORMANCE THROTTLE
@@ -388,15 +512,7 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     defensePressure++;
     updateAttackCounter();
     updateEscalationLevel();
-
-    // ================================
-    // ⭐ CINEMATIC ESCALATION LEVEL
-    // ================================
-    if (defensePressure > 12) escalationLevel = 3;
-    else if (defensePressure > 6) escalationLevel = 2;
-    else escalationLevel = 1;
-
-    playThreatAudio(escalationLevel);
+    updateCrisisMode(map);
 
 
     createOriginPulse(map, fromCoords);
@@ -404,27 +520,7 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     updateHeatZone(map, fromCoords);
     detectThreatCluster(map, fromCoords);
 
-    // ================================
-    // 🌍 THREAT CLUSTER DETECTION
-    // ================================
-    function detectThreatCluster(map, location) {
 
-        const key = location.toString();
-
-        if (heatZones[key] >= 4) {
-
-            const cluster = L.circle(location, {
-                radius: 120000,
-                color: "#ff3300",
-                weight: 1,
-                opacity: 0.4,
-                fillColor: "#ff3300",
-                fillOpacity: 0.15
-            }).addTo(map);
-
-            setTimeout(() => map.removeLayer(cluster), 2500);
-        }
-    }
 
     const color = severityColors[severity] || "#00ffff";
 
@@ -439,6 +535,8 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     }).addTo(map);
 
     if (severity === "critical") {
+
+        pulseShieldDome();
 
         if(soundEnabled){
             const now=Date.now();
@@ -456,16 +554,13 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
             orbitalPulse(map, toCoords);
         }
 
-        if (escalationLevel === 3) {
+        if (escalationLevel === 3 && Date.now() - lastGlobalPulse > 1200) {
             globalDefensePulse(map);
+            lastGlobalPulse = Date.now();
         }
 
         createImpactFlash(map, fromCoords, "#ff0033");
-
-        if (!window.lastGlobalPulse || Date.now()-window.lastGlobalPulse>1500){
-            globalDefensePulse(map);
-            window.lastGlobalPulse=Date.now();
-        }
+        
 
         createShieldImpact(map,toCoords);
         orbitalPulse(map,toCoords);
@@ -499,7 +594,7 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
 
         const domeCenter = shieldDomeLayer.getLatLng();
 
-        targets.forEach((target, i) => {
+        targets.slice(-4).forEach((target, i) => {
             setTimeout(() => {
                 createInterceptBeam(map, domeCenter, target, severity);
             }, i * 120); // stagger fire
