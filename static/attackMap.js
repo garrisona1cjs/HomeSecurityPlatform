@@ -21,7 +21,7 @@ let defensePressure = 0;
 let heatZones = {};
 let recentTargets = [];
 let lastDrawTime = 0;
-let escalationLevel = 0;
+let escalationLevel = 1;
 
 
 // ================================
@@ -34,6 +34,29 @@ let soundEnabled = false;
 
 document.addEventListener("click", () => soundEnabled = true, { once: true });
 document.addEventListener("keydown", () => soundEnabled = true, { once: true });
+
+// ================================
+// 🔊 DYNAMIC THREAT SOUND LAYERS
+// ================================
+const alertLow = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+const alertHigh = new Audio("https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg");
+
+alertLow.volume = 0.15;
+alertHigh.volume = 0.25;
+
+function playThreatAudio(level) {
+    if (!soundEnabled) return;
+
+    if (level === 2) {
+        alertLow.currentTime = 0;
+        alertLow.play().catch(()=>{});
+    }
+
+    if (level === 3) {
+        alertHigh.currentTime = 0;
+        alertHigh.play().catch(()=>{});
+    }
+}
 
 
 // ================================
@@ -61,12 +84,16 @@ function updateAttackCounter() {
     counter.innerHTML = "⚡ ATTACKS: " + attackCount;
 }
 
+// ================================
+// 🎬 ESCALATION LEVEL ENGINE
+// ================================
 function updateEscalationLevel() {
 
-    if (attackCount > 50) escalationLevel = 3;
-    else if (attackCount > 20) escalationLevel = 2;
-    else if (attackCount > 8) escalationLevel = 1;
+    if (defensePressure > 12) escalationLevel = 3;
+    else if (defensePressure > 6) escalationLevel = 2;
+    else escalationLevel = 1;
 
+    playThreatAudio(escalationLevel);
 }
 
 
@@ -368,6 +395,8 @@ function drawAttackBeam(map, fromCoords, toCoords, severity="medium") {
     if (defensePressure > 12) escalationLevel = 3;
     else if (defensePressure > 6) escalationLevel = 2;
     else escalationLevel = 1;
+
+    playThreatAudio(escalationLevel);
 
 
     createOriginPulse(map, fromCoords);
