@@ -656,6 +656,12 @@ function createPulse(lat, lng, severity){
 // 🎯 Precision investigation zoom
 function investigateLocation(lat, lng, intel){
 
+  if (!intel) return;
+
+  if (!intel.country) {
+    intel.country = "";
+  }
+
   if(cameraBusy || recoveringCamera) return;
 
   cameraBusy = true;
@@ -944,7 +950,17 @@ if (sev === "MEDIUM") {
 
   // occasional investigation zoom
   if (Math.random() < 0.35) {
-    investigateLocation(lat, lng);
+    investigateLocation(lat, lng, {
+      label: alert.origin_label,
+      country: alert.country_code,
+      ip: alert.source_ip,
+      isp: alert.isp,
+      asn: alert.asn,
+      severity: sev,
+      technique: alert.technique,
+      training: alert.training,
+      color: colors[sev]
+    });
   }
 }
 
