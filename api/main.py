@@ -417,7 +417,7 @@ const globe = Globe()(document.getElementById('globeViz'))
 .arcDashLength(0.35)
 .arcDashGap(0.06)
 .arcDashInitialGap(() => Math.random())
-.arcDashAnimateTime(900)
+.arcDashAnimateTime(1600)
 .arcAltitude(0.18)
 .arcStroke(() => 1.5);
 
@@ -530,7 +530,7 @@ resizeStars();
 window.addEventListener("resize", resizeStars);
 
 const stars = [];
-const STAR_COUNT = 260;
+const STAR_COUNT = 120;
 
 for(let i=0;i<STAR_COUNT;i++){
   stars.push({
@@ -621,7 +621,7 @@ function clusterAttack(lat, lng, severity){
       points.push({
         lat: c.lat,
         lng: c.lng,
-        size: 0.6 + c.count * 0.15,
+        size: Math.min(3, 0.6 + c.count * 0.15),
         color:
           c.count > 5 ? "#ff0033" :
           c.count > 3 ? "#ff5500" :
@@ -816,6 +816,15 @@ const colors={
 /* ---------- RENDER ---------- */
 
 function render(){
+
+// PERFORMANCE LIMITS
+arcs = arcs.slice(-120);
+points = points.slice(-200);
+rings = rings.slice(-60);
+packets = packets.slice(-80);
+heat = heat.slice(-80);
+labels = labels.slice(-120);
+
  globe.arcsData(arcs)
    .arcStroke('stroke')
    .arcColor('color')
