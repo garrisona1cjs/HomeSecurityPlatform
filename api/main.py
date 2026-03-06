@@ -643,6 +643,9 @@ const ticker = document.getElementById("ticker");
 const geoHUD = document.getElementById("geoHUD");
 
 let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[], satellites=[], orbitRings=[];
+// GLOBAL THREAT PRESSURE SYSTEM
+let pressureZones = [];
+const MAX_PRESSURE_ZONES = 120;
 // EVENT BUFFER SYSTEM
 let alertQueue = [];
 let processingQueue = false;
@@ -810,16 +813,18 @@ function investigateLocation(lat, lng, intel){
 }
 
   // 🌍 Threat Territory Zone Builder
-function updateTerritory(lat, lng, severity){
+function updateThreatPressure(lat, lng, severity){
 
-  const radius = 5;
+  const radius = 8;
+
   let found = false;
 
-  territories.forEach(zone => {
+  pressureZones.forEach(zone => {
 
     const d = Math.hypot(zone.lat - lat, zone.lng - lng);
 
     if(d < radius){
+
       zone.intensity +=
         severity === "CRITICAL" ? 3 :
         severity === "HIGH" ? 2 :
@@ -827,20 +832,26 @@ function updateTerritory(lat, lng, severity){
         0.5;
 
       found = true;
+
     }
+
   });
 
   if(!found){
-    territories.push({
+
+    pressureZones.push({
       lat,
       lng,
       intensity: 1
     });
 
-    if (territories.length > MAX_TERRITORIES) {
-      territories.shift();
+    if (pressureZones.length > MAX_PRESSURE_ZONES){
+      pressureZones.shift();
     }
+
   }
+
+}
 
   // decay over time
   setTimeout(()=>{
@@ -930,6 +941,17 @@ const zonePoints = territories.map(z => ({
     "#ffaa00"
 }));
 
+// global threat pressure glow
+const pressurePoints = pressureZones.map(z => ({
+  lat: z.lat,
+  lng: z.lng,
+  size: Math.min(4, z.intensity * 0.35),
+  color:
+    z.intensity > 8 ? "#ff0033" :
+    z.intensity > 4 ? "#ff5500" :
+    "#ffaa00"
+}));
+
 // 🛰 orbital defense rings
 const ringPaths = orbitRings.map(r => {
 
@@ -968,7 +990,7 @@ const satellitePoints = satellites.map(s => {
 });
 
 // combine all points
-globe.pointsData(points.concat(zonePoints, satellitePoints))
+globe.pointsData(points.concat(zonePoints, pressurePoints, satellitePoints))
   .pointRadius('size')
   .pointColor('color')
   .pointAltitude(0.02);
@@ -1094,6 +1116,7 @@ points.push({
 // swarm clustering
 clusterAttack(lat, lng, sev);
 updateTerritory(lat, lng, sev);
+updateThreatPressure(lat, lng, sev);
 
 // pulse wave expansion
 createPulse(lat, lng, sev);
@@ -1390,6 +1413,15 @@ setInterval(() => {
   processingQueue = false;
 
 }, 60);
+
+// threat pressure decay
+setInterval(()=>{
+
+  pressureZones.forEach(z => {
+    z.intensity *= 0.92;
+  });
+
+}, 2000);
 
 /* ---------- LOAD & LIVE ---------- */
 
