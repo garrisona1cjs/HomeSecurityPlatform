@@ -643,8 +643,14 @@ const ticker = document.getElementById("ticker");
 const geoHUD = document.getElementById("geoHUD");
 
 let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[], satellites=[], orbitRings=[];
+// EVENT BUFFER SYSTEM
+let alertQueue = [];
+let processingQueue = false;
 let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
 let surgeLevel = 0;
+
+const MAX_TERRITORIES = 80;
+const MAX_CLUSTERS = 60;
 
 // intelligence & analytics
 let clusters = [];
@@ -701,6 +707,8 @@ function clusterAttack(lat, lng, severity){
 
   if(!found){
     clusters.push({ lat, lng, count: 1 });
+
+    if (clusters.length > MAX_CLUSTERS) clusters.shift();
   }
 }
 
@@ -828,6 +836,9 @@ function updateTerritory(lat, lng, severity){
       lng,
       intensity: 1
     });
+
+    if (territories.length > MAX_TERRITORIES) territories.shift();
+    }
   }
 
   // decay over time
@@ -1359,6 +1370,25 @@ sweepCone.style.transform =
   "deg)";
 }, 60);
 
+// SOC Render Scheduler
+setInterval(() => {
+
+  if (processingQueue) return;
+
+  processingQueue = true;
+
+  let batchSize = 8;
+
+  while (alertQueue.length > 0 && batchSize > 0) {
+    const alert = alertQueue.shift();
+    addAlert(alert);
+    batchSize--;
+  }
+
+  processingQueue = false;
+
+}, 60);
+
 /* ---------- LOAD & LIVE ---------- */
 
 async function load(){
@@ -1367,7 +1397,10 @@ async function load(){
 }
 
 const ws=new WebSocket(`wss://${location.host}/ws`);
-ws.onmessage=e=>addAlert(JSON.parse(e.data));
+ws.onmessage = e => {
+  const alert = JSON.parse(e.data);
+  alertQueue.push(alert);
+};
 
 load();
 </script>
