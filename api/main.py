@@ -812,7 +812,7 @@ function investigateLocation(lat, lng, intel){
   // 🌍 Threat Territory Zone Builder
 function updateTerritory(lat, lng, severity){
 
-  const radius = 5; // zone size
+  const radius = 5;
   let found = false;
 
   territories.forEach(zone => {
@@ -837,7 +837,8 @@ function updateTerritory(lat, lng, severity){
       intensity: 1
     });
 
-    if (territories.length > MAX_TERRITORIES) territories.shift();
+    if (territories.length > MAX_TERRITORIES) {
+      territories.shift();
     }
   }
 
@@ -845,6 +846,7 @@ function updateTerritory(lat, lng, severity){
   setTimeout(()=>{
     territories.forEach(z => z.intensity *= 0.85);
   }, 3000);
+
 }
 
 // 🛰 orbital satellite network
