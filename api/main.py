@@ -1398,7 +1398,8 @@ async function load(){
  data.forEach(addAlert);
 }
 
-const ws=new WebSocket(`wss://${location.host}/ws`);
+const protocol = location.protocol === "https:" ? "wss" : "ws";
+const ws = new WebSocket(`${protocol}://${location.host}/ws`);
 ws.onmessage = e => {
   const alert = JSON.parse(e.data);
   alertQueue.push(alert);
