@@ -103,6 +103,27 @@ class Alert(Base):
     shockwave = Column(String)
 
 # =========================================================
+# INCIDENT MODEL
+# =========================================================
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id = Column(String, primary_key=True)
+    source_ip = Column(String)
+    asn = Column(String)
+    country_code = Column(String)
+
+    severity = Column(String)
+
+    alert_count = Column(String)
+
+    status = Column(String)
+
+    first_seen = Column(String)
+    last_seen = Column(String)
+
+# =========================================================
 # SAFE SCHEMA UPDATE
 # =========================================================
 
@@ -136,6 +157,46 @@ class AgentRegistration(BaseModel):
 class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
+
+# =========================================================
+# INCIDENT CORRELATION ENGINE
+# =========================================================
+
+CORRELATION_WINDOW = 120  # seconds
+
+
+def correlate_incident(db, source_ip, asn, country_code, severity):
+
+    now = datetime.utcnow()
+    window_start = now - timedelta(seconds=CORRELATION_WINDOW)
+
+    incident = db.query(Incident).filter(
+        Incident.source_ip == source_ip,
+        Incident.asn == asn
+    ).first()
+
+    if incident:
+        incident.alert_count = str(int(incident.alert_count) + 1)
+        incident.last_seen = now.isoformat()
+        db.commit()
+        return incident
+
+    incident = Incident(
+        id=str(uuid.uuid4()),
+        source_ip=source_ip,
+        asn=asn,
+        country_code=country_code,
+        severity=severity,
+        alert_count="1",
+        status="NEW",
+        first_seen=now.isoformat(),
+        last_seen=now.isoformat()
+    )
+
+    db.add(incident)
+    db.commit()
+
+    return incident
 
 # =========================================================
 # TRAINING + SURGE DETECTION
@@ -248,6 +309,14 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
 
     db.add(alert)
     db.commit()
+    correlate_incident(
+        db,
+        ip_addr,
+        asn,
+        country,
+        severity
+    )
+    
     db.close()
 
     # surge tracking
