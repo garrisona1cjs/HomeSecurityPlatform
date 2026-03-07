@@ -951,12 +951,40 @@ const colors={
 function render(){
 
 // PERFORMANCE LIMITS
-arcs = arcs.slice(-120);
-points = points.slice(-200);
-rings = rings.slice(-60);
-packets = packets.slice(-80);
-heat = heat.slice(-40);
-labels = labels.slice(-120);
+const LIMITS = {
+  arcs: 120,
+  points: 200,
+  rings: 80,
+  packets: 120,
+  heat: 40,
+  labels: 120
+};
+
+function clamp(arr, limit){
+  if(arr.length > limit){
+    arr.splice(0, arr.length - limit);
+  }
+}
+
+// ======================================
+// WebGL Memory Guard
+// ======================================
+setInterval(() => {
+
+  arcs.length = Math.min(arcs.length, 120);
+  points.length = Math.min(points.length, 200);
+  rings.length = Math.min(rings.length, 80);
+  packets.length = Math.min(packets.length, 120);
+  heat.length = Math.min(heat.length, 40);
+
+}, 5000);
+
+clamp(arcs, LIMITS.arcs);
+clamp(points, LIMITS.points);
+clamp(rings, LIMITS.rings);
+clamp(packets, LIMITS.packets);
+clamp(heat, LIMITS.heat);
+clamp(labels, LIMITS.labels);
 
  globe.arcsData(arcs)
    .arcStroke('stroke')
@@ -1452,7 +1480,7 @@ setInterval(() => {
 
   processingQueue = false;
 
-}, 80);
+}, 100);
 
 // threat pressure decay
 setInterval(()=>{
@@ -1464,6 +1492,25 @@ setInterval(()=>{
   pressureZones = pressureZones.filter(z => z.intensity > 0.25);
 
 }, 2000);
+
+// ======================================
+// Dashboard Watchdog
+// ======================================
+setInterval(()=>{
+
+  const mem = performance.memory;
+
+  if(mem && mem.usedJSHeapSize > 350000000){ // ~350MB
+    console.warn("SOC Dashboard memory reset triggered");
+
+    arcs.length = 0;
+    points.length = 0;
+    rings.length = 0;
+    packets.length = 0;
+    heat.length = 0;
+  }
+
+}, 10000);
 
 /* ---------- LOAD & LIVE ---------- */
 
@@ -1479,7 +1526,8 @@ ws.onmessage = e => {
   alertQueue.push(alert);
 
 if(alertQueue.length > 200){
-  alertQueue.shift();
+  if(alertQueue.length < 150){
+  alertQueue.push(alert);
 }
 };
 
