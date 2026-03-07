@@ -260,6 +260,19 @@ def track_asn_threat(asn):
 
     asn_threat_tracker[asn].append(now)
 
+    # remove expired activity
+    asn_threat_tracker[asn] = [
+        t for t in asn_threat_tracker[asn]
+        if now - t < ASN_WINDOW
+    ]
+
+    attack_count = len(asn_threat_tracker[asn])
+
+    if attack_count >= ASN_ESCALATION_THRESHOLD:
+        return "HOSTILE_NETWORK", attack_count
+
+    return None, attack_count
+
 # =========================================================
 # BOTNET DETECTION ENGINE
 # =========================================================
@@ -296,26 +309,56 @@ def detect_botnet(source_ip, asn, country):
 
     ip_count = len(tracker["ips"])
     country_count = len(tracker["countries"])
-    activity_count = len(tracker["timestamps"])
+
 
     if ip_count >= BOTNET_IP_THRESHOLD and country_count >= BOTNET_COUNTRY_THRESHOLD:
         return "BOTNET_CLUSTER", ip_count, country_count
 
     return None, ip_count, country_count
 
-    # remove expired activity
-    asn_threat_tracker[asn] = [
-        t for t in asn_threat_tracker[asn]
-        if now - t < ASN_WINDOW
-    ]
+# =========================================================
+# AUTOMATED DEFENSE ENGINE
+# =========================================================
 
-    attack_count = len(asn_threat_tracker[asn])
+blocked_ips = set()
+defense_log = []
 
-    # calculate reputation score
-    if attack_count >= ASN_ESCALATION_THRESHOLD:
-        return "HOSTILE_NETWORK", attack_count
+AUTO_BLOCK_THRESHOLD = 3
 
-    return None, attack_count
+
+def evaluate_defense(source_ip, severity, botnet_flag, asn_flag):
+
+    block_reason = None
+
+    # block immediately if botnet cluster
+    if botnet_flag == "BOTNET_CLUSTER":
+        block_reason = "BOTNET_ACTIVITY"
+
+    # block hostile ASN infrastructure
+    elif asn_flag == "HOSTILE_NETWORK" and severity in ["HIGH", "CRITICAL"]:
+        block_reason = "HOSTILE_ASN"
+
+    # block repeated critical attacks
+    elif severity == "CRITICAL":
+        block_reason = "CRITICAL_ATTACK"
+
+    if block_reason:
+
+        if source_ip not in blocked_ips:
+
+            blocked_ips.add(source_ip)
+
+            defense_log.append({
+                "ip": source_ip,
+                "reason": block_reason,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+            return True, block_reason
+
+    return False, None
+
+   
 
 campaign_tracker = {
     "asn_activity": {},
@@ -458,18 +501,8 @@ def authenticate_agent(db, agent_id, api_key, request_ip):
 def register(agent: AgentRegistration):
 
     db = SessionLocal()
+    
 
-    # ====================================
-    # AUTHENTICATE AGENT
-    # ====================================
-
-    if not authenticate_agent(db, report.agent_id, x_api_key, client_ip):
-
-        db.close()
-
-        return {
-            "error": "unauthorized agent"
-        }
 
     agent_id = str(uuid.uuid4())
     api_key = secrets.token_hex(32)
@@ -536,6 +569,14 @@ async def report_devices(
         country
     )
 
+    # automated defense evaluation
+    blocked, block_reason = evaluate_defense(
+        ip_addr,
+        severity,
+        botnet_flag,
+        asn_flag
+    )
+
     technique = random.choice([
         "T1110 Brute Force",
         "T1078 Valid Accounts",
@@ -598,15 +639,19 @@ async def report_devices(
     surge = detect_surge()
 
     payload = {
+
         "severity": severity,
         "technique": technique,
         "origin_label": origin_label,
-        "campaign": campaign,
+
 
         "asn_attack_count": asn_attack_count,
         "asn_flag": asn_flag,
 
         "botnet_flag": botnet_flag,
+
+        "blocked": blocked,
+        "block_reason": block_reason,
         "botnet_ips": botnet_ips,
         "botnet_countries": botnet_countries,
         "latitude": lat,
@@ -1969,12 +2014,27 @@ window.addEventListener("webglcontextlost", function(e){
 """
 
 # =========================================================
+# DEFENSE STATUS
+# =========================================================
+
+@app.get("/defense/blocked")
+def get_blocked():
+
+    return {
+        "blocked_ips": list(blocked_ips),
+        "events": defense_log
+    }
+
+
+# =========================================================
 # HEALTH CHECK
 # =========================================================
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
 
 
 
