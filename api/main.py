@@ -201,7 +201,7 @@ CORRELATION_WINDOW = 120  # seconds
 def correlate_incident(db, source_ip, asn, country_code, severity):
 
     now = datetime.utcnow()
-    window_start = now - timedelta(seconds=CORRELATION_WINDOW)
+    
 
     incident = db.query(Incident).filter(
         Incident.source_ip == source_ip,
