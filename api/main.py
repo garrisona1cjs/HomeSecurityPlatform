@@ -109,7 +109,7 @@ class Alert(Base):
     country_code = Column(String)
     shockwave = Column(String)
 
-   # =========================================================
+# =========================================================
 # AGENT MODEL (AUTHENTICATION)
 # =========================================================
 
@@ -259,6 +259,49 @@ def track_asn_threat(asn):
         asn_threat_tracker[asn] = []
 
     asn_threat_tracker[asn].append(now)
+
+# =========================================================
+# BOTNET DETECTION ENGINE
+# =========================================================
+
+botnet_tracker = {}
+
+BOTNET_WINDOW = 120
+BOTNET_IP_THRESHOLD = 10
+BOTNET_COUNTRY_THRESHOLD = 4
+
+
+def detect_botnet(source_ip, asn, country):
+
+    now = datetime.utcnow().timestamp()
+
+    if asn not in botnet_tracker:
+        botnet_tracker[asn] = {
+            "ips": set(),
+            "countries": set(),
+            "timestamps": []
+        }
+
+    tracker = botnet_tracker[asn]
+
+    tracker["ips"].add(source_ip)
+    tracker["countries"].add(country)
+    tracker["timestamps"].append(now)
+
+    # cleanup old timestamps
+    tracker["timestamps"] = [
+        t for t in tracker["timestamps"]
+        if now - t < BOTNET_WINDOW
+    ]
+
+    ip_count = len(tracker["ips"])
+    country_count = len(tracker["countries"])
+    activity_count = len(tracker["timestamps"])
+
+    if ip_count >= BOTNET_IP_THRESHOLD and country_count >= BOTNET_COUNTRY_THRESHOLD:
+        return "BOTNET_CLUSTER", ip_count, country_count
+
+    return None, ip_count, country_count
 
     # remove expired activity
     asn_threat_tracker[asn] = [
@@ -486,6 +529,13 @@ async def report_devices(
     # ASN threat intelligence
     asn_flag, asn_attack_count = track_asn_threat(asn)
 
+    # botnet detection
+    botnet_flag, botnet_ips, botnet_countries = detect_botnet(
+        ip_addr,
+        asn,
+        country
+    )
+
     technique = random.choice([
         "T1110 Brute Force",
         "T1078 Valid Accounts",
@@ -494,7 +544,7 @@ async def report_devices(
         "T1566 Phishing"
     ])
 
-       # escalate severity if ASN is hostile
+    # escalate severity if ASN is hostile
     if asn_flag == "HOSTILE_NETWORK":
 
         if severity == "LOW":
@@ -505,6 +555,15 @@ async def report_devices(
 
         elif severity == "HIGH":
             severity = "CRITICAL" 
+
+    # escalate severity if botnet activity detected
+    if botnet_flag == "BOTNET_CLUSTER":
+
+        if severity == "LOW":
+            severity = "HIGH"
+
+        elif severity == "MEDIUM":
+            severity = "CRITICAL"
 
     shockwave_flag = severity == "CRITICAL"
 
@@ -543,8 +602,13 @@ async def report_devices(
         "technique": technique,
         "origin_label": origin_label,
         "campaign": campaign,
+
         "asn_attack_count": asn_attack_count,
         "asn_flag": asn_flag,
+
+        "botnet_flag": botnet_flag,
+        "botnet_ips": botnet_ips,
+        "botnet_countries": botnet_countries,
         "latitude": lat,
         "longitude": lon,
         "country_code": country,
