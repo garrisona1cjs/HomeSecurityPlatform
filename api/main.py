@@ -1074,14 +1074,20 @@ globe.arcsData(arcs)
 
 
 // global threat pressure glow
+// 🌍 Global Threat Pressure Field
 const pressurePoints = pressureZones.map(z => ({
+
   lat: z.lat,
   lng: z.lng,
-  size: Math.min(4, z.intensity * 0.35),
+
+  size: Math.min(6, z.intensity * 0.5),
+
   color:
-    z.intensity > 8 ? "#ff0033" :
-    z.intensity > 4 ? "#ff5500" :
-    "#ffaa00"
+    z.intensity > 9 ? "#ff0033" :
+    z.intensity > 6 ? "#ff5500" :
+    z.intensity > 3 ? "#ffaa00" :
+    "#00ffff"
+
 }));
 
 // 🛰 orbital defense rings
@@ -1125,7 +1131,22 @@ const satellitePoints = satellites.map(s => {
 globe.pointsData(points.concat(pressurePoints, satellitePoints))
   .pointRadius('size')
   .pointColor('color')
-  .pointAltitude(0.02);
+  .pointAltitude(d => Math.min(0.08, d.size * 0.02));
+
+  // pressure pulse expansion
+pressureZones.forEach(z => {
+
+  if(z.intensity > 8){
+
+    rings.push({
+      lat: z.lat,
+      lng: z.lng,
+      maxR: 14
+    });
+
+  }
+
+});
 
  globe.ringsData(rings.concat(pulses))
    .ringMaxRadius('maxR')
@@ -1180,6 +1201,13 @@ satellites.forEach(s => {
   (sev === "CRITICAL" ? 0.004 :
    sev === "HIGH" ? 0.002 : 0),
   0.01
+);
+
+r.speed = Math.min(
+    r.speed +
+    (sev === "CRITICAL" ? 0.002 :
+    sev === "HIGH" ? 0.001 : 0),
+    0.01
 );
 
   setTimeout(() => s.speed *= 0.98, 2000);
