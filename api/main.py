@@ -751,9 +751,20 @@ let pressureZones = [];
 const MAX_PRESSURE_ZONES = 120;
 // EVENT BUFFER SYSTEM
 let alertQueue = [];
+
 let processingQueue = false;
-let counts={LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+
+let counts = {LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
+
 let surgeLevel = 0;
+
+/* =====================================
+   SOC EVENT GOVERNOR
+===================================== */
+
+let MAX_QUEUE = 400;
+let EVENT_DROP_COUNT = 0;
+let dynamicBatchSize = 8;
 
 const MAX_TERRITORIES = 80;
 const MAX_CLUSTERS = 60;
@@ -1039,7 +1050,28 @@ const RENDER_LIMITS = {
 };
 
 let lastFrame = 0;
-const FRAME_LIMIT = 90;
+let FRAME_LIMIT = 90;
+
+/* adaptive FPS control */
+
+setInterval(()=>{
+
+  if(alertQueue.length > 200){
+
+    FRAME_LIMIT = 140;
+
+  }else if(alertQueue.length > 100){
+
+    FRAME_LIMIT = 110;
+
+  }else{
+
+    FRAME_LIMIT = 90;
+
+  }
+
+},2000);
+
 let renderPending = false;
 
 /* ---------- RENDER ---------- */
@@ -1610,18 +1642,37 @@ setInterval(() => {
   processingQueue = true;
   renderPending = true;
 
-  let batchSize = Math.min(8, alertQueue.length);
+  /* adaptive load control */
+
+  if(alertQueue.length > 300){
+
+    dynamicBatchSize = 18;
+
+  } else if(alertQueue.length > 150){
+
+    dynamicBatchSize = 12;
+
+  } else {
+
+    dynamicBatchSize = 8;
+
+  }
+
+  let batchSize = Math.min(dynamicBatchSize, alertQueue.length);
 
   while (alertQueue.length > 0 && batchSize > 0) {
+
     const alert = alertQueue.shift();
     addAlert(alert);
+
     batchSize--;
+
   }
 
   processingQueue = false;
   renderPending = false;
 
-}, 100);;
+}, 100);
 
 // threat pressure decay
 setInterval(()=>{
@@ -1694,9 +1745,19 @@ ws.onmessage = e => {
 
 
   // backpressure protection
-  if(alertQueue.length < RENDER_LIMITS.queue){
-    alertQueue.push(alert);
+  if(alertQueue.length > MAX_QUEUE){
+
+  EVENT_DROP_COUNT++;
+
+  if(EVENT_DROP_COUNT % 100 === 0){
+    console.warn("SOC Governor dropping events:", EVENT_DROP_COUNT);
   }
+
+}else{
+
+  alertQueue.push(alert);
+
+}
 
 };
 
