@@ -816,7 +816,6 @@ function investigateLocation(lat, lng, intel){
 function updateThreatPressure(lat, lng, severity){
 
   const radius = 8;
-
   let found = false;
 
   pressureZones.forEach(zone => {
@@ -840,8 +839,8 @@ function updateThreatPressure(lat, lng, severity){
   if(!found){
 
     pressureZones.push({
-      lat,
-      lng,
+      lat: lat,
+      lng: lng,
       intensity: 1
     });
 
@@ -1119,7 +1118,7 @@ points.push({
 
 // swarm clustering
 clusterAttack(lat, lng, sev);
-updateTerritory(lat, lng, sev);
+
 updateThreatPressure(lat, lng, sev);
 
 // pulse wave expansion
