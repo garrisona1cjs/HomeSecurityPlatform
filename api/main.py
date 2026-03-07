@@ -237,6 +237,63 @@ def correlate_incident(db, source_ip, asn, country_code, severity):
 # TRAINING + SURGE DETECTION
 # =========================================================
 
+
+# =========================================================
+# GLOBAL ATTACK CAMPAIGN TRACKER (Layer 7)
+# =========================================================
+
+campaign_intel = {
+    "ip_activity": {},
+    "asn_activity": {},
+    "country_activity": {}
+}
+
+CAMPAIGN_WINDOW = 120
+
+IP_WAVE_THRESHOLD = 8
+ASN_WAVE_THRESHOLD = 6
+COUNTRY_CAMPAIGN_THRESHOLD = 10
+
+
+def detect_global_campaign(source_ip, asn, country):
+
+    now = datetime.utcnow().timestamp()
+
+    campaign_intel["ip_activity"].setdefault(source_ip, []).append(now)
+    campaign_intel["asn_activity"].setdefault(asn, []).append(now)
+    campaign_intel["country_activity"].setdefault(country, []).append(now)
+
+    for group in campaign_intel.values():
+
+        for key in list(group.keys()):
+
+            group[key] = [
+                t for t in group[key]
+                if now - t < CAMPAIGN_WINDOW
+            ]
+
+            if not group[key]:
+                del group[key]
+
+    if source_ip in campaign_intel["ip_activity"]:
+        if len(campaign_intel["ip_activity"][source_ip]) >= IP_WAVE_THRESHOLD:
+            return "GLOBAL_SCAN_WAVE"
+
+    if asn in campaign_intel["asn_activity"]:
+        if len(campaign_intel["asn_activity"][asn]) >= ASN_WAVE_THRESHOLD:
+            return "ASN_ATTACK_WAVE"
+
+    if country in campaign_intel["country_activity"]:
+        if len(campaign_intel["country_activity"][country]) >= COUNTRY_CAMPAIGN_THRESHOLD:
+            return "COUNTRY_ATTACK_CAMPAIGN"
+
+    return None
+
+
+# =========================================================
+# ASN THREAT INTELLIGENCE ENGINE
+# =========================================================
+
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
 # =========================================================
@@ -566,6 +623,7 @@ async def report_devices(
     origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(ip_addr)
 
     campaign = detect_campaign(ip_addr, asn, country)
+    global_campaign = detect_global_campaign(ip_addr, asn, country)
 
     # ASN threat intelligence
     asn_flag, asn_attack_count = track_asn_threat(asn)
@@ -652,6 +710,7 @@ async def report_devices(
         "technique": technique,
         "origin_label": origin_label,
 
+        "campaign": global_campaign,
 
         "asn_attack_count": asn_attack_count,
         "asn_flag": asn_flag,
