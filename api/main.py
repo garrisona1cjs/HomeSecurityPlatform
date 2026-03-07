@@ -501,7 +501,7 @@ def authenticate_agent(db, agent_id, api_key, request_ip):
 def register(agent: AgentRegistration):
 
     db = SessionLocal()
-    
+
 
 
     agent_id = str(uuid.uuid4())
@@ -539,6 +539,10 @@ async def report_devices(
 
     db = SessionLocal()
     client_ip = request.client.host
+
+    if not authenticate_agent(db, report.agent_id, x_api_key, client_ip):
+    db.close()
+    return {"error": "unauthorized agent"}
 
 
     risk = len(report.devices) * 40
