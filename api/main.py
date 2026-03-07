@@ -241,6 +241,39 @@ def correlate_incident(db, source_ip, asn, country_code, severity):
 # THREAT CAMPAIGN DETECTION ENGINE
 # =========================================================
 
+# =========================================================
+# ASN THREAT INTELLIGENCE ENGINE
+# =========================================================
+
+asn_threat_tracker = {}
+
+ASN_WINDOW = 300  # seconds
+ASN_ESCALATION_THRESHOLD = 8
+
+
+def track_asn_threat(asn):
+
+    now = datetime.utcnow().timestamp()
+
+    if asn not in asn_threat_tracker:
+        asn_threat_tracker[asn] = []
+
+    asn_threat_tracker[asn].append(now)
+
+    # remove expired activity
+    asn_threat_tracker[asn] = [
+        t for t in asn_threat_tracker[asn]
+        if now - t < ASN_WINDOW
+    ]
+
+    attack_count = len(asn_threat_tracker[asn])
+
+    # calculate reputation score
+    if attack_count >= ASN_ESCALATION_THRESHOLD:
+        return "HOSTILE_NETWORK", attack_count
+
+    return None, attack_count
+
 campaign_tracker = {
     "asn_activity": {},
     "country_activity": {},
@@ -450,6 +483,9 @@ async def report_devices(
 
     campaign = detect_campaign(ip_addr, asn, country)
 
+    # ASN threat intelligence
+    asn_flag, asn_attack_count = track_asn_threat(asn)
+
     technique = random.choice([
         "T1110 Brute Force",
         "T1078 Valid Accounts",
@@ -457,6 +493,18 @@ async def report_devices(
         "T1059 Command Exec",
         "T1566 Phishing"
     ])
+
+       # escalate severity if ASN is hostile
+    if asn_flag == "HOSTILE_NETWORK":
+
+        if severity == "LOW":
+            severity = "MEDIUM"
+
+        elif severity == "MEDIUM":
+            severity = "HIGH"
+
+        elif severity == "HIGH":
+            severity = "CRITICAL" 
 
     shockwave_flag = severity == "CRITICAL"
 
@@ -495,6 +543,8 @@ async def report_devices(
         "technique": technique,
         "origin_label": origin_label,
         "campaign": campaign,
+        "asn_attack_count": asn_attack_count,
+        "asn_flag": asn_flag,
         "latitude": lat,
         "longitude": lon,
         "country_code": country,
