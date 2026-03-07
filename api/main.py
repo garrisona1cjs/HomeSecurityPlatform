@@ -444,6 +444,51 @@ def evaluate_defense(source_ip, severity, botnet_flag, asn_flag):
 
     return False, None
 
+# =========================================================
+# AUTONOMOUS DEFENSE ENGINE (Layer 9)
+# =========================================================
+
+AUTO_BLOCK_ENABLED = True
+
+def autonomous_defense(source_ip, severity, botnet_flag, asn_flag, reputation_flag):
+
+    if not AUTO_BLOCK_ENABLED:
+        return False, None
+
+    reason = None
+
+    # botnet infrastructure
+    if botnet_flag == "BOTNET_CLUSTER":
+        reason = "BOTNET_BLOCK"
+
+    # hostile ASN networks
+    elif asn_flag == "HOSTILE_NETWORK":
+        reason = "HOSTILE_ASN_BLOCK"
+
+    # persistent attackers
+    elif reputation_flag == "PERSISTENT_THREAT":
+        reason = "PERSISTENT_ATTACKER_BLOCK"
+
+    # critical attack severity
+    elif severity == "CRITICAL":
+        reason = "CRITICAL_ATTACK_BLOCK"
+
+    if reason:
+
+        if source_ip not in blocked_ips:
+
+            blocked_ips.add(source_ip)
+
+            defense_log.append({
+                "ip": source_ip,
+                "reason": reason,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+            return True, reason
+
+    return False, None
+
    
 
 campaign_tracker = {
@@ -674,6 +719,14 @@ async def report_devices(
         asn_flag
     )
 
+    auto_blocked, auto_reason = autonomous_defense(
+        ip_addr,
+        severity,
+        botnet_flag,
+        asn_flag,
+        reputation_flag
+    )
+
     technique = random.choice([
         "T1110 Brute Force",
         "T1078 Valid Accounts",
@@ -759,6 +812,9 @@ if reputation_flag == "PERSISTENT_THREAT":
 
         "campaign": global_campaign,
         "reputation": reputation_flag,
+
+        "auto_blocked": auto_blocked,
+        "auto_reason": auto_reason,
 
         "asn_attack_count": asn_attack_count,
         "asn_flag": asn_flag,
