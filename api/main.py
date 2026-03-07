@@ -696,6 +696,8 @@ async def report_devices(
 
     origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(ip_addr)
 
+    heatmap_flag, heatmap_activity = track_heatmap(lat, lon, country)
+
     campaign = detect_campaign(ip_addr, asn, country)
     global_campaign = detect_global_campaign(ip_addr, asn, country)
 
@@ -767,10 +769,10 @@ async def report_devices(
             severity = "HIGH"
 
 
-# persistent attackers become critical
-if reputation_flag == "PERSISTENT_THREAT":
+    # persistent attackers become critical
+    if reputation_flag == "PERSISTENT_THREAT":
+        severity = "CRITICAL"
 
-    severity = "CRITICAL"
 
     shockwave_flag = severity == "CRITICAL"
 
@@ -790,6 +792,7 @@ if reputation_flag == "PERSISTENT_THREAT":
 
     db.add(alert)
     db.commit()
+
     correlate_incident(
         db,
         ip_addr,
@@ -797,7 +800,7 @@ if reputation_flag == "PERSISTENT_THREAT":
         country,
         severity
     )
-    
+
     db.close()
 
     # surge tracking
@@ -812,6 +815,7 @@ if reputation_flag == "PERSISTENT_THREAT":
 
         "campaign": global_campaign,
         "reputation": reputation_flag,
+        "heatmap": heatmap_flag,
 
         "auto_blocked": auto_blocked,
         "auto_reason": auto_reason,
@@ -823,14 +827,18 @@ if reputation_flag == "PERSISTENT_THREAT":
 
         "blocked": blocked,
         "block_reason": block_reason,
+
         "botnet_ips": botnet_ips,
         "botnet_countries": botnet_countries,
+
         "latitude": lat,
         "longitude": lon,
         "country_code": country,
+
         "source_ip": ip_addr,
         "isp": isp_name,
         "asn": asn,
+
         "shockwave": shockwave_flag,
         "training": training_mode,
         "team": "red",
@@ -868,6 +876,7 @@ async def simulate(source_ip: str, team: str = "red"):
     }
 
     await broadcast(payload)
+
     return {"simulated": True}
 
 # =========================================================
