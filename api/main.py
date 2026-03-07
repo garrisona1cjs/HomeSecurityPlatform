@@ -109,6 +109,20 @@ class Alert(Base):
     country_code = Column(String)
     shockwave = Column(String)
 
+   # =========================================================
+# AGENT MODEL (AUTHENTICATION)
+# =========================================================
+
+class Agent(Base):
+
+    __tablename__ = "agents"
+
+    agent_id = Column(String, primary_key=True)
+    hostname = Column(String)
+    ip_address = Column(String)
+    api_key = Column(String)
+    created_at = Column(String) 
+
 
 # =========================================================
 # INCIDENT MODEL
@@ -337,6 +351,24 @@ async def ws_endpoint(ws: WebSocket):
         
         connections.remove(ws)
 
+# =========================================================
+# AGENT AUTHENTICATION
+# =========================================================
+
+def authenticate_agent(db, agent_id, api_key):
+
+    agent = db.query(Agent).filter(
+        Agent.agent_id == agent_id
+    ).first()
+
+    if not agent:
+        return False
+
+    if agent.api_key != api_key:
+        return False
+
+    return True
+
 
 # =========================================================
 # REGISTER
@@ -344,10 +376,39 @@ async def ws_endpoint(ws: WebSocket):
 
 @app.post("/register")
 def register(agent: AgentRegistration):
-    
+
+    db = SessionLocal()
+
+    # ====================================
+    # AUTHENTICATE AGENT
+    # ====================================
+
+    if not authenticate_agent(db, report.agent_id, x_api_key):
+
+        db.close()
+
+        return {
+            "error": "unauthorized agent"
+        }
+
+    agent_id = str(uuid.uuid4())
+    api_key = secrets.token_hex(32)
+
+    new_agent = Agent(
+        agent_id=agent_id,
+        hostname=agent.hostname,
+        ip_address=agent.ip_address,
+        api_key=api_key,
+        created_at=datetime.utcnow().isoformat()
+    )
+
+    db.add(new_agent)
+    db.commit()
+    db.close()
+
     return {
-        "agent_id": str(uuid.uuid4()),
-        "api_key": secrets.token_hex(16)
+        "agent_id": agent_id,
+        "api_key": api_key
     }
 
 
