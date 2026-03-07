@@ -2,7 +2,7 @@
 # IMPORTS
 # =========================================================
 
-from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -541,12 +541,14 @@ async def report_devices(
     client_ip = request.client.host
 
     if not authenticate_agent(db, report.agent_id, x_api_key, client_ip):
-        
-        db.close()
 
-        return {"error": "unauthorized agent"}
+      db.close()
 
-
+      raise HTTPException(
+          status_code=401,
+          detail="Unauthorized agent"
+      )
+    
     risk = len(report.devices) * 40
 
     if risk >= 120:
