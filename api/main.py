@@ -854,9 +854,13 @@ function updateThreatPressure(lat, lng, severity){
 }
 
   // decay over time
-  setTimeout(()=>{
-    territories.forEach(z => z.intensity *= 0.85);
-  }, 3000);
+setTimeout(()=>{
+
+  territories.forEach(z => z.intensity *= 0.85);
+
+  territories = territories.filter(z => z.intensity > 0.2);
+
+}, 3000);
 
 }
 
@@ -915,7 +919,7 @@ arcs = arcs.slice(-120);
 points = points.slice(-200);
 rings = rings.slice(-60);
 packets = packets.slice(-80);
-heat = heat.slice(-80);
+heat = heat.slice(-40);
 labels = labels.slice(-120);
 
  globe.arcsData(arcs)
@@ -1412,7 +1416,7 @@ setInterval(() => {
 
   processingQueue = false;
 
-}, 60);
+}, 80);
 
 // threat pressure decay
 setInterval(()=>{
@@ -1420,6 +1424,8 @@ setInterval(()=>{
   pressureZones.forEach(z => {
     z.intensity *= 0.92;
   });
+
+  pressureZones = pressureZones.filter(z => z.intensity > 0.25);
 
 }, 2000);
 
@@ -1435,6 +1441,10 @@ const ws = new WebSocket(`${protocol}://${location.host}/ws`);
 ws.onmessage = e => {
   const alert = JSON.parse(e.data);
   alertQueue.push(alert);
+
+if(alertQueue.length > 200){
+  alertQueue.shift();
+}
 };
 
 load();
