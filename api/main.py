@@ -723,6 +723,123 @@ def alerts():
 
     return data
 
+# =========================================================
+# SOC THREAT INTELLIGENCE API
+# =========================================================
+
+
+@app.get("/intel/ip/{ip}")
+def intel_ip(ip: str):
+
+    db = SessionLocal()
+
+    alerts = db.query(Alert).filter(
+        Alert.origin_label.contains(ip)
+    ).all()
+
+    incidents = db.query(Incident).filter(
+        Incident.source_ip == ip
+    ).all()
+
+    db.close()
+
+    return {
+        "ip": ip,
+        "alert_count": len(alerts),
+        "incident_count": len(incidents),
+        "incidents": [
+            {
+                "asn": i.asn,
+                "country": i.country_code,
+                "severity": i.severity,
+                "alerts": i.alert_count,
+                "first_seen": i.first_seen,
+                "last_seen": i.last_seen
+            }
+            for i in incidents
+        ]
+    }
+
+
+@app.get("/intel/asn/{asn}")
+def intel_asn(asn: str):
+
+    db = SessionLocal()
+
+    incidents = db.query(Incident).filter(
+        Incident.asn == asn
+    ).all()
+
+    db.close()
+
+    return {
+        "asn": asn,
+        "incident_count": len(incidents),
+        "sources": [
+            {
+                "ip": i.source_ip,
+                "country": i.country_code,
+                "alerts": i.alert_count,
+                "first_seen": i.first_seen,
+                "last_seen": i.last_seen
+            }
+            for i in incidents
+        ]
+    }
+
+
+@app.get("/intel/country/{country}")
+def intel_country(country: str):
+
+    db = SessionLocal()
+
+    incidents = db.query(Incident).filter(
+        Incident.country_code == country
+    ).all()
+
+    db.close()
+
+    return {
+        "country": country,
+        "incident_count": len(incidents),
+        "attack_sources": [
+            {
+                "ip": i.source_ip,
+                "asn": i.asn,
+                "alerts": i.alert_count,
+                "first_seen": i.first_seen,
+                "last_seen": i.last_seen
+            }
+            for i in incidents
+        ]
+    }
+
+
+@app.get("/intel/incidents")
+def intel_incidents():
+
+    db = SessionLocal()
+
+    incidents = db.query(Incident).order_by(
+        Incident.last_seen.desc()
+    ).all()
+
+    db.close()
+
+    return [
+        {
+            "ip": i.source_ip,
+            "asn": i.asn,
+            "country": i.country_code,
+            "severity": i.severity,
+            "alerts": i.alert_count,
+            "first_seen": i.first_seen,
+            "last_seen": i.last_seen,
+            "status": i.status
+        }
+        for i in incidents
+    ]
+
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     return """
