@@ -202,6 +202,50 @@ def correlate_incident(db, source_ip, asn, country_code, severity):
 # TRAINING + SURGE DETECTION
 # =========================================================
 
+# =========================================================
+# THREAT CAMPAIGN DETECTION ENGINE
+# =========================================================
+
+campaign_tracker = {
+    "asn_activity": {},
+    "country_activity": {},
+    "ip_activity": {},
+}
+
+CAMPAIGN_WINDOW = 60  # seconds
+BOTNET_THRESHOLD = 6
+ASN_ATTACK_THRESHOLD = 4
+COUNTRY_CAMPAIGN_THRESHOLD = 5
+
+
+def detect_campaign(source_ip, asn, country):
+
+    now = datetime.utcnow().timestamp()
+
+    # track activity
+    campaign_tracker["ip_activity"].setdefault(source_ip, []).append(now)
+    campaign_tracker["asn_activity"].setdefault(asn, []).append(now)
+    campaign_tracker["country_activity"].setdefault(country, []).append(now)
+
+    # cleanup old entries
+    for category in campaign_tracker.values():
+        for key in list(category.keys()):
+            category[key] = [t for t in category[key] if now - t < CAMPAIGN_WINDOW]
+            if not category[key]:
+                del category[key]
+
+    # detection logic
+    if source_ip in campaign_tracker["ip_activity"] and len(campaign_tracker["ip_activity"][source_ip]) >= BOTNET_THRESHOLD:
+        return "BOTNET_RECON_WAVE"
+
+    if asn in campaign_tracker["asn_activity"] and len(campaign_tracker["asn_activity"][asn]) >= ASN_ATTACK_THRESHOLD:
+        return "ASN_COORDINATED_ATTACK"
+
+    if country in campaign_tracker["country_activity"] and len(campaign_tracker["country_activity"][country]) >= COUNTRY_CAMPAIGN_THRESHOLD:
+        return "MULTI_ORIGIN_CAMPAIGN"
+
+    return None
+
 training_mode = False
 
 
@@ -282,6 +326,7 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
     ip_addr = report.devices[0].get("ip", "8.8.8.8")
 
     origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(ip_addr)
+    campaign = detect_campaign(ip_addr, asn, country)
 
     technique = random.choice([
         "T1110 Brute Force",
@@ -327,6 +372,7 @@ async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
         "severity": severity,
         "technique": technique,
         "origin_label": origin_label,
+        "campaign": campaign,
         "latitude": lat,
         "longitude": lon,
         "country_code": country,
