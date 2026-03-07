@@ -477,18 +477,18 @@ text-align:center;">
 
 <script>
 
-const globe = Globe()(document.getElementById('globeViz'))
-.globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-.arcAltitudeAutoScale(0.45)
-.arcsTransitionDuration(0)
+const globe = Globe()(document.getElementById('globeViz'));
 
-/* 🔥 Neon Beam Enhancement */
-.arcDashLength(0.35)
-.arcDashGap(0.06)
-.arcDashInitialGap(() => Math.random())
-.arcDashAnimateTime(1600)
-.arcAltitude(0.18)
-.arcStroke(() => 1.5);
+globe
+  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+  .arcAltitudeAutoScale(0.45)
+  .arcsTransitionDuration(0)
+  .arcDashLength(0.35)
+  .arcDashGap(0.06)
+  .arcDashInitialGap(() => Math.random())
+  .arcDashAnimateTime(1600)
+  .arcAltitude(0.18)
+  .arcStroke(() => 1.5);
 
 globe.controls().autoRotate = true;
 globe.controls().autoRotateSpeed = 0.65;
@@ -852,16 +852,7 @@ function updateThreatPressure(lat, lng, severity){
 
 }
 
-  // decay over time
-setTimeout(()=>{
 
-  territories.forEach(z => z.intensity *= 0.85);
-
-  territories = territories.filter(z => z.intensity > 0.2);
-
-}, 3000);
-
-}
 
 // 🛰 orbital satellite network
 function initSatellites(){
