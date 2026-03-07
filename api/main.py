@@ -211,7 +211,7 @@ def correlate_incident(db, source_ip, asn, country_code, severity):
     if incident:
         
         incident.alert_count += 1
-        incident.last_seen = now.isoformat()
+        incident.last_seen = now
 
         db.commit()
         return incident
@@ -289,10 +289,39 @@ def detect_global_campaign(source_ip, asn, country):
 
     return None
 
+# =========================================================
+# THREAT REPUTATION MEMORY ENGINE (Layer 8)
+# =========================================================
 
-# =========================================================
-# ASN THREAT INTELLIGENCE ENGINE
-# =========================================================
+threat_reputation = {}
+
+REPUTATION_WINDOW = 86400  # 24 hours
+
+IP_REPEAT_THRESHOLD = 3
+ASN_REPEAT_THRESHOLD = 5
+
+
+def update_reputation(source_ip, asn):
+
+    now = datetime.utcnow().timestamp()
+
+    threat_reputation.setdefault(source_ip, []).append(now)
+
+    # cleanup expired history
+    threat_reputation[source_ip] = [
+        t for t in threat_reputation[source_ip]
+        if now - t < REPUTATION_WINDOW
+    ]
+
+    attack_count = len(threat_reputation[source_ip])
+
+    if attack_count >= ASN_REPEAT_THRESHOLD:
+        return "PERSISTENT_THREAT", attack_count
+
+    if attack_count >= IP_REPEAT_THRESHOLD:
+        return "REPEAT_ATTACKER", attack_count
+
+    return None, attack_count
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -625,6 +654,8 @@ async def report_devices(
     campaign = detect_campaign(ip_addr, asn, country)
     global_campaign = detect_global_campaign(ip_addr, asn, country)
 
+    reputation_flag, reputation_count = update_reputation(ip_addr, asn)
+
     # ASN threat intelligence
     asn_flag, asn_attack_count = track_asn_threat(asn)
 
@@ -672,6 +703,22 @@ async def report_devices(
         elif severity == "MEDIUM":
             severity = "CRITICAL"
 
+
+    # escalate severity for repeat attackers
+    if reputation_flag == "REPEAT_ATTACKER":
+
+        if severity == "LOW":
+            severity = "MEDIUM"
+
+        elif severity == "MEDIUM":
+            severity = "HIGH"
+
+
+# persistent attackers become critical
+if reputation_flag == "PERSISTENT_THREAT":
+
+    severity = "CRITICAL"
+
     shockwave_flag = severity == "CRITICAL"
 
     alert = Alert(
@@ -711,6 +758,7 @@ async def report_devices(
         "origin_label": origin_label,
 
         "campaign": global_campaign,
+        "reputation": reputation_flag,
 
         "asn_attack_count": asn_attack_count,
         "asn_flag": asn_flag,
