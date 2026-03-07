@@ -2,7 +2,7 @@
 # IMPORTS
 # =========================================================
 
-from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -355,7 +355,7 @@ async def ws_endpoint(ws: WebSocket):
 # AGENT AUTHENTICATION
 # =========================================================
 
-def authenticate_agent(db, agent_id, api_key):
+def authenticate_agent(db, agent_id, api_key, request_ip):
 
     agent = db.query(Agent).filter(
         Agent.agent_id == agent_id
@@ -365,6 +365,10 @@ def authenticate_agent(db, agent_id, api_key):
         return False
 
     if agent.api_key != api_key:
+        return False
+
+    # IP binding validation
+    if agent.ip_address != request_ip:
         return False
 
     return True
@@ -383,7 +387,7 @@ def register(agent: AgentRegistration):
     # AUTHENTICATE AGENT
     # ====================================
 
-    if not authenticate_agent(db, report.agent_id, x_api_key):
+    if not authenticate_agent(db, report.agent_id, x_api_key, client_ip):
 
         db.close()
 
@@ -417,10 +421,15 @@ def register(agent: AgentRegistration):
 # =========================================================
 
 @app.post("/report")
-async def report_devices(report: DeviceReport, x_api_key: str = Header(None)):
+async def report_devices(
+    report: DeviceReport,
+    request: Request,
+    x_api_key: str = Header(None)
+):
     
 
     db = SessionLocal()
+    client_ip = request.client.host
 
 
     risk = len(report.devices) * 40
