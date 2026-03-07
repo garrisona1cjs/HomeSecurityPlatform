@@ -946,11 +946,13 @@ const colors={
  CRITICAL:"#ff0033"
 };
 
-/* ---------- RENDER ---------- */
 
-function render(){
 
-// PERFORMANCE LIMITS
+
+
+
+
+
 const LIMITS = {
   arcs: 120,
   points: 200,
@@ -966,18 +968,18 @@ function clamp(arr, limit){
   }
 }
 
-// ======================================
-// WebGL Memory Guard
-// ======================================
-setInterval(() => {
+let lastFrame = 0;
+const FRAME_LIMIT = 90;
 
-  arcs.length = Math.min(arcs.length, 120);
-  points.length = Math.min(points.length, 200);
-  rings.length = Math.min(rings.length, 80);
-  packets.length = Math.min(packets.length, 120);
-  heat.length = Math.min(heat.length, 40);
+/* ---------- RENDER ---------- */
 
-}, 5000);
+function render(){
+
+const now = Date.now();
+if(now - lastFrame < FRAME_LIMIT) return;
+lastFrame = now;
+
+
 
 clamp(arcs, LIMITS.arcs);
 clamp(points, LIMITS.points);
@@ -986,28 +988,19 @@ clamp(packets, LIMITS.packets);
 clamp(heat, LIMITS.heat);
 clamp(labels, LIMITS.labels);
 
- globe.arcsData(arcs)
-   .arcStroke('stroke')
-   .arcColor('color')
-   .arcDashLength(0.3)
-   .arcDashGap(0.08)
-   .arcDashAnimateTime(900)
-   .arcDashInitialGap(() => Math.random())
-   .arcDashGap(0.06)
-   .arcDashLength(0.35)
-   .arcColor(d => d.color)
-   .arcAltitude(d => 0.18);
+globe.arcsData(arcs)
+  .arcStroke('stroke')
+  .arcColor('color')
+  .arcDashLength(0.3)
+  .arcDashGap(0.08)
+  .arcDashAnimateTime(900)
+  .arcDashInitialGap(() => Math.random())
+  .arcDashGap(0.06)
+  .arcDashLength(0.35)
+  .arcColor(d => d.color)
+  .arcAltitude(d => 0.18);
 
-// 🌍 territory danger zones
-const zonePoints = territories.map(z => ({
-  lat: z.lat,
-  lng: z.lng,
-  size: Math.min(2.5, z.intensity * 0.4),
-  color:
-    z.intensity > 6 ? "#ff0033" :
-    z.intensity > 3 ? "#ff5500" :
-    "#ffaa00"
-}));
+
 
 // global threat pressure glow
 const pressurePoints = pressureZones.map(z => ({
@@ -1025,12 +1018,12 @@ const ringPaths = orbitRings.map(r => {
 
   r.angle += r.speed;
 
-  const points = [];
+  const pathPoints = [];
 
   for(let a=0; a<=360; a+=5){
     const rad = (a + r.angle * 57) * Math.PI / 180;
 
-    points.push([
+    pathPoints.push([
       Math.sin(rad) * (90 - r.tilt),
       a,
       r.altitude
@@ -1038,7 +1031,7 @@ const ringPaths = orbitRings.map(r => {
   }
 
   return {
-    points,
+    points: pathPoints,
     color: "rgba(0,255,255,0.55)"
   };
 });
@@ -1058,7 +1051,7 @@ const satellitePoints = satellites.map(s => {
 });
 
 // combine all points
-globe.pointsData(points.concat(zonePoints, pressurePoints, satellitePoints))
+globe.pointsData(points.concat(pressurePoints, satellitePoints))
   .pointRadius('size')
   .pointColor('color')
   .pointAltitude(0.02);
@@ -1074,7 +1067,7 @@ globe.pointsData(points.concat(zonePoints, pressurePoints, satellitePoints))
    .labelDotRadius(0.3);
 
 // fade old packet trails
-packets = packets.filter(p => Date.now() - p.created < 8000);
+packets = packets.filter(p => now - p.created < 8000);
 
 globe.pathsData([
   ...packets,
@@ -1090,6 +1083,7 @@ globe.hexPolygonsData(heat)
    .hexPolygonColor(d => d.color)
    .hexPolygonAltitude(d => d.alt);
 }
+
 
 /* ---------- ADD ALERT ---------- */
 
@@ -1455,6 +1449,26 @@ setInterval(()=>{
 
 }, 9000);
 
+// ======================================
+// WebGL Memory Guard
+// ======================================
+function trim(arr, max){
+  if(arr.length > max){
+    arr.splice(0, arr.length - max);
+  }
+}
+
+setInterval(()=>{
+
+  trim(arcs,120);
+  trim(points,200);
+  trim(rings,80);
+  trim(packets,120);
+  trim(heat,40);
+  trim(labels,120);
+
+}, 5000);
+
 // animate radar sweep cone
 setInterval(()=>{
 sweepCone.style.transform =
@@ -1522,13 +1536,16 @@ async function load(){
 const protocol = location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${protocol}://${location.host}/ws`);
 ws.onmessage = e => {
-  const alert = JSON.parse(e.data);
-  alertQueue.push(alert);
 
-if(alertQueue.length > 200){
+  const alert = JSON.parse(e.data);
+
+
+
+  // backpressure protection
   if(alertQueue.length < 150){
-  alertQueue.push(alert);
-}
+      alertQueue.push(alert);
+  }
+
 };
 
 load();
