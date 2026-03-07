@@ -11,7 +11,7 @@ from typing import List
 import uuid, secrets, os, random, asyncio
 import geoip2.database
 
-from sqlalchemy import create_engine, Column, String, inspect, text
+from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from ipwhois import IPWhois
@@ -93,19 +93,19 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # =========================================================
 
 class Alert(Base):
-    
+
     __tablename__ = "alerts"
 
     id = Column(String, primary_key=True)
     agent_id = Column(String)
-    risk_score = Column(String)
+    risk_score = Column(Integer)
     severity = Column(String)
     technique = Column(String)
-    timestamp = Column(String)
+    timestamp = Column(DateTime)
 
     origin_label = Column(String)
-    latitude = Column(String)
-    longitude = Column(String)
+    latitude = Column(Float)
+    longitude = Column(Float)
     country_code = Column(String)
     shockwave = Column(String)
 
@@ -129,7 +129,7 @@ class Agent(Base):
 # =========================================================
 
 class Incident(Base):
-    
+
     __tablename__ = "incidents"
 
     id = Column(String, primary_key=True)
@@ -139,12 +139,12 @@ class Incident(Base):
 
     severity = Column(String)
 
-    alert_count = Column(String)
+    alert_count = Column(Integer)
 
     status = Column(String)
 
-    first_seen = Column(String)
-    last_seen = Column(String)
+    first_seen = Column(DateTime)
+    last_seen = Column(DateTime)
 
 
 # =========================================================
@@ -201,7 +201,7 @@ CORRELATION_WINDOW = 120  # seconds
 def correlate_incident(db, source_ip, asn, country_code, severity):
 
     now = datetime.utcnow()
-    
+
 
     incident = db.query(Incident).filter(
         Incident.source_ip == source_ip,
@@ -210,7 +210,7 @@ def correlate_incident(db, source_ip, asn, country_code, severity):
 
     if incident:
         
-        incident.alert_count = str(int(incident.alert_count) + 1)
+        incident.alert_count += 1
         incident.last_seen = now.isoformat()
 
         db.commit()
@@ -222,10 +222,10 @@ def correlate_incident(db, source_ip, asn, country_code, severity):
         asn=asn,
         country_code=country_code,
         severity=severity,
-        alert_count="1",
+        alert_count=1,
         status="NEW",
-        first_seen=now.isoformat(),
-        last_seen=now.isoformat()
+        first_seen=now,
+        last_seen=now
     )
 
     db.add(incident)
@@ -619,13 +619,13 @@ async def report_devices(
     alert = Alert(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
-        risk_score=str(risk),
+        risk_score=risk,
         severity=severity,
         technique=technique,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.utcnow(),
         origin_label=origin_label,
-        latitude=str(lat),
-        longitude=str(lon),
+        latitude=lat,
+        longitude=lon,
         country_code=country,
         shockwave=str(shockwave_flag)
     )
