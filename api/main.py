@@ -327,7 +327,7 @@ async def ws_endpoint(ws: WebSocket):
     await ws.accept()
 
     connections.add(ws)
-    
+
     try:
         
         while True:
@@ -629,7 +629,7 @@ setInterval(()=>{
     "inset 0 0 " +
     (100 + Math.sin(Date.now()*0.002)*40) +
     "px rgba(0,150,255,0.08)";
-}, 60);
+}, 120);
 
 // subtle magnetic flow shimmer
 setInterval(()=>{
@@ -641,7 +641,7 @@ setInterval(()=>{
       rgba(0,255,255,${energy}),
       rgba(0,0,0,0) 60%)`;
 
-}, 60);
+}, 120);
 
 // 🚨 surge grid overlay
 const surgeOverlay = document.createElement("div");
@@ -1175,16 +1175,24 @@ const color = colors[sev];
 
 // 🛰 satellites react to threats
 satellites.forEach(s => {
-  s.speed += sev === "CRITICAL" ? 0.004 :
-             sev === "HIGH" ? 0.002 : 0;
+  s.speed = Math.min(
+  s.speed +
+  (sev === "CRITICAL" ? 0.004 :
+   sev === "HIGH" ? 0.002 : 0),
+  0.01
+);
 
   setTimeout(() => s.speed *= 0.98, 2000);
 });
 
 // 🛰 defense rings react to attacks
 orbitRings.forEach(r => {
-  r.speed += sev === "CRITICAL" ? 0.002 :
-             sev === "HIGH" ? 0.001 : 0;
+  r.speed = Math.min(
+    r.speed +
+    (sev === "CRITICAL" ? 0.002 :
+    sev === "HIGH" ? 0.001 : 0),
+    0.01
+  );
 
   setTimeout(() => r.speed *= 0.9, 2500);
 });
@@ -1498,8 +1506,22 @@ setTimeout(()=>{
   targetRotateSpeed = baseRotateSpeed;
 }, 4000);
 
- render();
+
 }
+
+/* =====================================
+   SOC CONTROLLED RENDER LOOP
+===================================== */
+
+function renderLoop(){
+
+  render();
+
+  requestAnimationFrame(renderLoop);
+
+}
+
+renderLoop();
 
 /* ---------- RADAR SWEEP ---------- */
 
@@ -1550,7 +1572,7 @@ sweepCone.style.transform =
   "translate(-50%, -50%) rotate(" +
   (Date.now()*0.02 % 360) +
   "deg)";
-}, 60);
+}, 120);
 
 // SOC Render Scheduler
 setInterval(() => {
@@ -1560,7 +1582,7 @@ setInterval(() => {
   processingQueue = true;
   renderPending = true;
 
-  let batchSize = 8;
+  let batchSize = Math.min(8, alertQueue.length);
 
   while (alertQueue.length > 0 && batchSize > 0) {
     const alert = alertQueue.shift();
@@ -1604,6 +1626,7 @@ setInterval(()=>{
     heat.length = 0;
     labels.length = 0;
     pressureZones.length = 0;
+    clusters.length = 0;
 
   }
 
@@ -1650,6 +1673,22 @@ ws.onmessage = e => {
 };
 
 load();
+
+/* ======================================
+   WebGL Context Recovery
+====================================== */
+
+window.addEventListener("webglcontextlost", function(e){
+
+  console.warn("WebGL context lost - reloading dashboard");
+
+  e.preventDefault();
+
+  setTimeout(()=>{
+    location.reload();
+  },2000);
+
+}, false);
 </script>
 
 </body>
