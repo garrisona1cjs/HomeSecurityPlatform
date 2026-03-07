@@ -968,8 +968,22 @@ function clamp(arr, limit){
   }
 }
 
+// ======================================
+// SOC RENDER LIMIT CONFIG
+// ======================================
+const RENDER_LIMITS = {
+  arcs: 120,
+  points: 200,
+  rings: 80,
+  packets: 120,
+  heat: 40,
+  labels: 120,
+  queue: 150
+};
+
 let lastFrame = 0;
 const FRAME_LIMIT = 90;
+let renderPending = false;
 
 /* ---------- RENDER ---------- */
 
@@ -981,12 +995,12 @@ lastFrame = now;
 
 
 
-clamp(arcs, LIMITS.arcs);
-clamp(points, LIMITS.points);
-clamp(rings, LIMITS.rings);
-clamp(packets, LIMITS.packets);
-clamp(heat, LIMITS.heat);
-clamp(labels, LIMITS.labels);
+clamp(arcs, RENDER_LIMITS.arcs);
+clamp(points, RENDER_LIMITS.points);
+clamp(rings, RENDER_LIMITS.rings);
+clamp(packets, RENDER_LIMITS.packets);
+clamp(heat, RENDER_LIMITS.heat);
+clamp(labels, RENDER_LIMITS.labels);
 
 globe.arcsData(arcs)
   .arcStroke('stroke')
@@ -1067,7 +1081,11 @@ globe.pointsData(points.concat(pressurePoints, satellitePoints))
    .labelDotRadius(0.3);
 
 // fade old packet trails
-packets = packets.filter(p => now - p.created < 8000);
+for (let i = packets.length - 1; i >= 0; i--) {
+  if (now - packets[i].created > 8000) {
+    packets.splice(i, 1);
+  }
+}
 
 globe.pathsData([
   ...packets,
@@ -1470,19 +1488,21 @@ setInterval(()=>{
 }, 5000);
 
 // animate radar sweep cone
+// animate radar sweep cone
 setInterval(()=>{
 sweepCone.style.transform =
   "translate(-50%, -50%) rotate(" +
   (Date.now()*0.02 % 360) +
   "deg)";
-}, 60);
+}, 120);
 
 // SOC Render Scheduler
 setInterval(() => {
 
-  if (processingQueue) return;
+  if (processingQueue || renderPending) return;
 
   processingQueue = true;
+  renderPending = true;
 
   let batchSize = 8;
 
@@ -1493,8 +1513,9 @@ setInterval(() => {
   }
 
   processingQueue = false;
+  renderPending = false;
 
-}, 100);
+}, 100);;
 
 // threat pressure decay
 setInterval(()=>{
@@ -1503,7 +1524,9 @@ setInterval(()=>{
     z.intensity *= 0.92;
   });
 
-  pressureZones = pressureZones.filter(z => z.intensity > 0.25);
+  pressureZones = pressureZones
+  .filter(z => z.intensity > 0.25)
+  .slice(-80);
 
 }, 2000);
 
@@ -1514,7 +1537,8 @@ setInterval(()=>{
 
   const mem = performance.memory;
 
-  if(mem && mem.usedJSHeapSize > 350000000){ // ~350MB
+  if(mem && mem.usedJSHeapSize > 350000000){
+
     console.warn("SOC Dashboard memory reset triggered");
 
     arcs.length = 0;
@@ -1522,9 +1546,30 @@ setInterval(()=>{
     rings.length = 0;
     packets.length = 0;
     heat.length = 0;
+    labels.length = 0;
+    pressureZones.length = 0;
+
   }
 
 }, 10000);
+
+// ======================================
+// Idle Cleanup
+// ======================================
+setInterval(()=>{
+
+  if(alertQueue.length === 0){
+
+    clamp(arcs,80);
+    clamp(points,120);
+    clamp(rings,60);
+    clamp(packets,60);
+    clamp(heat,20);
+    clamp(labels,80);
+
+  }
+
+},15000);
 
 /* ---------- LOAD & LIVE ---------- */
 
@@ -1542,8 +1587,8 @@ ws.onmessage = e => {
 
 
   // backpressure protection
-  if(alertQueue.length < 150){
-      alertQueue.push(alert);
+  if(alertQueue.length < RENDER_LIMITS.queue){
+    alertQueue.push(alert);
   }
 
 };
