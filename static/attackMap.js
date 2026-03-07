@@ -28,6 +28,25 @@ let escalationLevel = 1;
 let shieldDomeLayer = null
 let lastGlobalPulse = 0;
 
+// ================================
+// MEMORY CLEANUP SYSTEM
+// ================================
+setInterval(() => {
+
+    const MAX_KEYS = 300;
+
+    function trimObject(obj){
+        const keys = Object.keys(obj);
+        if(keys.length > MAX_KEYS){
+            keys.slice(0, keys.length - MAX_KEYS).forEach(k => delete obj[k]);
+        }
+    }
+
+    trimObject(originIntensity);
+    trimObject(heatZones);
+
+}, 15000);
+
 
 
 
