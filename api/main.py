@@ -2507,7 +2507,7 @@ async def report_devices(
     campaign_wave = detect_attack_campaign(ip_addr, asn, country)
     velocity_flag = detect_attack_velocity(ip_addr)
     geo_wave = detect_geo_wave(country)
-    persistence_flag = detect_persistent_infrastructure(ip_addr)
+    infra_persistence_flag = detect_persistent_infrastructure(ip_addr)
 
     # Layer 19 — Threat attribution
     behavior_label = classify_attack_behavior(
@@ -3723,22 +3723,17 @@ if(alert.cluster_flag === "INFRASTRUCTURE_SWARM"){
 
 // 🛰 satellites react to threats
 satellites.forEach(s => {
-  s.speed = Math.min(
-  s.speed +
-  (sev === "CRITICAL" ? 0.004 :
-   sev === "HIGH" ? 0.002 : 0),
-  0.01
-);
 
-r.speed = Math.min(
-    r.speed +
-    (sev === "CRITICAL" ? 0.002 :
-    sev === "HIGH" ? 0.001 : 0),
+  s.speed = Math.min(
+    s.speed +
+    (sev === "CRITICAL" ? 0.004 :
+     sev === "HIGH" ? 0.002 : 0),
     0.01
-);
+  );
 
   setTimeout(() => s.speed *= 0.98, 2000);
-});
+
+});;
 
 // 🛰 defense rings react to attacks
 orbitRings.forEach(r => {
