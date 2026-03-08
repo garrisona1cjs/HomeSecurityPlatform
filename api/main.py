@@ -433,6 +433,35 @@ def classify_threat_actor(
     return "LOW_RISK_ACTIVITY"
 
 # =========================================================
+# ATTACK PATTERN RECOGNITION ENGINE (Layer 15)
+# =========================================================
+
+def detect_attack_pattern(timeline):
+
+    if not timeline:
+        return None
+
+    techniques = [event["technique"] for event in timeline[-5:]]
+
+    # brute force pattern
+    if "T1110 Brute Force" in techniques and "T1078 Valid Accounts" in techniques:
+        return "ACCOUNT_COMPROMISE_PATTERN"
+
+    # recon pattern
+    if techniques.count("T1046 Network Scan") >= 3:
+        return "GLOBAL_RECON_PATTERN"
+
+    # command execution pattern
+    if "T1059 Command Exec" in techniques:
+        return "REMOTE_COMMAND_PATTERN"
+
+    # phishing chain
+    if "T1566 Phishing" in techniques and "T1078 Valid Accounts" in techniques:
+        return "PHISHING_COMPROMISE_PATTERN"
+
+    return None
+
+# =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
 # =========================================================
 
@@ -872,6 +901,8 @@ async def report_devices(
 
     timeline = update_attack_timeline(ip_addr, technique, severity)
 
+    pattern_flag = detect_attack_pattern(timeline)
+
     threat_score = calculate_threat_score(
         severity,
         reputation_flag,
@@ -969,6 +1000,7 @@ async def report_devices(
         "origin_label": origin_label,
 
         "timeline": timeline,
+        "pattern": pattern_flag,
 
         "campaign": global_campaign,
         "reputation": reputation_flag,
