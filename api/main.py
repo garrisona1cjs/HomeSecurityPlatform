@@ -3267,6 +3267,26 @@ let counts = {LOW:0,MEDIUM:0,HIGH:0,CRITICAL:0};
 
 let surgeLevel = 0;
 
+// 🌍 CYBER WEATHER CURRENT SYSTEM (Layer 104)
+
+let cyberCurrents = [];
+
+function updateCyberWeather(lat,lng,severity){
+
+  cyberCurrents.push({
+    lat,
+    lng,
+    driftLat:(Math.random()-0.5)*0.1,
+    driftLng:(Math.random()-0.5)*0.1,
+    life:120
+  });
+
+  if(cyberCurrents.length > 120){
+    cyberCurrents.shift();
+  }
+
+}
+
 /* =====================================
    SOC EVENT GOVERNOR
 ===================================== */
@@ -3612,6 +3632,26 @@ globe.arcsData(arcs)
   .arcColor(d => d.color)
   .arcAltitude(d => 0.18);
 
+// 🌬 render cyber weather currents
+
+const weatherParticles = [];
+
+cyberCurrents.forEach(w=>{
+
+  w.lat += w.driftLat;
+  w.lng += w.driftLng;
+  w.life--;
+
+  weatherParticles.push({
+    lat:w.lat,
+    lng:w.lng,
+    size:0.2,
+    color:"rgba(0,255,255,0.35)"
+  });
+
+});
+
+cyberCurrents = cyberCurrents.filter(w=>w.life>0);
 
 
 // global threat pressure glow
@@ -3675,10 +3715,15 @@ const stormParticles = [];
 
 botnetStorms.forEach(storm => {
 
+storm.rotation = storm.rotation || Math.random()*6.28;
+storm.rotation += 0.02;
+
   storm.particles.forEach(p => {
 
-    p.lat += p.driftLat;
-    p.lng += p.driftLng;
+    const spin = storm.rotation;
+
+    p.lat += p.driftLat + Math.sin(spin + p.lat)*0.02;
+    p.lng += p.driftLng + Math.cos(spin + p.lng)*0.02;
     p.life--;
 
     stormParticles.push({
@@ -3695,6 +3740,10 @@ botnetStorms.forEach(storm => {
 });
 
 botnetStorms = botnetStorms.filter(s => s.particles.length > 0);
+
+if(botnetStorms.length > MAX_STORMS){
+  botnetStorms.splice(0, botnetStorms.length - MAX_STORMS);
+}
 
 globe.pointsData(points.concat(pressurePoints, satellitePoints, stormParticles))
   .pointRadius('size')
@@ -3880,6 +3929,7 @@ points.push({
 clusterAttack(lat, lng, sev);
 
 updateThreatPressure(lat, lng, sev);
+updateCyberWeather(lat,lng,sev);
 
 // pulse wave expansion
 createPulse(lat, lng, sev);
@@ -3935,6 +3985,18 @@ heat.push({
        .map(c=>127397+c.charCodeAt()))
    });
  }
+
+ // 🌊 GLOBAL DDoS SHOCKWAVE (Layer 103)
+
+if(alert.attack_pressure === "GLOBAL_ATTACK_SURGE"){
+
+  rings.push({
+    lat: 0,
+    lng: 0,
+    maxR: 120
+  });
+
+}
 
  
 // CRITICAL shockwave & cinematic zoom
