@@ -830,6 +830,128 @@ def calculate_threat_confidence(
 
     return "LOW_CONFIDENCE"
 
+# =========================================================
+# BOTNET SWARM DETECTION ENGINE
+# Layer 26
+# =========================================================
+
+botnet_swarm_tracker = {}
+
+BOTNET_SWARM_THRESHOLD = 12
+
+def detect_botnet_swarm(asn, ip):
+
+    botnet_swarm_tracker.setdefault(asn, set()).add(ip)
+
+    if len(botnet_swarm_tracker[asn]) >= BOTNET_SWARM_THRESHOLD:
+        return "GLOBAL_BOTNET_SWARM"
+
+    return None
+
+# =========================================================
+# AUTONOMOUS THREAT ESCALATION ENGINE
+# Layer 27
+# =========================================================
+
+def autonomous_threat_escalation(
+    threat_score,
+    campaign_flag,
+    cluster_flag,
+    graph_flag,
+    swarm_flag
+):
+
+    escalation = 0
+
+    if campaign_flag:
+        escalation += 10
+
+    if cluster_flag:
+        escalation += 10
+
+    if graph_flag:
+        escalation += 10
+
+    if swarm_flag:
+        escalation += 20
+
+    return min(threat_score + escalation, 100)
+
+# =========================================================
+# GLOBAL ATTACK PRESSURE ENGINE
+# Layer 28
+# =========================================================
+
+global_attack_counter = []
+
+GLOBAL_PRESSURE_WINDOW = 10
+GLOBAL_PRESSURE_THRESHOLD = 40
+
+def detect_global_attack_pressure():
+
+    now = datetime.utcnow()
+
+    global_attack_counter.append(now)
+
+    while global_attack_counter and now - global_attack_counter[0] > timedelta(seconds=GLOBAL_PRESSURE_WINDOW):
+        global_attack_counter.pop(0)
+
+    if len(global_attack_counter) >= GLOBAL_PRESSURE_THRESHOLD:
+        return "GLOBAL_ATTACK_SURGE"
+
+    return None
+
+# =========================================================
+# INFRASTRUCTURE EVOLUTION ENGINE
+# Layer 29
+# =========================================================
+
+infrastructure_evolution = {}
+
+EVOLUTION_THRESHOLD = 4
+
+def detect_infrastructure_evolution(asn, country):
+
+    key = f"{asn}:{country}"
+
+    infrastructure_evolution.setdefault(key, 0)
+
+    infrastructure_evolution[key] += 1
+
+    if infrastructure_evolution[key] >= EVOLUTION_THRESHOLD:
+        return "EVOLVING_ATTACK_INFRASTRUCTURE"
+
+    return None
+
+# =========================================================
+# THREAT INTELLIGENCE FUSION ENGINE
+# Layer 30
+# =========================================================
+
+def fuse_threat_intelligence(
+    threat_score,
+    threat_confidence,
+    reputation_flag,
+    actor_reputation,
+    swarm_flag
+):
+
+    fusion_score = threat_score
+
+    if threat_confidence == "HIGH_CONFIDENCE":
+        fusion_score += 5
+
+    if reputation_flag:
+        fusion_score += 5
+
+    if actor_reputation:
+        fusion_score += 10
+
+    if swarm_flag:
+        fusion_score += 15
+
+    return min(fusion_score, 100)
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -1318,6 +1440,11 @@ async def report_devices(
 
     pattern_flag = detect_attack_pattern(timeline)
 
+    # Layer 26–29 intelligence
+    swarm_flag = detect_botnet_swarm(asn, ip_addr)
+    attack_pressure = detect_global_attack_pressure()
+    evolution_flag = detect_infrastructure_evolution(asn, country)
+
     # Layer 21–24 intelligence
     campaign_wave = detect_attack_campaign(ip_addr, asn, country)
     velocity_flag = detect_attack_velocity(ip_addr)
@@ -1349,6 +1476,15 @@ async def report_devices(
         heatmap_flag
     )
 
+    # Layer 27 escalation
+    threat_score = autonomous_threat_escalation(
+        threat_score,
+        global_campaign,
+        cluster_flag,
+        graph_flag,
+        swarm_flag
+    )
+
     # Layer 25 — confidence
     threat_confidence = calculate_threat_confidence(
         threat_score,
@@ -1356,6 +1492,15 @@ async def report_devices(
         botnet_flag,
         global_campaign,
         cluster_flag
+    )
+
+    # Layer 30 fusion intelligence
+    fusion_score = fuse_threat_intelligence(
+        threat_score,
+        threat_confidence,
+        reputation_flag,
+        actor_reputation,
+        swarm_flag
     )
 
     # cluster escalation
@@ -1473,6 +1618,11 @@ async def report_devices(
         "geo_wave": geo_wave,
         "persistence_flag": persistence_flag,
         "confidence": threat_confidence,
+
+        "swarm_flag": swarm_flag,
+        "attack_pressure": attack_pressure,
+        "evolution_flag": evolution_flag,
+        "fusion_score": fusion_score,
 
         "technique": technique,
         "origin_label": origin_label,
