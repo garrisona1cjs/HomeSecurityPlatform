@@ -616,6 +616,50 @@ def update_threat_graph(ip, asn, country, campaign):
 
     return None
 
+# =========================================================
+# THREAT ATTRIBUTION ENGINE
+# Layer 19
+# =========================================================
+
+def classify_attack_behavior(
+    technique,
+    reputation_flag,
+    botnet_flag,
+    campaign_flag,
+    cluster_flag,
+    graph_flag
+):
+
+    # automated scanning
+    if technique == "T1046 Network Scan":
+        return "SCAN_BOT"
+
+    # credential abuse
+    if technique == "T1110 Brute Force":
+        return "CREDENTIAL_STUFFER"
+
+    # phishing operations
+    if technique == "T1566 Phishing":
+        return "PHISHING_CAMPAIGN"
+
+    # botnet infrastructure
+    if botnet_flag == "BOTNET_CLUSTER":
+        return "BOTNET_INFRASTRUCTURE"
+
+    # coordinated attack infrastructure
+    if cluster_flag == "INFRASTRUCTURE_SWARM":
+        return "COORDINATED_ATTACK_CLUSTER"
+
+    # large ASN attack networks
+    if graph_flag == "ASN_ATTACK_NETWORK":
+        return "HOSTILE_NETWORK_ACTIVITY"
+
+    # persistent actors
+    if reputation_flag == "PERSISTENT_THREAT":
+        return "APT_STYLE_ACTIVITY"
+
+    return "UNCLASSIFIED_ACTIVITY"
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -1104,6 +1148,16 @@ async def report_devices(
 
     pattern_flag = detect_attack_pattern(timeline)
 
+    # Layer 19 — Threat attribution
+    behavior_label = classify_attack_behavior(
+        technique,
+        reputation_flag,
+        botnet_flag,
+        global_campaign,
+        cluster_flag,
+        graph_flag
+    )
+
     threat_score = calculate_threat_score(
         severity,
         reputation_flag,
@@ -1220,6 +1274,7 @@ async def report_devices(
         "severity": severity,
         "threat_score": threat_score,
         "actor_profile": actor_profile,
+        "behavior": behavior_label,
 
         "technique": technique,
         "origin_label": origin_label,
