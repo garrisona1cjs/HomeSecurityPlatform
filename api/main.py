@@ -523,6 +523,95 @@ def update_threat_infrastructure(db, ip, score, asn=None, country=None, campaign
 
     db.commit() 
 
+# =========================================================
+# THREAT INFRASTRUCTURE CLUSTER ENGINE
+# Layer 17
+# =========================================================
+
+infrastructure_clusters = {}
+
+CLUSTER_WINDOW = 120  # seconds
+CLUSTER_IP_THRESHOLD = 6
+CLUSTER_ASN_THRESHOLD = 4
+
+
+def detect_infrastructure_cluster(source_ip, asn, country):
+
+    now = datetime.utcnow().timestamp()
+
+    # initialize cluster tracking
+    infrastructure_clusters.setdefault(asn, {
+        "ips": set(),
+        "countries": set(),
+        "timestamps": []
+    })
+
+    cluster = infrastructure_clusters[asn]
+
+    cluster["ips"].add(source_ip)
+    cluster["countries"].add(country)
+    cluster["timestamps"].append(now)
+
+    # remove expired timestamps
+    cluster["timestamps"] = [
+        t for t in cluster["timestamps"]
+        if now - t < CLUSTER_WINDOW
+    ]
+
+    ip_count = len(cluster["ips"])
+    country_count = len(cluster["countries"])
+
+    # detect distributed infrastructure swarm
+    if ip_count >= CLUSTER_IP_THRESHOLD and country_count >= 2:
+        return "INFRASTRUCTURE_SWARM", ip_count
+
+    # detect ASN coordinated attacks
+    if len(cluster["timestamps"]) >= CLUSTER_ASN_THRESHOLD:
+        return "COORDINATED_ASN_ATTACK", len(cluster["timestamps"])
+
+    return None, ip_count
+
+# =========================================================
+# THREAT RELATIONSHIP GRAPH ENGINE
+# Layer 18
+# =========================================================
+
+threat_graph = {
+    "ip_to_asn": {},
+    "ip_to_country": {},
+    "ip_to_campaign": {},
+    "asn_to_ips": {},
+    "country_to_ips": {}
+}
+
+GRAPH_CLUSTER_THRESHOLD = 5
+
+
+def update_threat_graph(ip, asn, country, campaign):
+
+    # IP relationships
+    threat_graph["ip_to_asn"][ip] = asn
+    threat_graph["ip_to_country"][ip] = country
+
+    if campaign:
+        threat_graph["ip_to_campaign"][ip] = campaign
+
+    # ASN relationships
+    threat_graph["asn_to_ips"].setdefault(asn, set()).add(ip)
+
+    # Country relationships
+    threat_graph["country_to_ips"].setdefault(country, set()).add(ip)
+
+    # detection logic
+
+    if len(threat_graph["asn_to_ips"][asn]) >= GRAPH_CLUSTER_THRESHOLD:
+        return "ASN_ATTACK_NETWORK"
+
+    if len(threat_graph["country_to_ips"][country]) >= GRAPH_CLUSTER_THRESHOLD:
+        return "COUNTRY_ATTACK_NETWORK"
+
+    return None
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -945,6 +1034,14 @@ async def report_devices(
         country
     )
 
+    # Layer 18 — Threat relationship graph
+    graph_flag = update_threat_graph(
+        ip_addr,
+        asn,
+        country,
+        global_campaign
+    )
+
     # automated defense evaluation
     blocked, block_reason = evaluate_defense(
         ip_addr,
@@ -988,6 +1085,13 @@ async def report_devices(
 
     if cluster_flag == "COORDINATED_ASN_ATTACK":
         threat_score = min(threat_score + 10, 100)
+
+    # graph intelligence escalation
+    if graph_flag == "ASN_ATTACK_NETWORK":
+        threat_score = min(threat_score + 12, 100)
+
+    if graph_flag == "COUNTRY_ATTACK_NETWORK":
+        threat_score = min(threat_score + 8, 100)
 
     # Layer 16 — Track attacker infrastructure
     update_threat_infrastructure(
@@ -1093,6 +1197,7 @@ async def report_devices(
         "reputation": reputation_flag,
         "heatmap": heatmap_flag,
         "cluster_flag": cluster_flag,
+        "graph_flag": graph_flag,
 
         "auto_blocked": auto_blocked,
         "auto_reason": auto_reason,
