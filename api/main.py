@@ -462,6 +462,68 @@ def detect_attack_pattern(timeline):
     return None
 
 # =========================================================
+# THREAT INFRASTRUCTURE MEMORY
+# Layer 16
+# =========================================================
+
+class ThreatInfrastructure(Base):
+    __tablename__ = "threat_infrastructure"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    ip_address = Column(String, index=True)
+    asn = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+
+    attack_count = Column(Integer, default=1)
+
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+
+    avg_threat_score = Column(Float, default=0.0)
+
+    campaign = Column(String, nullable=True)   
+
+# =========================================================
+# THREAT INFRASTRUCTURE TRACKER
+# Layer 16
+# =========================================================
+
+def update_threat_infrastructure(db, ip, score, asn=None, country=None, campaign=None):
+
+    record = db.query(ThreatInfrastructure).filter(
+        ThreatInfrastructure.ip_address == ip
+    ).first()
+
+    if record:
+
+        record.attack_count += 1
+        record.last_seen = datetime.utcnow()
+
+        # rolling average threat score
+        record.avg_threat_score = (
+            (record.avg_threat_score + score) / 2
+        )
+
+        if campaign:
+            record.campaign = campaign
+
+    else:
+
+        record = ThreatInfrastructure(
+            ip_address=ip,
+            asn=asn,
+            country=country,
+            attack_count=1,
+            avg_threat_score=score,
+            campaign=campaign
+        )
+
+        db.add(record)
+
+    db.commit() 
+
+# =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
 # =========================================================
 
@@ -910,6 +972,16 @@ async def report_devices(
         asn_flag,
         global_campaign,
         heatmap_flag
+    )
+
+    # Layer 16 — Track attacker infrastructure
+    update_threat_infrastructure(
+        db,
+        ip=ip_addr,
+        score=threat_score,
+        asn=asn,
+        country=country,
+         campaign=global_campaign
     )
 
     actor_profile = classify_threat_actor(
