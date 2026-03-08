@@ -327,6 +327,31 @@ def update_reputation(source_ip, asn):
     return None, attack_count
 
 # =========================================================
+# ATTACK TIMELINE ENGINE (Layer 12)
+# =========================================================
+
+attack_timelines = {}
+
+TIMELINE_LIMIT = 20
+
+
+def update_attack_timeline(source_ip, technique, severity):
+
+    entry = {
+        "time": datetime.utcnow().isoformat(),
+        "technique": technique,
+        "severity": severity
+    }
+
+    attack_timelines.setdefault(source_ip, []).append(entry)
+
+    # keep only recent entries
+    if len(attack_timelines[source_ip]) > TIMELINE_LIMIT:
+        attack_timelines[source_ip].pop(0)
+
+    return attack_timelines[source_ip]
+
+# =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
 # =========================================================
 
@@ -764,6 +789,8 @@ async def report_devices(
         "T1566 Phishing"
     ])
 
+    timeline = update_attack_timeline(ip_addr, technique, severity)
+
     # escalate severity if ASN is hostile
     if asn_flag == "HOSTILE_NETWORK":
 
@@ -839,6 +866,8 @@ async def report_devices(
         "severity": severity,
         "technique": technique,
         "origin_label": origin_label,
+
+        "timeline": timeline,
 
         "campaign": global_campaign,
         "reputation": reputation_flag,
