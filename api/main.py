@@ -166,10 +166,10 @@ if "alerts" in inspector.get_table_names():
             conn.execute(text("ALTER TABLE alerts ADD COLUMN origin_label VARCHAR"))
 
         if "latitude" not in existing:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN latitude VARCHAR"))
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN latitude FLOAT"))
 
         if "longitude" not in existing:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN longitude VARCHAR"))
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN longitude FLOAT"))
 
         if "country_code" not in existing:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN country_code VARCHAR"))
@@ -585,6 +585,7 @@ threat_graph = {
 }
 
 GRAPH_CLUSTER_THRESHOLD = 5
+GRAPH_MAX_IPS = 500
 
 
 def update_threat_graph(ip, asn, country, campaign):
@@ -598,6 +599,9 @@ def update_threat_graph(ip, asn, country, campaign):
 
     # ASN relationships
     threat_graph["asn_to_ips"].setdefault(asn, set()).add(ip)
+
+    if len(threat_graph["asn_to_ips"][asn]) > GRAPH_MAX_IPS:
+        threat_graph["asn_to_ips"][asn].pop()
 
     # Country relationships
     threat_graph["country_to_ips"].setdefault(country, set()).add(ip)
@@ -648,6 +652,36 @@ def track_asn_threat(asn):
         return "HOSTILE_NETWORK", attack_count
 
     return None, attack_count
+
+# =========================================================
+# GLOBAL THREAT HEATMAP ENGINE (Layer 10)
+# =========================================================
+
+heatmap_tracker = {}
+
+HEATMAP_WINDOW = 300
+HEATMAP_THRESHOLD = 6
+
+
+def track_heatmap(lat, lon, country):
+
+    key = f"{round(lat,2)}:{round(lon,2)}"
+
+    now = datetime.utcnow().timestamp()
+
+    heatmap_tracker.setdefault(key, []).append(now)
+
+    heatmap_tracker[key] = [
+        t for t in heatmap_tracker[key]
+        if now - t < HEATMAP_WINDOW
+    ]
+
+    activity = len(heatmap_tracker[key])
+
+    if activity >= HEATMAP_THRESHOLD:
+        return "THREAT_HOTSPOT", activity
+
+    return None, activity
 
 # =========================================================
 # BOTNET DETECTION ENGINE
@@ -1100,7 +1134,7 @@ async def report_devices(
         score=threat_score,
         asn=asn,
         country=country,
-         campaign=global_campaign
+        campaign=global_campaign
     )
 
     actor_profile = classify_threat_actor(
