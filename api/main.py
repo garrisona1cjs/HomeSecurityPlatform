@@ -81,6 +81,9 @@ Base = declarative_base()
 app = FastAPI(title="LayerSeven Security Platform")
 
 
+@app.on_event("startup")
+async def start_dispatcher():
+    asyncio.create_task(event_dispatcher())
 
 
 
@@ -554,6 +557,30 @@ def detect_surge():
 
     return len(recent_alerts) >= SURGE_THRESHOLD
 
+# =========================================================
+# EVENT BROADCAST QUEUE (Performance Layer)
+# =========================================================
+
+event_queue = []
+QUEUE_FLUSH_INTERVAL = 0.2  # seconds
+
+
+async def event_dispatcher():
+
+    while True:
+
+        if event_queue:
+
+            batch = event_queue.copy()
+            event_queue.clear()
+
+            await broadcast({
+                "type": "batch",
+                "events": batch
+            })
+
+        await asyncio.sleep(QUEUE_FLUSH_INTERVAL)
+
 
 # =========================================================
 # WEBSOCKET HUB
@@ -845,7 +872,7 @@ async def report_devices(
         "surge": surge
     }
 
-    await broadcast(payload)
+    event_queue.append(payload)
 
     return {"risk_score": risk, "severity": severity}
 
@@ -875,7 +902,7 @@ async def simulate(source_ip: str, team: str = "red"):
         "team": team
     }
 
-    await broadcast(payload)
+    event_queue.append(payload)
 
     return {"simulated": True}
 
