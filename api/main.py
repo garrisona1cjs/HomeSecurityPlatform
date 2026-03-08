@@ -3225,6 +3225,36 @@ const ticker = document.getElementById("ticker");
 const geoHUD = document.getElementById("geoHUD");
 
 let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[], satellites=[], orbitRings=[];
+// 🌪 GLOBAL BOTNET STORM SYSTEM (Layer 101)
+
+let botnetStorms = [];
+const MAX_STORMS = 12;
+
+function createBotnetStorm(lat, lng, size){
+
+  const particles = [];
+
+  const count = Math.min(60, 15 + size * 3);
+
+  for(let i=0;i<count;i++){
+
+    particles.push({
+      lat: lat + (Math.random()-0.5)*8,
+      lng: lng + (Math.random()-0.5)*8,
+      driftLat: (Math.random()-0.5)*0.08,
+      driftLng: (Math.random()-0.5)*0.08,
+      life: 80 + Math.random()*40
+    });
+
+  }
+
+  botnetStorms.push({ particles });
+
+  if(botnetStorms.length > MAX_STORMS){
+    botnetStorms.shift();
+  }
+
+}
 // GLOBAL THREAT PRESSURE SYSTEM
 let pressureZones = [];
 const MAX_PRESSURE_ZONES = 120;
@@ -3639,7 +3669,34 @@ const satellitePoints = satellites.map(s => {
 });
 
 // combine all points
-globe.pointsData(points.concat(pressurePoints, satellitePoints))
+// 🌪 render botnet storms
+
+const stormParticles = [];
+
+botnetStorms.forEach(storm => {
+
+  storm.particles.forEach(p => {
+
+    p.lat += p.driftLat;
+    p.lng += p.driftLng;
+    p.life--;
+
+    stormParticles.push({
+      lat: p.lat,
+      lng: p.lng,
+      size: 0.4,
+      color: "rgba(255,80,0,0.9)"
+    });
+
+  });
+
+  storm.particles = storm.particles.filter(p => p.life > 0);
+
+});
+
+botnetStorms = botnetStorms.filter(s => s.particles.length > 0);
+
+globe.pointsData(points.concat(pressurePoints, satellitePoints, stormParticles))
   .pointRadius('size')
   .pointColor('color')
   .pointAltitude(d => Math.min(0.08, d.size * 0.02));
@@ -3710,6 +3767,17 @@ createAttackBeam(lat, lng, sev);
 
 if(alert.swarm_flag){
   createSwarmBurst(lat, lng);
+}
+
+// 🌪 Botnet Storm Visualization
+if(alert.botnet_flag === "BOTNET_CLUSTER"){
+
+  createBotnetStorm(
+    lat,
+    lng,
+    alert.botnet_ips || 10
+  );
+
 }
 
 if(alert.path_flag){
