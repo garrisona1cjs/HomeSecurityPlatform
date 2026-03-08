@@ -1710,7 +1710,282 @@ def evaluate_defense_readiness(global_index, battlefield_score):
 
     return "NORMAL_OPERATION"
 
+# =========================================================
+# ADVERSARY BEHAVIOR MEMORY
+# Layer 76
+# =========================================================
 
+behavior_memory = {}
+
+def track_adversary_behavior(ip, technique):
+
+    behavior_memory.setdefault(ip, []).append(technique)
+
+    if len(behavior_memory[ip]) >= 20:
+        return "LONG_TERM_BEHAVIOR_PATTERN"
+
+    return None
+
+# =========================================================
+# THREAT PATTERN FORECAST
+# Layer 77
+# =========================================================
+
+pattern_forecast = {}
+
+def forecast_threat_pattern(technique):
+
+    pattern_forecast.setdefault(technique, 0)
+
+    pattern_forecast[technique] += 1
+
+    if pattern_forecast[technique] >= 30:
+        return "RECURRING_ATTACK_PATTERN"
+
+    return None
+
+# =========================================================
+# GLOBAL ATTACK FREQUENCY ENGINE
+# Layer 78
+# =========================================================
+
+attack_frequency = []
+
+def update_attack_frequency():
+
+    attack_frequency.append(1)
+
+    if len(attack_frequency) > 500:
+        attack_frequency.pop(0)
+
+    return len(attack_frequency)
+
+# =========================================================
+# INFRASTRUCTURE EXPANSION ENGINE
+# Layer 79
+# =========================================================
+
+infra_expansion = {}
+
+def detect_infrastructure_expansion(asn, ip):
+
+    infra_expansion.setdefault(asn, set()).add(ip)
+
+    if len(infra_expansion[asn]) >= 30:
+        return "EXPANDING_INFRASTRUCTURE"
+
+    return None
+
+# =========================================================
+# THREAT SIGNAL AMPLIFIER
+# Layer 80
+# =========================================================
+
+def amplify_threat_signal(score):
+
+    return min(score * 1.1, 100)
+
+# =========================================================
+# COORDINATED CAMPAIGN DETECTOR
+# Layer 81
+# =========================================================
+
+campaign_coordination = {}
+
+def detect_campaign_coordination(campaign):
+
+    if not campaign:
+        return None
+
+    campaign_coordination.setdefault(campaign, 0)
+
+    campaign_coordination[campaign] += 1
+
+    if campaign_coordination[campaign] >= 30:
+        return "COORDINATED_CAMPAIGN"
+
+    return None
+
+# =========================================================
+# ADVERSARY STRATEGY ENGINE
+# Layer 82
+# =========================================================
+
+def identify_adversary_strategy(vector_flag, campaign_flag):
+
+    if vector_flag and campaign_flag:
+        return "STRATEGIC_ATTACK_CAMPAIGN"
+
+    if vector_flag:
+        return "TACTICAL_ATTACK_PATTERN"
+
+    return None
+
+# =========================================================
+# TARGET RISK ACCUMULATION ENGINE
+# Layer 83
+# =========================================================
+
+target_risk = {}
+
+def accumulate_target_risk(country):
+
+    target_risk.setdefault(country, 0)
+
+    target_risk[country] += 1
+
+    if target_risk[country] >= 50:
+        return "HIGH_RISK_TARGET"
+
+    return None
+
+# =========================================================
+# GLOBAL RECON DENSITY ENGINE
+# Layer 84
+# =========================================================
+
+recon_density = set()
+
+def detect_recon_density(ip):
+
+    recon_density.add(ip)
+
+    if len(recon_density) >= 120:
+        return "DENSE_GLOBAL_RECON"
+
+    return None
+
+# =========================================================
+# ATTACK SURFACE PRESSURE ENGINE
+# Layer 85
+# =========================================================
+
+attack_surface_pressure = {}
+
+def detect_surface_pressure(country):
+
+    attack_surface_pressure.setdefault(country, 0)
+
+    attack_surface_pressure[country] += 1
+
+    if attack_surface_pressure[country] >= 60:
+        return "SUSTAINED_ATTACK_PRESSURE"
+
+    return None
+
+# =========================================================
+# STRATEGIC THREAT SATURATION
+# Layer 86
+# =========================================================
+
+def detect_threat_saturation(global_index):
+
+    if global_index >= 90:
+        return "GLOBAL_THREAT_SATURATION"
+
+    return None
+
+# =========================================================
+# INFRASTRUCTURE REGENERATION ENGINE
+# Layer 87
+# =========================================================
+
+infra_regeneration = {}
+
+def detect_infrastructure_regeneration(asn):
+
+    infra_regeneration.setdefault(asn, 0)
+
+    infra_regeneration[asn] += 1
+
+    if infra_regeneration[asn] >= 40:
+        return "REGENERATING_INFRASTRUCTURE"
+
+    return None
+
+# =========================================================
+# THREAT ADAPTATION FORECAST
+# Layer 88
+# =========================================================
+
+def forecast_threat_adaptation(adaptation_flag):
+
+    if adaptation_flag:
+        return "LIKELY_ADAPTATION"
+
+    return None
+
+# =========================================================
+# AUTONOMOUS THREAT ESCALATOR
+# Layer 89
+# =========================================================
+
+def escalate_persistent_threat(persistence_flag, threat_score):
+
+    if persistence_flag:
+        return min(threat_score + 10, 100)
+
+    return threat_score
+
+# =========================================================
+# GLOBAL THREAT SYNCHRONIZATION
+# Layer 90
+# =========================================================
+
+sync_tracker = {}
+
+def detect_threat_sync(country):
+
+    sync_tracker.setdefault(country, 0)
+
+    sync_tracker[country] += 1
+
+    if sync_tracker[country] >= 70:
+        return "SYNCHRONIZED_ATTACKS"
+
+    return None
+
+# =========================================================
+# ADVERSARY POWER INDEX
+# Layer 98
+# =========================================================
+
+def calculate_adversary_power(capability, battlefield_score):
+
+    if capability == "ADVANCED_THREAT_ACTOR":
+        return battlefield_score * 1.3
+
+    if capability == "INTERMEDIATE_THREAT_ACTOR":
+        return battlefield_score * 1.1
+
+    return battlefield_score
+
+
+# =========================================================
+# CYBER BATTLEFIELD MOMENTUM
+# Layer 99
+# =========================================================
+
+momentum_index = []
+
+def update_battlefield_momentum(score):
+
+    momentum_index.append(score)
+
+    if len(momentum_index) > 400:
+        momentum_index.pop(0)
+
+    return sum(momentum_index) / len(momentum_index)
+
+
+# =========================================================
+# STRATEGIC GLOBAL THREAT SCORE
+# Layer 100
+# =========================================================
+
+def calculate_global_threat_score(momentum, stability):
+
+    return (momentum + stability) / 2
 
 
 # =========================================================
