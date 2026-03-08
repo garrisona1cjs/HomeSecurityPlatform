@@ -1297,6 +1297,168 @@ def update_global_threat_index(score):
 
     return sum(global_threat_index) / len(global_threat_index)
 
+# =========================================================
+# ADVERSARY PERSISTENCE ENGINE
+# Layer 51
+# =========================================================
+
+adversary_persistence = {}
+
+def detect_adversary_persistence(ip):
+
+    adversary_persistence.setdefault(ip, 0)
+
+    adversary_persistence[ip] += 1
+
+    if adversary_persistence[ip] >= 20:
+        return "PERSISTENT_ADVERSARY"
+
+    return None
+
+# =========================================================
+# TARGET SATURATION ENGINE
+# Layer 52
+# =========================================================
+
+target_saturation = {}
+
+def detect_target_saturation(country):
+
+    target_saturation.setdefault(country, 0)
+
+    target_saturation[country] += 1
+
+    if target_saturation[country] >= 25:
+        return "TARGET_SATURATION_ATTACK"
+
+    return None
+
+# =========================================================
+# ATTACK DIVERSITY ENGINE
+# Layer 53
+# =========================================================
+
+attack_diversity = {}
+
+def detect_attack_diversity(ip, technique):
+
+    attack_diversity.setdefault(ip, set()).add(technique)
+
+    if len(attack_diversity[ip]) >= 8:
+        return "MULTI_VECTOR_ATTACKER"
+
+    return None
+
+# =========================================================
+# INFRASTRUCTURE ROTATION ENGINE
+# Layer 54
+# =========================================================
+
+infrastructure_rotation = {}
+
+def detect_infrastructure_rotation(asn, ip):
+
+    infrastructure_rotation.setdefault(asn, set()).add(ip)
+
+    if len(infrastructure_rotation[asn]) >= 15:
+        return "ROTATING_ATTACK_INFRASTRUCTURE"
+
+    return None
+
+# =========================================================
+# GLOBAL RECON SATURATION ENGINE
+# Layer 55
+# =========================================================
+
+global_recon_saturation = set()
+
+def detect_global_recon_saturation(ip):
+
+    global_recon_saturation.add(ip)
+
+    if len(global_recon_saturation) >= 60:
+        return "GLOBAL_RECON_SATURATION"
+
+    return None
+
+# =========================================================
+# STRATEGIC THREAT DRIFT ENGINE
+# Layer 56
+# =========================================================
+
+threat_drift = {}
+
+def detect_strategic_threat_drift(country):
+
+    threat_drift.setdefault(country, 0)
+
+    threat_drift[country] += 1
+
+    if threat_drift[country] >= 30:
+        return "STRATEGIC_ATTACK_SHIFT"
+
+    return None
+
+# =========================================================
+# ADVERSARY CAPABILITY ENGINE
+# Layer 57
+# =========================================================
+
+def estimate_adversary_capability(threat_score, fusion_score):
+
+    capability = threat_score + fusion_score
+
+    if capability >= 160:
+        return "ADVANCED_THREAT_ACTOR"
+
+    if capability >= 120:
+        return "INTERMEDIATE_THREAT_ACTOR"
+
+    return "LOW_CAPABILITY_ACTOR"
+
+# =========================================================
+# AUTONOMOUS THREAT HORIZON ENGINE
+# Layer 58
+# =========================================================
+
+threat_horizon = {}
+
+def predict_threat_horizon(country):
+
+    threat_horizon.setdefault(country, 0)
+
+    threat_horizon[country] += 1
+
+    if threat_horizon[country] >= 40:
+        return "LONG_TERM_ATTACK_TREND"
+
+    return None
+
+# =========================================================
+# SOC THREAT STABILITY ENGINE
+# Layer 59
+# =========================================================
+
+threat_stability_index = []
+
+def calculate_threat_stability(score):
+
+    threat_stability_index.append(score)
+
+    if len(threat_stability_index) > 200:
+        threat_stability_index.pop(0)
+
+    return sum(threat_stability_index) / len(threat_stability_index)
+
+# =========================================================
+# GLOBAL CYBER BATTLEFIELD ENGINE
+# Layer 60
+# =========================================================
+
+def calculate_cyber_battlefield_score(global_index, stability):
+
+    return (global_index + stability) / 2
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -1785,6 +1947,13 @@ async def report_devices(
 
     pattern_flag = detect_attack_pattern(timeline)
 
+    # Layer 51–55 intelligence
+    persistence_flag = detect_adversary_persistence(ip_addr)
+    saturation_flag = detect_target_saturation(country)
+    diversity_flag = detect_attack_diversity(ip_addr, technique)
+    rotation_flag = detect_infrastructure_rotation(asn, ip_addr)
+    recon_saturation_flag = detect_global_recon_saturation(ip_addr)
+
     # Layer 41–46 intelligence
     convergence_flag = detect_attack_convergence(country, asn)
     recon_flag = detect_global_recon(ip_addr)
@@ -1889,6 +2058,23 @@ async def report_devices(
     )
 
     global_index = update_global_threat_index(escalated_score)
+
+    # Layer 56–60 intelligence
+    drift_flag = detect_strategic_threat_drift(country)
+
+    capability_level = estimate_adversary_capability(
+        threat_score,
+        fusion_score
+    )
+
+    horizon_flag = predict_threat_horizon(country)
+
+    stability_value = calculate_threat_stability(global_index)
+
+    battlefield_score = calculate_cyber_battlefield_score(
+        global_index,
+        stability_value
+    )
 
     # cluster escalation
     if cluster_flag == "INFRASTRUCTURE_SWARM":
@@ -2032,6 +2218,17 @@ async def report_devices(
         "alert_priority": alert_priority,
         "escalated_score": escalated_score,
         "global_threat_index": global_index,
+
+        "persistence_flag": persistence_flag,
+        "saturation_flag": saturation_flag,
+        "diversity_flag": diversity_flag,
+        "rotation_flag": rotation_flag,
+        "recon_saturation_flag": recon_saturation_flag,
+        "drift_flag": drift_flag,
+        "capability_level": capability_level,
+        "horizon_flag": horizon_flag,
+        "stability_value": stability_value,
+        "battlefield_score": battlefield_score,
 
         "technique": technique,
         "origin_label": origin_label,
