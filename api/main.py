@@ -523,6 +523,7 @@ def update_threat_infrastructure(db, ip, score, asn=None, country=None, campaign
 
     db.commit() 
 
+
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
 # =========================================================
@@ -937,6 +938,13 @@ async def report_devices(
         country
     )
 
+    # Layer 17 — Infrastructure clustering
+    cluster_flag, cluster_size = detect_infrastructure_cluster(
+        ip_addr,
+        asn,
+        country
+    )
+
     # automated defense evaluation
     blocked, block_reason = evaluate_defense(
         ip_addr,
@@ -973,6 +981,13 @@ async def report_devices(
         global_campaign,
         heatmap_flag
     )
+
+    # cluster escalation
+    if cluster_flag == "INFRASTRUCTURE_SWARM":
+        threat_score = min(threat_score + 15, 100)
+
+    if cluster_flag == "COORDINATED_ASN_ATTACK":
+        threat_score = min(threat_score + 10, 100)
 
     # Layer 16 — Track attacker infrastructure
     update_threat_infrastructure(
@@ -1077,6 +1092,7 @@ async def report_devices(
         "campaign": global_campaign,
         "reputation": reputation_flag,
         "heatmap": heatmap_flag,
+        "cluster_flag": cluster_flag,
 
         "auto_blocked": auto_blocked,
         "auto_reason": auto_reason,
