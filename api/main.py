@@ -3225,6 +3225,36 @@ const ticker = document.getElementById("ticker");
 const geoHUD = document.getElementById("geoHUD");
 
 let arcs=[], points=[], rings=[], labels=[], packets=[], heat=[], pulses=[], territories=[], satellites=[], orbitRings=[];
+
+// 🌍 GLOBAL ADVERSARY TERRITORY MAP (Layer 106)
+
+let adversaryTerritories = [];
+
+const MAX_TERRITORIES = 80;
+
+function updateAdversaryTerritory(lat, lng){
+
+  const size = 1.4;
+
+  adversaryTerritories.push({
+    type: "Polygon",
+    coordinates: [[
+      [lng-size, lat-size],
+      [lng+size, lat-size],
+      [lng+size, lat+size],
+      [lng-size, lat+size],
+      [lng-size, lat-size]
+    ]],
+    color: "rgba(255,0,50,0.25)",
+    alt: 0.06
+  });
+
+  if(adversaryTerritories.length > MAX_TERRITORIES){
+    adversaryTerritories.shift();
+  }
+
+}
+
 // 🌪 GLOBAL BOTNET STORM SYSTEM (Layer 101)
 
 let botnetStorms = [];
@@ -3791,7 +3821,7 @@ globe.pathsData([
   .pathDashLength(0.4)
   .pathDashAnimateTime(600);
 
-globe.hexPolygonsData(heat)
+globe.hexPolygonsData(heat.concat(adversaryTerritories))
    .hexPolygonGeoJsonGeometry(d => d)
    .hexPolygonColor(d => d.color)
    .hexPolygonAltitude(d => d.alt);
@@ -3929,6 +3959,7 @@ points.push({
 clusterAttack(lat, lng, sev);
 
 updateThreatPressure(lat, lng, sev);
+updateAdversaryTerritory(lat, lng);
 updateCyberWeather(lat,lng,sev);
 
 // pulse wave expansion
