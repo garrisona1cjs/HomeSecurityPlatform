@@ -1459,6 +1459,259 @@ def calculate_cyber_battlefield_score(global_index, stability):
 
     return (global_index + stability) / 2
 
+# =========================================================
+# ADAPTIVE THREAT MEMORY ENGINE
+# Layer 61
+# =========================================================
+
+adaptive_memory = {}
+
+def update_adaptive_memory(ip, technique):
+
+    adaptive_memory.setdefault(ip, set()).add(technique)
+
+    if len(adaptive_memory[ip]) >= 10:
+        return "EVOLVING_ATTACK_PATTERN"
+
+    return None
+
+# =========================================================
+# TACTICAL ESCALATION ENGINE
+# Layer 62
+# =========================================================
+
+tactical_escalation = {}
+
+def detect_tactical_escalation(ip):
+
+    tactical_escalation.setdefault(ip, 0)
+
+    tactical_escalation[ip] += 1
+
+    if tactical_escalation[ip] >= 15:
+        return "TACTICAL_ESCALATION"
+
+    return None
+
+# =========================================================
+# ADVERSARY COORDINATION NETWORK
+# Layer 63
+# =========================================================
+
+coordination_network = {}
+
+def detect_coordination_network(asn):
+
+    coordination_network.setdefault(asn, 0)
+
+    coordination_network[asn] += 1
+
+    if coordination_network[asn] >= 25:
+        return "COORDINATED_ADVERSARY_NETWORK"
+
+    return None
+
+# =========================================================
+# THREAT PERSISTENCE FORECAST
+# Layer 64
+# =========================================================
+
+def forecast_threat_persistence(persistence_flag, drift_flag):
+
+    if persistence_flag and drift_flag:
+        return "LONG_TERM_ADVERSARY"
+
+    if persistence_flag:
+        return "LIKELY_RETURNING_ATTACKER"
+
+    return None
+
+# =========================================================
+# ATTACK VECTOR DOMINANCE ENGINE
+# Layer 65
+# =========================================================
+
+vector_dominance = {}
+
+def detect_vector_dominance(technique):
+
+    vector_dominance.setdefault(technique, 0)
+
+    vector_dominance[technique] += 1
+
+    if vector_dominance[technique] >= 20:
+        return "DOMINANT_ATTACK_VECTOR"
+
+    return None
+
+# =========================================================
+# INFRASTRUCTURE LIFESPAN ENGINE
+# Layer 66
+# =========================================================
+
+infra_lifespan = {}
+
+def track_infrastructure_lifespan(ip):
+
+    infra_lifespan.setdefault(ip, 0)
+
+    infra_lifespan[ip] += 1
+
+    if infra_lifespan[ip] >= 30:
+        return "LONG_LIVED_INFRASTRUCTURE"
+
+    return None
+
+# =========================================================
+# GLOBAL RECON PATTERN ENGINE
+# Layer 67
+# =========================================================
+
+recon_pattern = set()
+
+def detect_recon_pattern(ip):
+
+    recon_pattern.add(ip)
+
+    if len(recon_pattern) >= 80:
+        return "STRUCTURED_GLOBAL_RECON"
+
+    return None
+
+# =========================================================
+# AUTONOMOUS THREAT WEIGHTING
+# Layer 68
+# =========================================================
+
+def autonomous_threat_weighting(threat_score, capability):
+
+    weight = threat_score
+
+    if capability == "ADVANCED_THREAT_ACTOR":
+        weight += 15
+
+    if capability == "INTERMEDIATE_THREAT_ACTOR":
+        weight += 5
+
+    return min(weight, 100)
+
+# =========================================================
+# SOC NOISE REDUCTION ENGINE
+# Layer 69
+# =========================================================
+
+def reduce_soc_noise(priority):
+
+    if priority == "LOW_PRIORITY":
+        return "FILTERED_ALERT"
+
+    return "SOC_ALERT"
+
+# =========================================================
+# GLOBAL THREAT CLIMATE ENGINE
+# Layer 70
+# =========================================================
+
+threat_climate = []
+
+def update_threat_climate(score):
+
+    threat_climate.append(score)
+
+    if len(threat_climate) > 300:
+        threat_climate.pop(0)
+
+    return sum(threat_climate) / len(threat_climate)
+
+# =========================================================
+# ADVERSARY EVOLUTION ENGINE
+# Layer 71
+# =========================================================
+
+evolution_tracker = {}
+
+def detect_adversary_evolution(ip):
+
+    evolution_tracker.setdefault(ip, 0)
+
+    evolution_tracker[ip] += 1
+
+    if evolution_tracker[ip] >= 40:
+        return "EVOLVING_ADVERSARY"
+
+    return None
+
+# =========================================================
+# TARGET VULNERABILITY PRESSURE
+# Layer 72
+# =========================================================
+
+target_pressure = {}
+
+def detect_target_pressure(country):
+
+    target_pressure.setdefault(country, 0)
+
+    target_pressure[country] += 1
+
+    if target_pressure[country] >= 35:
+        return "TARGET_UNDER_PRESSURE"
+
+    return None
+
+# =========================================================
+# INFRASTRUCTURE COLLAPSE ENGINE
+# Layer 73
+# =========================================================
+
+infra_collapse = {}
+
+def detect_infrastructure_collapse(asn):
+
+    infra_collapse.setdefault(asn, 0)
+
+    infra_collapse[asn] += 1
+
+    if infra_collapse[asn] >= 50:
+        return "INFRASTRUCTURE_COLLAPSE"
+
+    return None
+
+# =========================================================
+# THREAT ADAPTATION ENGINE
+# Layer 74
+# =========================================================
+
+adaptation_tracker = {}
+
+def detect_threat_adaptation(ip, technique):
+
+    adaptation_tracker.setdefault(ip, set()).add(technique)
+
+    if len(adaptation_tracker[ip]) >= 12:
+        return "ADAPTIVE_ATTACKER"
+
+    return None
+
+# =========================================================
+# AUTONOMOUS DEFENSE READINESS ENGINE
+# Layer 75
+# =========================================================
+
+def evaluate_defense_readiness(global_index, battlefield_score):
+
+    readiness = (global_index + battlefield_score) / 2
+
+    if readiness >= 80:
+        return "HIGH_ALERT"
+
+    if readiness >= 50:
+        return "ELEVATED_ALERT"
+
+    return "NORMAL_OPERATION"
+
+
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
