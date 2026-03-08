@@ -952,6 +952,182 @@ def fuse_threat_intelligence(
 
     return min(fusion_score, 100)
 
+# =========================================================
+# ATTACK PATH PREDICTION ENGINE
+# Layer 31
+# =========================================================
+
+attack_path_memory = {}
+
+def predict_attack_path(asn, country):
+
+    key = f"{asn}:{country}"
+
+    attack_path_memory.setdefault(key, 0)
+
+    attack_path_memory[key] += 1
+
+    if attack_path_memory[key] >= 6:
+        return "LIKELY_ATTACK_PATH"
+
+    return None
+
+# =========================================================
+# TARGET PREDICTION ENGINE
+# Layer 32
+# =========================================================
+
+target_prediction = {}
+
+def predict_attack_target(country):
+
+    target_prediction.setdefault(country, 0)
+
+    target_prediction[country] += 1
+
+    if target_prediction[country] >= 8:
+        return "HIGH_PROBABILITY_TARGET"
+
+    return None
+
+# =========================================================
+# THREAT MOMENTUM ENGINE
+# Layer 33
+# =========================================================
+
+momentum_tracker = {}
+
+def detect_threat_momentum(ip):
+
+    momentum_tracker.setdefault(ip, 0)
+
+    momentum_tracker[ip] += 1
+
+    if momentum_tracker[ip] >= 7:
+        return "ACCELERATING_ATTACK"
+
+    return None
+
+# =========================================================
+# BEHAVIORAL DRIFT ENGINE
+# Layer 34
+# =========================================================
+
+behavior_drift = {}
+
+def detect_behavior_drift(ip, technique):
+
+    behavior_drift.setdefault(ip, set()).add(technique)
+
+    if len(behavior_drift[ip]) >= 4:
+        return "TACTIC_SHIFT"
+
+    return None
+
+# =========================================================
+# INFRASTRUCTURE SPREAD ENGINE
+# Layer 35
+# =========================================================
+
+infrastructure_spread = {}
+
+def detect_infrastructure_spread(asn, ip):
+
+    infrastructure_spread.setdefault(asn, set()).add(ip)
+
+    if len(infrastructure_spread[asn]) >= 10:
+        return "EXPANDING_ATTACK_INFRASTRUCTURE"
+
+    return None
+
+# =========================================================
+# THREAT STABILITY ENGINE
+# Layer 36
+# =========================================================
+
+stability_tracker = {}
+
+def detect_threat_stability(ip):
+
+    stability_tracker.setdefault(ip, 0)
+
+    stability_tracker[ip] += 1
+
+    if stability_tracker[ip] >= 12:
+        return "STABLE_ATTACK_SOURCE"
+
+    return None
+
+# =========================================================
+# CAMPAIGN LIFECYCLE ENGINE
+# Layer 37
+# =========================================================
+
+campaign_lifecycle = {}
+
+def detect_campaign_phase(campaign):
+
+    if not campaign:
+        return None
+
+    campaign_lifecycle.setdefault(campaign, 0)
+
+    campaign_lifecycle[campaign] += 1
+
+    if campaign_lifecycle[campaign] < 5:
+        return "CAMPAIGN_INITIAL"
+
+    if campaign_lifecycle[campaign] < 15:
+        return "CAMPAIGN_ACTIVE"
+
+    return "CAMPAIGN_MATURE"
+
+# =========================================================
+# THREAT GRAVITY ENGINE
+# Layer 38
+# =========================================================
+
+threat_gravity = {}
+
+def detect_threat_gravity(country):
+
+    threat_gravity.setdefault(country, 0)
+
+    threat_gravity[country] += 1
+
+    if threat_gravity[country] >= 20:
+        return "GLOBAL_THREAT_HUB"
+
+    return None
+
+# =========================================================
+# AUTONOMOUS THREAT PRIORITIZATION ENGINE
+# Layer 39
+# =========================================================
+
+def prioritize_threat(threat_score, fusion_score):
+
+    priority = fusion_score
+
+    if threat_score >= 90:
+        priority += 10
+
+    return min(priority, 100)
+
+# =========================================================
+# STRATEGIC THREAT INTELLIGENCE ENGINE
+# Layer 40
+# =========================================================
+
+def strategic_threat_score(priority_score, confidence):
+
+    score = priority_score
+
+    if confidence == "HIGH_CONFIDENCE":
+        score += 5
+
+    return min(score, 100)
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -1440,6 +1616,14 @@ async def report_devices(
 
     pattern_flag = detect_attack_pattern(timeline)
 
+    # Layer 31-36 intelligence
+    path_flag = predict_attack_path(asn, country)
+    target_flag = predict_attack_target(country)
+    momentum_flag = detect_threat_momentum(ip_addr)
+    drift_flag = detect_behavior_drift(ip_addr, technique)
+    spread_flag = detect_infrastructure_spread(asn, ip_addr)
+    stability_flag = detect_threat_stability(ip_addr)
+
     # Layer 26–29 intelligence
     swarm_flag = detect_botnet_swarm(asn, ip_addr)
     attack_pressure = detect_global_attack_pressure()
@@ -1501,6 +1685,20 @@ async def report_devices(
         reputation_flag,
         actor_reputation,
         swarm_flag
+    )
+
+    # Layer 37-40 intelligence
+    campaign_phase = detect_campaign_phase(global_campaign)
+    gravity_flag = detect_threat_gravity(country)
+
+    priority_score = prioritize_threat(
+        threat_score,
+        fusion_score
+    )
+
+    strategic_score = strategic_threat_score(
+        priority_score,
+        threat_confidence
     )
 
     # cluster escalation
@@ -1623,6 +1821,17 @@ async def report_devices(
         "attack_pressure": attack_pressure,
         "evolution_flag": evolution_flag,
         "fusion_score": fusion_score,
+
+        "path_flag": path_flag,
+        "target_flag": target_flag,
+        "momentum_flag": momentum_flag,
+        "drift_flag": drift_flag,
+        "spread_flag": spread_flag,
+        "stability_flag": stability_flag,
+        "campaign_phase": campaign_phase,
+        "gravity_flag": gravity_flag,
+        "priority_score": priority_score,
+        "strategic_score": strategic_score,
 
         "technique": technique,
         "origin_label": origin_label,
