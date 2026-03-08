@@ -352,6 +352,50 @@ def update_attack_timeline(source_ip, technique, severity):
     return attack_timelines[source_ip]
 
 # =========================================================
+# THREAT SCORING ENGINE (Layer 13)
+# =========================================================
+
+def calculate_threat_score(
+    severity,
+    reputation_flag,
+    botnet_flag,
+    asn_flag,
+    campaign_flag,
+    heatmap_flag
+):
+
+    score = 0
+
+    severity_scores = {
+        "LOW": 10,
+        "MEDIUM": 30,
+        "HIGH": 60,
+        "CRITICAL": 90
+    }
+
+    score += severity_scores.get(severity, 0)
+
+    if reputation_flag == "REPEAT_ATTACKER":
+        score += 15
+
+    if reputation_flag == "PERSISTENT_THREAT":
+        score += 25
+
+    if botnet_flag == "BOTNET_CLUSTER":
+        score += 25
+
+    if asn_flag == "HOSTILE_NETWORK":
+        score += 20
+
+    if campaign_flag:
+        score += 15
+
+    if heatmap_flag:
+        score += 10
+
+    return min(score, 100)
+
+# =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
 # =========================================================
 
@@ -791,6 +835,15 @@ async def report_devices(
 
     timeline = update_attack_timeline(ip_addr, technique, severity)
 
+    threat_score = calculate_threat_score(
+        severity,
+        reputation_flag,
+        botnet_flag,
+        asn_flag,
+        global_campaign,
+        heatmap_flag
+    )
+
     # escalate severity if ASN is hostile
     if asn_flag == "HOSTILE_NETWORK":
 
@@ -864,6 +917,8 @@ async def report_devices(
     payload = {
 
         "severity": severity,
+        "threat_score": threat_score,
+        
         "technique": technique,
         "origin_label": origin_label,
 
