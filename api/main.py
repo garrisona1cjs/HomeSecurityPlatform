@@ -706,6 +706,130 @@ def update_actor_reputation(ip, behavior):
 
     return None
 
+# =========================================================
+# CAMPAIGN CORRELATION ENGINE
+# Layer 21
+# =========================================================
+
+campaign_correlation = {}
+
+CAMPAIGN_CLUSTER_THRESHOLD = 6
+
+def detect_attack_campaign(ip, asn, country):
+
+    key = f"{asn}:{country}"
+
+    campaign_correlation.setdefault(key, set()).add(ip)
+
+    if len(campaign_correlation[key]) >= CAMPAIGN_CLUSTER_THRESHOLD:
+        return "COORDINATED_ATTACK_CAMPAIGN"
+
+    return None
+
+# =========================================================
+# ATTACK VELOCITY ENGINE
+# Layer 22
+# =========================================================
+
+velocity_tracker = {}
+
+VELOCITY_WINDOW = 10
+VELOCITY_THRESHOLD = 15
+
+def detect_attack_velocity(ip):
+
+    now = datetime.utcnow().timestamp()
+
+    velocity_tracker.setdefault(ip, []).append(now)
+
+    velocity_tracker[ip] = [
+        t for t in velocity_tracker[ip]
+        if now - t < VELOCITY_WINDOW
+    ]
+
+    if len(velocity_tracker[ip]) >= VELOCITY_THRESHOLD:
+        return "HIGH_VELOCITY_ATTACK"
+
+    return None
+
+# =========================================================
+# GEO THREAT ESCALATION ENGINE
+# Layer 23
+# =========================================================
+
+geo_wave_tracker = {}
+
+GEO_WAVE_THRESHOLD = 5
+
+def detect_geo_wave(country):
+
+    geo_wave_tracker.setdefault(country, 0)
+
+    geo_wave_tracker[country] += 1
+
+    if geo_wave_tracker[country] >= GEO_WAVE_THRESHOLD:
+        return "GEOGRAPHIC_ATTACK_WAVE"
+
+    return None
+
+# =========================================================
+# INFRASTRUCTURE PERSISTENCE ENGINE
+# Layer 24
+# =========================================================
+
+infrastructure_persistence = {}
+
+PERSISTENCE_THRESHOLD = 10
+
+def detect_persistent_infrastructure(ip):
+
+    infrastructure_persistence.setdefault(ip, 0)
+
+    infrastructure_persistence[ip] += 1
+
+    if infrastructure_persistence[ip] >= PERSISTENCE_THRESHOLD:
+        return "LONG_TERM_ATTACK_INFRASTRUCTURE"
+
+    return None
+
+# =========================================================
+# THREAT CONFIDENCE ENGINE
+# Layer 25
+# =========================================================
+
+def calculate_threat_confidence(
+    threat_score,
+    reputation_flag,
+    botnet_flag,
+    campaign_flag,
+    cluster_flag
+):
+
+    confidence = 0
+
+    if threat_score >= 80:
+        confidence += 40
+
+    if reputation_flag:
+        confidence += 15
+
+    if botnet_flag:
+        confidence += 20
+
+    if campaign_flag:
+        confidence += 15
+
+    if cluster_flag:
+        confidence += 10
+
+    if confidence >= 80:
+        return "HIGH_CONFIDENCE"
+
+    if confidence >= 50:
+        return "MEDIUM_CONFIDENCE"
+
+    return "LOW_CONFIDENCE"
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -1194,6 +1318,12 @@ async def report_devices(
 
     pattern_flag = detect_attack_pattern(timeline)
 
+    # Layer 21–24 intelligence
+    campaign_wave = detect_attack_campaign(ip_addr, asn, country)
+    velocity_flag = detect_attack_velocity(ip_addr)
+    geo_wave = detect_geo_wave(country)
+    persistence_flag = detect_persistent_infrastructure(ip_addr)
+
     # Layer 19 — Threat attribution
     behavior_label = classify_attack_behavior(
         technique,
@@ -1217,6 +1347,15 @@ async def report_devices(
         asn_flag,
         global_campaign,
         heatmap_flag
+    )
+
+    # Layer 25 — confidence
+    threat_confidence = calculate_threat_confidence(
+        threat_score,
+        reputation_flag,
+        botnet_flag,
+        global_campaign,
+        cluster_flag
     )
 
     # cluster escalation
@@ -1328,6 +1467,12 @@ async def report_devices(
         "actor_profile": actor_profile,
         "behavior": behavior_label,
         "actor_reputation": actor_reputation,
+
+        "campaign_wave": campaign_wave,
+        "velocity_flag": velocity_flag,
+        "geo_wave": geo_wave,
+        "persistence_flag": persistence_flag,
+        "confidence": threat_confidence,
 
         "technique": technique,
         "origin_label": origin_label,
