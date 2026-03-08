@@ -660,6 +660,52 @@ def classify_attack_behavior(
 
     return "UNCLASSIFIED_ACTIVITY"
 
+# =========================================================
+# THREAT ACTOR REPUTATION DATABASE
+# Layer 20
+# =========================================================
+
+actor_reputation_db = {}
+
+REPUTATION_ESCALATION_THRESHOLD = 5
+
+
+def update_actor_reputation(ip, behavior):
+
+    actor_reputation_db.setdefault(ip, {
+        "behaviors": {},
+        "total_activity": 0
+    })
+
+    record = actor_reputation_db[ip]
+
+    record["total_activity"] += 1
+
+    record["behaviors"].setdefault(behavior, 0)
+    record["behaviors"][behavior] += 1
+
+    # determine dominant behavior
+    dominant_behavior = max(
+        record["behaviors"],
+        key=record["behaviors"].get
+    )
+
+    if record["behaviors"][dominant_behavior] >= REPUTATION_ESCALATION_THRESHOLD:
+
+        if dominant_behavior == "SCAN_BOT":
+            return "KNOWN_SCANNER"
+
+        if dominant_behavior == "BOTNET_INFRASTRUCTURE":
+            return "KNOWN_BOTNET_NODE"
+
+        if dominant_behavior == "CREDENTIAL_STUFFER":
+            return "KNOWN_CREDENTIAL_ATTACKER"
+
+        if dominant_behavior == "PHISHING_CAMPAIGN":
+            return "KNOWN_PHISHING_SOURCE"
+
+    return None
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -1158,6 +1204,12 @@ async def report_devices(
         graph_flag
     )
 
+    # Layer 20 — Threat actor reputation
+    actor_reputation = update_actor_reputation(
+        ip_addr,
+        behavior_label
+    )
+
     threat_score = calculate_threat_score(
         severity,
         reputation_flag,
@@ -1275,6 +1327,7 @@ async def report_devices(
         "threat_score": threat_score,
         "actor_profile": actor_profile,
         "behavior": behavior_label,
+        "actor_reputation": actor_reputation,
 
         "technique": technique,
         "origin_label": origin_label,
