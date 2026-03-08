@@ -396,6 +396,43 @@ def calculate_threat_score(
     return min(score, 100)
 
 # =========================================================
+# THREAT ACTOR PROFILING ENGINE (Layer 14)
+# =========================================================
+
+def classify_threat_actor(
+    reputation_flag,
+    botnet_flag,
+    asn_flag,
+    campaign_flag,
+    threat_score
+):
+
+    # persistent attackers
+    if reputation_flag == "PERSISTENT_THREAT":
+        return "PERSISTENT_THREAT_ACTOR"
+
+    # botnet infrastructure
+    if botnet_flag == "BOTNET_CLUSTER":
+        return "BOTNET_CONTROLLER"
+
+    # hostile ASN infrastructure
+    if asn_flag == "HOSTILE_NETWORK":
+        return "HOSTILE_ASN_INFRASTRUCTURE"
+
+    # coordinated campaigns
+    if campaign_flag:
+        return "GLOBAL_ATTACK_CAMPAIGN"
+
+    # high scoring attackers
+    if threat_score >= 80:
+        return "HIGH_RISK_ATTACKER"
+
+    if threat_score >= 50:
+        return "MEDIUM_RISK_ATTACKER"
+
+    return "LOW_RISK_ACTIVITY"
+
+# =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
 # =========================================================
 
@@ -844,6 +881,14 @@ async def report_devices(
         heatmap_flag
     )
 
+    actor_profile = classify_threat_actor(
+        reputation_flag,
+        botnet_flag,
+        asn_flag,
+        global_campaign,
+        threat_score
+    )
+
     # escalate severity if ASN is hostile
     if asn_flag == "HOSTILE_NETWORK":
 
@@ -918,7 +963,8 @@ async def report_devices(
 
         "severity": severity,
         "threat_score": threat_score,
-        
+        "actor_profile": actor_profile,
+
         "technique": technique,
         "origin_label": origin_label,
 
