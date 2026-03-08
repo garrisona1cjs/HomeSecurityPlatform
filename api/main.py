@@ -1128,6 +1128,175 @@ def strategic_threat_score(priority_score, confidence):
 
     return min(score, 100)
 
+# =========================================================
+# ATTACK CONVERGENCE ENGINE
+# Layer 41
+# =========================================================
+
+attack_convergence = {}
+
+def detect_attack_convergence(country, asn):
+
+    key = f"{country}:{asn}"
+
+    attack_convergence.setdefault(key, 0)
+
+    attack_convergence[key] += 1
+
+    if attack_convergence[key] >= 8:
+        return "CONVERGING_ATTACK_ACTIVITY"
+
+    return None
+
+# =========================================================
+# GLOBAL RECON DETECTOR
+# Layer 42
+# =========================================================
+
+global_recon = set()
+
+def detect_global_recon(ip):
+
+    global_recon.add(ip)
+
+    if len(global_recon) >= 30:
+        return "GLOBAL_RECON_ACTIVITY"
+
+    return None
+
+# =========================================================
+# ADVERSARY COORDINATION ENGINE
+# Layer 43
+# =========================================================
+
+coordination_tracker = {}
+
+def detect_adversary_coordination(asn):
+
+    coordination_tracker.setdefault(asn, 0)
+
+    coordination_tracker[asn] += 1
+
+    if coordination_tracker[asn] >= 15:
+        return "COORDINATED_ATTACK_GROUP"
+
+    return None
+
+# =========================================================
+# INFRASTRUCTURE RESILIENCE ENGINE
+# Layer 44
+# =========================================================
+
+resilient_infrastructure = {}
+
+def detect_resilient_infrastructure(ip):
+
+    resilient_infrastructure.setdefault(ip, 0)
+
+    resilient_infrastructure[ip] += 1
+
+    if resilient_infrastructure[ip] >= 15:
+        return "RESILIENT_ATTACK_INFRASTRUCTURE"
+
+    return None
+
+# =========================================================
+# THREAT MUTATION ENGINE
+# Layer 45
+# =========================================================
+
+mutation_tracker = {}
+
+def detect_threat_mutation(ip, technique):
+
+    mutation_tracker.setdefault(ip, set()).add(technique)
+
+    if len(mutation_tracker[ip]) >= 6:
+        return "ADAPTIVE_ATTACKER"
+
+    return None
+
+# =========================================================
+# ATTACK WAVE PREDICTION ENGINE
+# Layer 46
+# =========================================================
+
+wave_prediction = {}
+
+def predict_attack_wave(country):
+
+    wave_prediction.setdefault(country, 0)
+
+    wave_prediction[country] += 1
+
+    if wave_prediction[country] >= 12:
+        return "IMMINENT_ATTACK_WAVE"
+
+    return None
+
+# =========================================================
+# GLOBAL CAMPAIGN PRESSURE ENGINE
+# Layer 47
+# =========================================================
+
+campaign_pressure = {}
+
+def detect_campaign_pressure(campaign):
+
+    if not campaign:
+        return None
+
+    campaign_pressure.setdefault(campaign, 0)
+
+    campaign_pressure[campaign] += 1
+
+    if campaign_pressure[campaign] >= 20:
+        return "MAJOR_ATTACK_CAMPAIGN"
+
+    return None
+
+# =========================================================
+# SOC ALERT FILTER ENGINE
+# Layer 48
+# =========================================================
+
+def filter_soc_alerts(threat_score):
+
+    if threat_score < 30:
+        return "LOW_PRIORITY"
+
+    if threat_score < 70:
+        return "MEDIUM_PRIORITY"
+
+    return "HIGH_PRIORITY"
+
+# =========================================================
+# STRATEGIC THREAT ESCALATION ENGINE
+# Layer 49
+# =========================================================
+
+def escalate_strategic_threat(priority_score, strategic_score):
+
+    final_score = priority_score + strategic_score
+
+    return min(final_score, 100)
+
+# =========================================================
+# GLOBAL THREAT INDEX ENGINE
+# Layer 50
+# =========================================================
+
+global_threat_index = []
+
+def update_global_threat_index(score):
+
+    global_threat_index.append(score)
+
+    if len(global_threat_index) > 100:
+        global_threat_index.pop(0)
+
+    return sum(global_threat_index) / len(global_threat_index)
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -1616,6 +1785,14 @@ async def report_devices(
 
     pattern_flag = detect_attack_pattern(timeline)
 
+    # Layer 41–46 intelligence
+    convergence_flag = detect_attack_convergence(country, asn)
+    recon_flag = detect_global_recon(ip_addr)
+    coordination_flag = detect_adversary_coordination(asn)
+    resilience_flag = detect_resilient_infrastructure(ip_addr)
+    mutation_flag = detect_threat_mutation(ip_addr, technique)
+    wave_flag = predict_attack_wave(country)
+
     # Layer 31-36 intelligence
     path_flag = predict_attack_path(asn, country)
     target_flag = predict_attack_target(country)
@@ -1700,6 +1877,18 @@ async def report_devices(
         priority_score,
         threat_confidence
     )
+
+    # Layer 47–50 intelligence
+    campaign_pressure_flag = detect_campaign_pressure(global_campaign)
+
+    alert_priority = filter_soc_alerts(threat_score)
+
+    escalated_score = escalate_strategic_threat(
+        priority_score,
+        strategic_score
+    )
+
+    global_index = update_global_threat_index(escalated_score)
 
     # cluster escalation
     if cluster_flag == "INFRASTRUCTURE_SWARM":
@@ -1832,6 +2021,17 @@ async def report_devices(
         "gravity_flag": gravity_flag,
         "priority_score": priority_score,
         "strategic_score": strategic_score,
+
+        "convergence_flag": convergence_flag,
+        "recon_flag": recon_flag,
+        "coordination_flag": coordination_flag,
+        "resilience_flag": resilience_flag,
+        "mutation_flag": mutation_flag,
+        "wave_flag": wave_flag,
+        "campaign_pressure_flag": campaign_pressure_flag,
+        "alert_priority": alert_priority,
+        "escalated_score": escalated_score,
+        "global_threat_index": global_index,
 
         "technique": technique,
         "origin_label": origin_label,
