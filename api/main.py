@@ -3704,6 +3704,22 @@ function addAlert(alert){
 
 const color = colors[sev];
 
+// SOC visual intelligence triggers
+
+createAttackBeam(lat, lng, sev);
+
+if(alert.swarm_flag){
+  createSwarmBurst(lat, lng);
+}
+
+if(alert.path_flag){
+  createPredictionArc(lat, lng);
+}
+
+if(alert.cluster_flag === "INFRASTRUCTURE_SWARM"){
+  createThreatFlash(lat, lng);
+}
+
 
 // 🛰 satellites react to threats
 satellites.forEach(s => {
@@ -4213,6 +4229,80 @@ setInterval(()=>{
 async function load(){
  const data=await fetch('/alerts').then(r=>r.json());
  data.forEach(addAlert);
+}
+
+// ======================================================
+// SOC ADVANCED ATTACK VISUALIZATION ENGINE
+// ======================================================
+
+// advanced beam generator
+function createAttackBeam(lat, lng, severity){
+
+  const color =
+    severity === "CRITICAL" ? "#ff0033" :
+    severity === "HIGH" ? "#ff5500" :
+    severity === "MEDIUM" ? "#ffaa00" :
+    "#00ffff";
+
+  arcs.push({
+    startLat: lat,
+    startLng: lng,
+    endLat: 41.59,
+    endLng: -93.62,
+    color: [color, color]
+  });
+
+}
+
+// swarm burst visualization
+function createSwarmBurst(lat, lng){
+
+  for(let i=0;i<5;i++){
+
+    setTimeout(()=>{
+
+      rings.push({
+        lat: lat,
+        lng: lng,
+        maxR: 6 + Math.random()*4
+      });
+
+    }, i * 120);
+
+  }
+
+}
+
+// predictive attack arc
+function createPredictionArc(lat, lng){
+
+  const offsetLat = lat + (Math.random()*20 - 10);
+  const offsetLng = lng + (Math.random()*20 - 10);
+
+  arcs.push({
+    startLat: lat,
+    startLng: lng,
+    endLat: offsetLat,
+    endLng: offsetLng,
+    color: ["#ffaa00","#ffaa00"]
+  });
+
+}
+
+// infrastructure heat flash
+function createThreatFlash(lat, lng){
+
+  points.push({
+    lat: lat,
+    lng: lng,
+    size: 1.6,
+    color: "#ff0033"
+  });
+
+  setTimeout(()=>{
+    points.pop();
+  }, 800);
+
 }
 
 const protocol = location.protocol === "https:" ? "wss" : "ws";
