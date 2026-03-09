@@ -2838,15 +2838,26 @@ async def simulate(source_ip: str, team: str = "red"):
 
 @app.get("/alerts")
 def alerts():
-    
-    
+
     db = SessionLocal()
 
-    data = db.query(Alert).order_by(Alert.timestamp.desc()).all()
+    records = db.query(Alert).order_by(Alert.timestamp.desc()).limit(200).all()
 
     db.close()
 
-    return data
+    return [
+        {
+            "severity": a.severity,
+            "technique": a.technique,
+            "origin_label": a.origin_label,
+            "latitude": a.latitude,
+            "longitude": a.longitude,
+            "country_code": a.country_code,
+            "shockwave": a.shockwave,
+            "timestamp": a.timestamp.isoformat() if a.timestamp else None
+        }
+        for a in records
+    ]
 
 # =========================================================
 # SOC THREAT INTELLIGENCE API
