@@ -2808,7 +2808,7 @@ async def report_devices(
 # SIMULATION
 # =========================================================
 
-@app.post("/simulate")
+@app.get("/simulate")
 async def simulate(source_ip: str, team: str = "red"):
 
     origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(source_ip)
