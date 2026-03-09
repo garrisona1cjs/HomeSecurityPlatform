@@ -2854,6 +2854,79 @@ async def simulate(source_ip: str, team: str = "red"):
 
     return {"simulated": True}
 
+
+
+# =========================================================
+# GLOBAL ATTACK STORM GENERATOR
+# Layer 121
+# =========================================================
+
+@app.get("/storm")
+async def global_attack_storm(size: int = 200):
+
+    db = SessionLocal()
+
+    generated = 0
+
+    for i in range(size):
+
+        ip = ".".join(str(random.randint(1,254)) for _ in range(4))
+
+        origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(ip)
+
+        severity = random.choice([
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+        ])
+
+        alert = Alert(
+            id=str(uuid.uuid4()),
+            agent_id="storm_sim",
+            risk_score=random.randint(40,100),
+            severity=severity,
+            technique="Storm Simulation",
+            timestamp=datetime.utcnow(),
+            origin_label=origin_label,
+            latitude=lat,
+            longitude=lon,
+            country_code=country,
+            shockwave=str(severity == "CRITICAL")
+        )
+
+        db.add(alert)
+
+        payload = {
+            "severity": severity,
+            "technique": "Storm Simulation",
+            "origin_label": origin_label,
+            "latitude": lat,
+            "longitude": lon,
+            "country_code": country,
+            "source_ip": ip,
+            "isp": isp_name,
+            "asn": asn,
+            "shockwave": severity == "CRITICAL",
+            "training": True,
+            "team": "red"
+        }
+
+        event_queue.append(payload)
+
+        generated += 1
+
+    db.commit()
+    db.close()
+
+    return {
+        "storm_generated": generated
+    }
+
+
+# =========================================================
+# ALERT HISTORY
+# =========================================================
+
 # =========================================================
 # ALERT HISTORY
 # =========================================================
