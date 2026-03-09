@@ -2843,24 +2843,24 @@ def alerts():
 
     records = db.query(Alert).order_by(Alert.timestamp.desc()).limit(200).all()
 
-    db.close()
-
-    alerts_json = []
+    results = []
 
     for a in records:
 
-        alerts_json.append({
-            "severity": a.severity,
-            "technique": a.technique,
-            "origin_label": a.origin_label,
-            "latitude": a.latitude,
-            "longitude": a.longitude,
-            "country_code": a.country_code,
-            "shockwave": a.shockwave,
+        results.append({
+            "severity": str(a.severity) if a.severity else "LOW",
+            "technique": str(a.technique) if a.technique else "Unknown",
+            "origin_label": str(a.origin_label) if a.origin_label else "Unknown",
+            "latitude": float(a.latitude) if a.latitude else 0,
+            "longitude": float(a.longitude) if a.longitude else 0,
+            "country_code": str(a.country_code) if a.country_code else "",
+            "shockwave": bool(a.shockwave),
             "timestamp": a.timestamp.isoformat() if a.timestamp else None
         })
 
-    return alerts_json
+    db.close()
+
+    return results
 
 # =========================================================
 # SOC THREAT INTELLIGENCE API
