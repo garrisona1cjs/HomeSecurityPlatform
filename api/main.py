@@ -4526,43 +4526,45 @@ const protocol = location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${protocol}://${location.host}/ws`);
 ws.onmessage = e => {
 
-  const msg = JSON.parse(e.data);
+  try {
 
-  // handle batched events
-  if(msg.type === "batch"){
+    const msg = JSON.parse(e.data);
 
-    msg.events.forEach(alert => {
+    // handle batched alerts
+    if(msg.type === "batch" && Array.isArray(msg.events)){
 
-      if(alertQueue.length > MAX_QUEUE){
+      msg.events.forEach(alert => {
 
-        EVENT_DROP_COUNT++;
+        if(!alert.latitude || !alert.longitude) return;
 
-      } else {
+        if(alertQueue.length > MAX_QUEUE){
+          EVENT_DROP_COUNT++;
+        } else {
+          alertQueue.push(alert);
+        }
 
-        alertQueue.push(alert);
-
-      }
-
-    });
-
-  } else {
-  
-
-
-
-
-    if(alertQueue.length > MAX_QUEUE){
-      EVENT_DROP_COUNT++;
+      });
 
     } else {
 
-      alertQueue.push(msg);
+      // single alert fallback
+      if(msg.latitude && msg.longitude){
+
+        if(alertQueue.length > MAX_QUEUE){
+          EVENT_DROP_COUNT++;
+        } else {
+          alertQueue.push(msg);
+        }
+
+      }
 
     }
 
+  } catch(err){
+
+    console.error("WebSocket error", err);
+
   }
-
-
 
 };
 
