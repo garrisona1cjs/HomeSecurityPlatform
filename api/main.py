@@ -2841,26 +2841,46 @@ def alerts():
 
     db = SessionLocal()
 
-    records = db.query(Alert).order_by(Alert.timestamp.desc()).limit(200).all()
+    try:
 
-    results = []
+        records = (
+            db.query(Alert)
+            .order_by(Alert.timestamp.desc().nullslast())
+            .limit(200)
+            .all()
+        )
 
-    for a in records:
+        results = []
 
-        results.append({
-            "severity": str(a.severity) if a.severity else "LOW",
-            "technique": str(a.technique) if a.technique else "Unknown",
-            "origin_label": str(a.origin_label) if a.origin_label else "Unknown",
-            "latitude": float(a.latitude) if a.latitude else 0,
-            "longitude": float(a.longitude) if a.longitude else 0,
-            "country_code": str(a.country_code) if a.country_code else "",
-            "shockwave": bool(a.shockwave),
-            "timestamp": a.timestamp.isoformat() if a.timestamp else None
-        })
+        for a in records:
 
-    db.close()
+            try:
 
-    return results
+                results.append({
+                    "severity": str(a.severity) if a.severity else "LOW",
+                    "technique": str(a.technique) if a.technique else "Unknown",
+                    "origin_label": str(a.origin_label) if a.origin_label else "Unknown",
+                    "latitude": float(a.latitude) if a.latitude else 0,
+                    "longitude": float(a.longitude) if a.longitude else 0,
+                    "country_code": str(a.country_code) if a.country_code else "",
+                    "shockwave": bool(a.shockwave),
+                    "timestamp": a.timestamp.isoformat() if a.timestamp else None
+                })
+
+            except Exception:
+                continue
+
+        return results
+
+    except Exception as e:
+
+        print("ALERT HISTORY ERROR:", e)
+
+        return []
+
+    finally:
+
+        db.close()
 
 # =========================================================
 # SOC THREAT INTELLIGENCE API
