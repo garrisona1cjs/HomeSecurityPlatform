@@ -2811,10 +2811,32 @@ async def report_devices(
 @app.get("/simulate")
 async def simulate(source_ip: str, team: str = "red"):
 
+    db = SessionLocal()
+
     origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(source_ip)
 
+    severity = "HIGH"
+
+    alert = Alert(
+        id=str(uuid.uuid4()),
+        agent_id="simulation",
+        risk_score=80,
+        severity=severity,
+        technique="Simulation",
+        timestamp=datetime.utcnow(),
+        origin_label=origin_label,
+        latitude=lat,
+        longitude=lon,
+        country_code=country,
+        shockwave="False"
+    )
+
+    db.add(alert)
+    db.commit()
+    db.close()
+
     payload = {
-        "severity": "HIGH",
+        "severity": severity,
         "technique": "Simulation",
         "origin_label": origin_label,
         "latitude": lat,
