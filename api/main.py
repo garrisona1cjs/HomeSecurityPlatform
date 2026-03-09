@@ -2845,8 +2845,11 @@ def alerts():
 
     db.close()
 
-    return [
-        {
+    alerts_json = []
+
+    for a in records:
+
+        alerts_json.append({
             "severity": a.severity,
             "technique": a.technique,
             "origin_label": a.origin_label,
@@ -2855,9 +2858,9 @@ def alerts():
             "country_code": a.country_code,
             "shockwave": a.shockwave,
             "timestamp": a.timestamp.isoformat() if a.timestamp else None
-        }
-        for a in records
-    ]
+        })
+
+    return alerts_json
 
 # =========================================================
 # SOC THREAT INTELLIGENCE API
