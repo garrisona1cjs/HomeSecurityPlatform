@@ -4440,7 +4440,7 @@ setInterval(()=>{
 
   const mem = performance.memory;
 
-  if(mem && mem.usedJSHeapSize > 350000000){
+  if(mem && mem.usedJSHeapSize > 70000000){
 
     console.warn("SOC Dashboard memory reset triggered");
 
