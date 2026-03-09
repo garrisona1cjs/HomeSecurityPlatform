@@ -4546,10 +4546,12 @@ ws.onmessage = e => {
     });
 
   } else {
+  
 
-    // fallback for single alerts
+
+
+
     if(alertQueue.length > MAX_QUEUE){
-
       EVENT_DROP_COUNT++;
 
     } else {
@@ -4560,7 +4562,7 @@ ws.onmessage = e => {
 
   }
 
-};
+
 
 };
 
