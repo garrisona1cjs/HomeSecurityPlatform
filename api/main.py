@@ -2938,12 +2938,19 @@ def alerts():
 
     try:
 
-        records = (
-            db.query(Alert)
-            .order_by(Alert.timestamp.desc().nullslast())
-            .limit(200)
-            .all()
-        )
+        records = db.execute(text("""
+            SELECT severity,
+                technique,
+                origin_label,
+                latitude,
+                longitude,
+                country_code,
+                shockwave,
+                timestamp
+            FROM alerts
+            ORDER BY timestamp DESC
+            LIMIT 200
+        """)).fetchall()
 
         results = []
 
@@ -2952,14 +2959,14 @@ def alerts():
             try:
 
                 results.append({
-                    "severity": str(a.severity) if a.severity else "LOW",
-                    "technique": str(a.technique) if a.technique else "Unknown",
-                    "origin_label": str(a.origin_label) if a.origin_label else "Unknown",
-                    "latitude": float(a.latitude) if a.latitude else 0,
-                    "longitude": float(a.longitude) if a.longitude else 0,
-                    "country_code": str(a.country_code) if a.country_code else "",
-                    "shockwave": bool(a.shockwave),
-                    "timestamp": a.timestamp.isoformat() if a.timestamp else None
+                    "severity": str(a[0]) if a[0] else "LOW",
+                    "technique": str(a[1]) if a[1] else "Unknown",
+                    "origin_label": str(a[2]) if a[2] else "Unknown",
+                    "latitude": float(a[3]) if a[3] else 0,
+                    "longitude": float(a[4]) if a[4] else 0,
+                    "country_code": str(a[5]) if a[5] else "",
+                    "shockwave": bool(a[6]),
+                    "timestamp": a[7].isoformat() if a[7] else None
                 })
 
             except Exception:
