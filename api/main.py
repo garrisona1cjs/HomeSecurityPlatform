@@ -3287,6 +3287,25 @@ function createBotnetStorm(lat, lng, size){
 }
 // GLOBAL THREAT PRESSURE SYSTEM
 let pressureZones = [];
+
+// 🌍 GLOBAL THREAT FRONTLINES (Layer 107)
+
+let frontlines = [];
+
+function updateFrontline(lat,lng){
+
+  frontlines.push({
+    lat,
+    lng,
+    life: 120
+  });
+
+  if(frontlines.length > 100){
+    frontlines.shift();
+  }
+
+}
+
 const MAX_PRESSURE_ZONES = 120;
 // EVENT BUFFER SYSTEM
 let alertQueue = [];
@@ -3330,6 +3349,22 @@ const MAX_CLUSTERS = 60;
 
 // intelligence & analytics
 let clusters = [];
+
+// 🔴 ADVERSARY BEACONS (Layer 108)
+
+let adversaryBeacons = [];
+
+function createAdversaryBeacon(lat,lng){
+
+  adversaryBeacons.push({
+    lat,
+    lng,
+    size:1.8,
+    life:180
+  });
+
+}
+
 let countryCounts = {};
 let alertTimes = [];
 let lastVelocity = 0;
@@ -3741,6 +3776,25 @@ const satellitePoints = satellites.map(s => {
 // combine all points
 // 🌪 render botnet storms
 
+// 🔴 render adversary beacons (Layer 108)
+
+const beaconPoints = [];
+
+adversaryBeacons.forEach(b => {
+
+  b.life--;
+
+  beaconPoints.push({
+    lat: b.lat,
+    lng: b.lng,
+    size: b.size,
+    color: "#ff0033"
+  });
+
+});
+
+adversaryBeacons = adversaryBeacons.filter(b => b.life > 0);
+
 const stormParticles = [];
 
 botnetStorms.forEach(storm => {
@@ -3775,7 +3829,7 @@ if(botnetStorms.length > MAX_STORMS){
   botnetStorms.splice(0, botnetStorms.length - MAX_STORMS);
 }
 
-globe.pointsData(points.concat(pressurePoints, satellitePoints, stormParticles))
+globe.pointsData(points.concat(pressurePoints, satellitePoints, stormParticles, beaconPoints))
   .pointRadius('size')
   .pointColor('color')
   .pointAltitude(d => Math.min(0.08, d.size * 0.02));
@@ -3959,8 +4013,15 @@ points.push({
 clusterAttack(lat, lng, sev);
 
 updateThreatPressure(lat, lng, sev);
+updateFrontline(lat,lng);
 updateAdversaryTerritory(lat, lng);
 updateCyberWeather(lat,lng,sev);
+
+// 🔴 persistent attacker beacon (Layer 108)
+
+if(alert.persistence_flag){
+  createAdversaryBeacon(lat,lng);
+}
 
 // pulse wave expansion
 createPulse(lat, lng, sev);
