@@ -3344,7 +3344,7 @@ let MAX_QUEUE = 400;
 let EVENT_DROP_COUNT = 0;
 let dynamicBatchSize = 8;
 
-const MAX_TERRITORIES = 80;
+
 const MAX_CLUSTERS = 60;
 
 // intelligence & analytics
