@@ -4526,24 +4526,41 @@ const protocol = location.protocol === "https:" ? "wss" : "ws";
 const ws = new WebSocket(`${protocol}://${location.host}/ws`);
 ws.onmessage = e => {
 
-  const alert = JSON.parse(e.data);
+  const msg = JSON.parse(e.data);
 
+  // handle batched events
+  if(msg.type === "batch"){
 
+    msg.events.forEach(alert => {
 
-  // backpressure protection
-  if(alertQueue.length > MAX_QUEUE){
+      if(alertQueue.length > MAX_QUEUE){
 
-  EVENT_DROP_COUNT++;
+        EVENT_DROP_COUNT++;
 
-  if(EVENT_DROP_COUNT % 100 === 0){
-    console.warn("SOC Governor dropping events:", EVENT_DROP_COUNT);
+      } else {
+
+        alertQueue.push(alert);
+
+      }
+
+    });
+
+  } else {
+
+    // fallback for single alerts
+    if(alertQueue.length > MAX_QUEUE){
+
+      EVENT_DROP_COUNT++;
+
+    } else {
+
+      alertQueue.push(msg);
+
+    }
+
   }
 
-}else{
-
-  alertQueue.push(alert);
-
-}
+};
 
 };
 
