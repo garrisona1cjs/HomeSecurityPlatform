@@ -83,12 +83,11 @@ app = FastAPI(title="LayerSeven Security Platform")
 
 @app.on_event("startup")
 async def start_dispatcher():
+
     asyncio.create_task(event_dispatcher())
 
-
-
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
+    # Layer 122 — Nation-State Campaign Simulator
+    asyncio.create_task(nation_state_campaign_simulator())
 
 
 # =========================================================
@@ -2963,6 +2962,81 @@ async def global_attack_storm(size: int = 200):
     return {
         "storm_generated": generated
     }
+
+# =========================================================
+# NATION STATE ATTACK CAMPAIGN SIMULATOR
+# Layer 122
+# =========================================================
+
+async def nation_state_campaign_simulator():
+
+    techniques = [
+        "Recon Sweep",
+        "Credential Stuffing",
+        "Infrastructure Scan",
+        "Botnet Flood"
+    ]
+
+    targets = [
+        (41.59, -93.62),   # Iowa SOC
+        (38.90, -77.03),   # Washington
+        (51.50, -0.12),    # London
+        (35.68, 139.69),   # Tokyo
+        (37.77, -122.41)   # San Francisco
+    ]
+
+    while True:
+
+        phase = random.choice(techniques)
+
+        waves = random.randint(15, 40)
+
+        for _ in range(waves):
+
+            ip = ".".join(str(random.randint(1,254)) for _ in range(4))
+
+            origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(ip)
+
+            severity = random.choice([
+                "MEDIUM",
+                "HIGH",
+                "CRITICAL"
+            ])
+
+            target = random.choice(targets)
+
+            payload = {
+
+                "severity": severity,
+                "technique": phase,
+
+                "origin_label": origin_label,
+
+                "latitude": lat,
+                "longitude": lon,
+
+                "country_code": country,
+
+                "source_ip": ip,
+                "isp": isp_name,
+                "asn": asn,
+
+                "shockwave": severity == "CRITICAL",
+
+                "training": True,
+                "team": "red",
+
+                "target_lat": target[0],
+                "target_lng": target[1]
+
+            }
+
+            event_queue.append(payload)
+
+            await asyncio.sleep(random.uniform(0.15,0.4))
+
+        # campaign pause
+        await asyncio.sleep(random.randint(8,16))
 
 
 # =========================================================
