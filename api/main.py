@@ -2991,17 +2991,27 @@ def alerts():
                    timestamp
             FROM alerts
             ORDER BY timestamp DESC
-            LIMIT 10
+            LIMIT 120
         """)).fetchall()
 
-        return {
-            "row_count": len(rows),
-            "sample": [dict(r._mapping) for r in rows]
-        }
+        results = []
 
-    except Exception as e:
+        for r in rows:
 
-        return {"error": str(e)}
+            m = r._mapping
+
+            results.append({
+                "severity": m["severity"] or "LOW",
+                "technique": m["technique"] or "Unknown",
+                "origin_label": m["origin_label"] or "Unknown",
+                "latitude": float(m["latitude"] or 0),
+                "longitude": float(m["longitude"] or 0),
+                "country_code": m["country_code"] or "",
+                "shockwave": str(m["shockwave"]) == "True",
+                "timestamp": str(m["timestamp"])
+            })
+
+        return results
 
     finally:
 
