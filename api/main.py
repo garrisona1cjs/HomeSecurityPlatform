@@ -2980,15 +2980,15 @@ def alerts():
 
     try:
 
-        records = db.execute(text("""
+        rows = db.execute(text("""
             SELECT severity,
-                technique,
-                origin_label,
-                latitude,
-                longitude,
-                country_code,
-                shockwave,
-                timestamp
+                   technique,
+                   origin_label,
+                   latitude,
+                   longitude,
+                   country_code,
+                   shockwave,
+                   timestamp
             FROM alerts
             ORDER BY timestamp DESC
             LIMIT 200
@@ -2996,26 +2996,35 @@ def alerts():
 
         results = []
 
-        for a in records:
+        for r in rows:
 
+            try:
 
-            results.append({
-                "severity": str(a["severity"]) if a["severity"] else "LOW",
-                "technique": str(a["technique"]) if a["technique"] else "Unknown",
-                "origin_label": str(a["origin_label"]) if a["origin_label"] else "Unknown",
-                "latitude": float(a["latitude"]) if a["latitude"] else 0,
-                "longitude": float(a["longitude"]) if a["longitude"] else 0,
-                "country_code": str(a["country_code"]) if a["country_code"] else "",
-                "shockwave": True if str(a["shockwave"]) == "True" else False,
-                "timestamp": a["timestamp"].isoformat() if a["timestamp"] else None
-            })
+                results.append({
+                    "severity": r.get("severity") or "LOW",
+                    "technique": r.get("technique") or "Unknown",
+                    "origin_label": r.get("origin_label") or "Unknown",
+                    "latitude": float(r.get("latitude") or 0),
+                    "longitude": float(r.get("longitude") or 0),
+                    "country_code": r.get("country_code") or "",
+                    "shockwave": str(r.get("shockwave")) == "True",
+                    "timestamp": (
+                        r["timestamp"].isoformat()
+                        if r.get("timestamp")
+                        else None
+                    )
+                })
+
+            except Exception as row_error:
+
+                print("ROW ERROR:", row_error)
 
         return results
 
     except Exception as e:
 
         print("ALERT HISTORY ERROR:", e)
-
+        
         return []
 
     finally:
