@@ -2991,41 +2991,17 @@ def alerts():
                    timestamp
             FROM alerts
             ORDER BY timestamp DESC
-            LIMIT 200
-        """)).mappings().all()
+            LIMIT 10
+        """)).fetchall()
 
-        results = []
-
-        for r in rows:
-
-            try:
-
-                results.append({
-                    "severity": r.get("severity") or "LOW",
-                    "technique": r.get("technique") or "Unknown",
-                    "origin_label": r.get("origin_label") or "Unknown",
-                    "latitude": float(r.get("latitude") or 0),
-                    "longitude": float(r.get("longitude") or 0),
-                    "country_code": r.get("country_code") or "",
-                    "shockwave": str(r.get("shockwave")) == "True",
-                    "timestamp": (
-                        r["timestamp"].isoformat()
-                        if r.get("timestamp")
-                        else None
-                    )
-                })
-
-            except Exception as row_error:
-
-                print("ROW ERROR:", row_error)
-
-        return results
+        return {
+            "row_count": len(rows),
+            "sample": [dict(r._mapping) for r in rows]
+        }
 
     except Exception as e:
 
-        print("ALERT HISTORY ERROR:", e)
-        
-        return []
+        return {"error": str(e)}
 
     finally:
 
