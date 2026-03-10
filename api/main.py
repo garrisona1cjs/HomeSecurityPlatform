@@ -1986,6 +1986,83 @@ def calculate_global_threat_score(momentum, stability):
 
     return (momentum + stability) / 2
 
+# =========================================================
+# APT THREAT ACTOR DATABASE
+# Layer 123
+# =========================================================
+
+APT_ACTORS = {
+
+    "APT28": {
+        "origin": "Russia",
+        "techniques": [
+            "T1110 Brute Force",
+            "T1046 Network Scan",
+            "T1059 Command Exec"
+        ]
+    },
+
+    "LAZARUS": {
+        "origin": "North Korea",
+        "techniques": [
+            "T1566 Phishing",
+            "T1078 Valid Accounts"
+        ]
+    },
+
+    "VOLT_TYPHOON": {
+        "origin": "China",
+        "techniques": [
+            "T1046 Network Scan",
+            "T1078 Valid Accounts"
+        ]
+    },
+
+    "SANDWORM": {
+        "origin": "Russia",
+        "techniques": [
+            "T1059 Command Exec",
+            "T1046 Network Scan"
+        ]
+    },
+
+    "FIN7": {
+        "origin": "Eastern Europe",
+        "techniques": [
+            "T1566 Phishing",
+            "T1110 Brute Force"
+        ]
+    }
+
+}
+
+actor_activity = {}
+
+ACTOR_CONFIDENCE_THRESHOLD = 6
+
+# =========================================================
+# THREAT ACTOR ATTRIBUTION ENGINE
+# Layer 123
+# =========================================================
+
+def attribute_threat_actor(ip, technique):
+
+    for actor, profile in APT_ACTORS.items():
+
+        if technique in profile["techniques"]:
+
+            actor_activity.setdefault(actor, set()).add(ip)
+
+            confidence = len(actor_activity[actor])
+
+            if confidence >= ACTOR_CONFIDENCE_THRESHOLD:
+
+                return actor, profile["origin"], "HIGH"
+
+            return actor, profile["origin"], "MEDIUM"
+
+    return None, None, "LOW"
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -2472,6 +2549,12 @@ async def report_devices(
 
     timeline = update_attack_timeline(ip_addr, technique, severity)
 
+    # Layer 123 — Threat actor attribution
+    threat_actor, actor_origin, actor_confidence = attribute_threat_actor(
+        ip_addr,
+        technique
+    )
+
     pattern_flag = detect_attack_pattern(timeline)
 
     # Layer 51–55 intelligence
@@ -2709,6 +2792,11 @@ async def report_devices(
 
         "severity": severity,
         "threat_score": threat_score,
+
+        "threat_actor": threat_actor,
+        "actor_origin": actor_origin,
+        "actor_confidence": actor_confidence,
+        
         "actor_profile": actor_profile,
         "behavior": behavior_label,
         "actor_reputation": actor_reputation,
