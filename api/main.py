@@ -2984,7 +2984,7 @@ def alerts():
         results = []
 
         for a in records:
-            
+
 
             results.append({
                 "severity": str(a["severity"]) if a["severity"] else "LOW",
@@ -4772,6 +4772,13 @@ def get_blocked():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/dbinfo")
+def dbinfo():
+
+    return {
+        "DATABASE_URL": DATABASE_URL
+    }
 
 
 
