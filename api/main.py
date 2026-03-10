@@ -2854,6 +2854,35 @@ async def simulate(source_ip: str, team: str = "red"):
 
     return {"simulated": True}
 
+# =========================================================
+# DATABASE WRITE TEST
+# =========================================================
+
+@app.get("/dbtest")
+def db_test():
+
+    db = SessionLocal()
+
+    test = Alert(
+        id=str(uuid.uuid4()),
+        agent_id="dbtest",
+        risk_score=50,
+        severity="LOW",
+        technique="DB Test",
+        timestamp=datetime.utcnow(),
+        origin_label="Test",
+        latitude=0,
+        longitude=0,
+        country_code="XX",
+        shockwave="False"
+    )
+
+    db.add(test)
+    db.commit()
+    db.close()
+
+    return {"status": "inserted"}
+
 
 
 # =========================================================
