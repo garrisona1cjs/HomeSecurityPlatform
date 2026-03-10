@@ -3770,9 +3770,9 @@ function clamp(arr, limit){
 // SOC RENDER LIMIT CONFIG
 // ======================================
 const RENDER_LIMITS = {
-  arcs: 120,
-  points: 200,
-  rings: 80,
+  arcs: 300,
+  points: 400,
+  rings: 150,
   packets: 120,
   heat: 40,
   labels: 120,
@@ -3997,7 +3997,7 @@ pressureZones.forEach(z => {
 
 // fade old packet trails
 for (let i = packets.length - 1; i >= 0; i--) {
-  if (now - packets[i].created > 8000) {
+  if (now - packets[i].created > 25000) {
     packets.splice(i, 1);
   }
 }
@@ -4526,7 +4526,7 @@ setInterval(() => {
 setInterval(()=>{
 
   pressureZones.forEach(z => {
-    z.intensity *= 0.92;
+    z.intensity *= 0.97;
   });
 
   pressureZones = pressureZones
@@ -4566,9 +4566,9 @@ setInterval(()=>{
 
   if(alertQueue.length === 0){
 
-    clamp(arcs,80);
-    clamp(points,120);
-    clamp(rings,60);
+    clamp(arcs,200);
+    clamp(points,300);
+    clamp(rings,120);
     clamp(packets,60);
     clamp(heat,20);
     clamp(labels,80);
