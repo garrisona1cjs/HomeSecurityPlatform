@@ -2883,6 +2883,19 @@ def db_test():
 
     return {"status": "inserted"}
 
+@app.get("/dbcheck")
+def dbcheck():
+
+    db = SessionLocal()
+
+    rows = db.execute(text("SELECT COUNT(*) FROM alerts")).fetchone()
+
+    db.close()
+
+    return {
+        "alerts_in_db": rows[0]
+    }
+
 
 
 # =========================================================
