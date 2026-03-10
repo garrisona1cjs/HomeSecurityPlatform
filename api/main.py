@@ -2040,6 +2040,7 @@ actor_activity = {}
 
 ACTOR_CONFIDENCE_THRESHOLD = 6
 
+
 # =========================================================
 # THREAT ACTOR ATTRIBUTION ENGINE
 # Layer 123
@@ -2062,6 +2063,70 @@ def attribute_threat_actor(ip, technique):
             return actor, profile["origin"], "MEDIUM"
 
     return None, None, "LOW"
+
+# =========================================================
+# ADVERSARY CAMPAIGN GRAPH ENGINE
+# Layer 124
+# =========================================================
+
+campaign_graph = {
+    "actors": {},
+    "asn_nodes": {},
+    "country_nodes": {}
+}
+
+CAMPAIGN_ESCALATION_THRESHOLD = 10
+
+
+def update_campaign_graph(actor, ip, asn, country):
+
+    if not actor:
+        return None, 0
+
+    campaign_graph["actors"].setdefault(actor, {
+        "ips": set(),
+        "asns": set(),
+        "countries": set()
+    })
+
+    actor_node = campaign_graph["actors"][actor]
+
+    actor_node["ips"].add(ip)
+    actor_node["asns"].add(asn)
+    actor_node["countries"].add(country)
+
+    size = len(actor_node["ips"])
+
+    if size >= CAMPAIGN_ESCALATION_THRESHOLD:
+
+        return "APT_CAMPAIGN_EXPANSION", size
+
+    return None, size
+
+# =========================================================
+# ADVERSARY TERRITORY INTELLIGENCE
+# Layer 124.5
+# =========================================================
+
+actor_territory = {}
+
+TERRITORY_EXPANSION_THRESHOLD = 6
+
+
+def update_actor_territory(actor, country):
+
+    if not actor:
+        return None, 0
+
+    actor_territory.setdefault(actor, set()).add(country)
+
+    territory_size = len(actor_territory[actor])
+
+    if territory_size >= TERRITORY_EXPANSION_THRESHOLD:
+
+        return "APT_TERRITORIAL_EXPANSION", territory_size
+
+    return None, territory_size
 
 
 # =========================================================
@@ -2549,6 +2614,20 @@ async def report_devices(
 
     timeline = update_attack_timeline(ip_addr, technique, severity)
 
+    # Layer 124 — campaign graph intelligence
+    campaign_graph_flag, campaign_size = update_campaign_graph(
+        threat_actor,
+        ip_addr,
+        asn,
+        country
+    )
+
+    # Layer 124.5 — territory expansion detection
+    territory_flag, territory_size = update_actor_territory(
+        threat_actor,
+        country
+    )
+
     # Layer 123 — Threat actor attribution
     threat_actor, actor_origin, actor_confidence = attribute_threat_actor(
         ip_addr,
@@ -2796,7 +2875,13 @@ async def report_devices(
         "threat_actor": threat_actor,
         "actor_origin": actor_origin,
         "actor_confidence": actor_confidence,
-        
+
+        "campaign_graph_flag": campaign_graph_flag,
+        "campaign_size": campaign_size,
+
+        "territory_flag": territory_flag,
+        "territory_size": territory_size,
+
         "actor_profile": actor_profile,
         "behavior": behavior_label,
         "actor_reputation": actor_reputation,
