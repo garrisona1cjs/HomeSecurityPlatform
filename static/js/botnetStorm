@@ -1,0 +1,79 @@
+// ============================================================
+// GLOBAL BOTNET STORM RENDERER
+// Layer 101
+// ============================================================
+
+const BOTNET_STORMS = []
+
+const STORM_MAX_PARTICLES = 120
+const STORM_LIFETIME = 9000
+
+function createBotnetStorm(originLat, originLng, targetLat, targetLng, intensity = 1) {
+
+    const particleCount = Math.min(
+        STORM_MAX_PARTICLES,
+        40 + Math.floor(intensity * 20)
+    )
+
+    const particles = []
+
+    for (let i = 0; i < particleCount; i++) {
+
+        particles.push({
+            lat: originLat + (Math.random() - 0.5) * 5,
+            lng: originLng + (Math.random() - 0.5) * 5,
+            targetLat,
+            targetLng,
+            progress: Math.random(),
+            speed: 0.002 + Math.random() * 0.004
+        })
+    }
+
+    BOTNET_STORMS.push({
+        particles,
+        created: Date.now()
+    })
+}
+
+function updateBotnetStorms(globe) {
+
+    const now = Date.now()
+
+    for (let i = BOTNET_STORMS.length - 1; i >= 0; i--) {
+
+        const storm = BOTNET_STORMS[i]
+
+        if (now - storm.created > STORM_LIFETIME) {
+            BOTNET_STORMS.splice(i, 1)
+            continue
+        }
+
+        storm.particles.forEach(p => {
+
+            p.progress += p.speed
+
+            if (p.progress > 1) p.progress = 1
+
+            p.currentLat = p.lat + (p.targetLat - p.lat) * p.progress
+            p.currentLng = p.lng + (p.targetLng - p.lng) * p.progress
+        })
+    }
+
+    const stormParticles = []
+
+    BOTNET_STORMS.forEach(storm => {
+
+        storm.particles.forEach(p => {
+
+            stormParticles.push({
+                lat: p.currentLat,
+                lng: p.currentLng,
+                size: 0.25,
+                color: "rgba(255,80,0,0.9)"
+            })
+
+        })
+    })
+
+    globe.pointsData(stormParticles)
+}

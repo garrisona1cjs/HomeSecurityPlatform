@@ -1,4 +1,5 @@
 from modules.threat_intel import evaluate_asn_threat
+from modules.predictive_intel import projected_risk_score
 
 # =========================
 # Device Risk Scoring
@@ -41,5 +42,12 @@ def calculate_risk(device: dict, correlated: bool = False):
 
     # Clamp score
     score = max(0, min(score, 100))
+    # =========================
+    # Predictive Risk Escalation (SAFE ADDITION)
+    # =========================
+    device.setdefault("risk_score", score)
+    device["threat_tags"] = threat_tags
+    device["projected_risk"] = projected_risk_score(device)
+
 
     return score, threat_tags
