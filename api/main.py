@@ -2303,6 +2303,46 @@ async def autonomous_adversary_ai():
 
         await asyncio.sleep(random.uniform(0.25,0.8))
 
+# =========================================================
+# GLOBAL CYBER WAR COMMAND ENGINE
+# Layer 128
+# =========================================================
+
+actor_coalitions = {
+
+    "RUSSIAN_COALITION": ["APT28", "SANDWORM"],
+
+    "FINANCIAL_CRIME_ALLIANCE": ["LAZARUS", "FIN7"],
+
+    "STRATEGIC_RECON_GROUP": ["VOLT_TYPHOON"]
+
+}
+
+coalition_activity = {}
+
+COALITION_TRIGGER = 6
+
+
+def detect_coalition_activity(actor):
+
+    if not actor:
+        return None, None
+
+    for coalition, members in actor_coalitions.items():
+
+        if actor in members:
+
+            coalition_activity.setdefault(coalition, 0)
+            coalition_activity[coalition] += 1
+
+            if coalition_activity[coalition] >= COALITION_TRIGGER:
+
+                return coalition, "COALITION_OPERATION"
+
+            return coalition, None
+
+    return None, None
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -2817,6 +2857,11 @@ async def report_devices(
         territory_flag
     )
 
+    # Layer 128 — coalition intelligence
+    coalition, coalition_flag = detect_coalition_activity(
+        threat_actor
+    )
+
     # Layer 123 — Threat actor attribution
     threat_actor, actor_origin, actor_confidence = attribute_threat_actor(
         ip_addr,
@@ -3074,6 +3119,9 @@ async def report_devices(
         "strategic_objective": strategic_objective,
 
         "evolution_flag": evolution_flag,
+
+        "coalition": coalition,
+        "coalition_flag": coalition_flag,
 
         "actor_profile": actor_profile,
         "behavior": behavior_label,
