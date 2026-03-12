@@ -2459,6 +2459,70 @@ def choose_strategic_target(actor):
 
     return sector, location
 
+# =========================================================
+# CRITICAL INFRASTRUCTURE IMPACT ENGINE
+# Layer 131
+# =========================================================
+
+def evaluate_infrastructure_impact(
+    target_sector,
+    severity,
+    strategic_objective,
+    cyber_war_level
+):
+
+    if not target_sector:
+        return None
+
+    impact = None
+
+    # energy infrastructure
+    if target_sector == "ENERGY":
+
+        if severity == "CRITICAL":
+            impact = "POWER_GRID_DISRUPTION"
+        elif severity == "HIGH":
+            impact = "ENERGY_SUPPLY_PRESSURE"
+
+    # financial sector
+    elif target_sector == "FINANCIAL":
+
+        if severity == "CRITICAL":
+            impact = "FINANCIAL_SYSTEM_INSTABILITY"
+        elif severity == "HIGH":
+            impact = "BANKING_NETWORK_STRESS"
+
+    # telecom networks
+    elif target_sector == "TELECOM":
+
+        if severity == "CRITICAL":
+            impact = "TELECOM_SERVICE_OUTAGE"
+        elif severity == "HIGH":
+            impact = "NETWORK_LATENCY_SPIKE"
+
+    # government systems
+    elif target_sector == "GOVERNMENT":
+
+        if severity == "CRITICAL":
+            impact = "GOVERNMENT_SYSTEM_COMPROMISE"
+        elif severity == "HIGH":
+            impact = "CIVIC_SERVICE_DEGRADATION"
+
+    # technology sector
+    elif target_sector == "TECHNOLOGY":
+
+        if severity == "CRITICAL":
+            impact = "CLOUD_INFRASTRUCTURE_DISRUPTION"
+        elif severity == "HIGH":
+            impact = "DATA_CENTER_PRESSURE"
+
+    # escalate impact during cyber war
+    if cyber_war_level == "CYBER_LEVEL_5_FULL_WAR" and impact:
+
+        impact = "STRATEGIC_" + impact
+
+    return impact
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -2986,6 +3050,14 @@ async def report_devices(
         campaign_graph_flag
     )
 
+    # Layer 131 — infrastructure impact detection
+    infrastructure_impact = evaluate_infrastructure_impact(
+        target_sector,
+        severity,
+        strategic_objective,
+        cyber_war_level
+    )
+
     # Layer 123 — Threat actor attribution
     threat_actor, actor_origin, actor_confidence = attribute_threat_actor(
         ip_addr,
@@ -3326,6 +3398,11 @@ async def report_devices(
 
         "latitude": lat,
         "longitude": lon,
+
+        "target_sector": target_sector,
+        "target_lat": target_lat,
+        "target_lng": target_lng,
+
         "country_code": country,
 
         "source_ip": ip_addr,
