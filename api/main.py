@@ -2128,6 +2128,47 @@ def update_actor_territory(actor, country):
 
     return None, territory_size
 
+# =========================================================
+# GLOBAL CYBER WAR STRATEGY ENGINE
+# Layer 125
+# =========================================================
+
+def evaluate_adversary_strategy(
+    threat_actor,
+    technique,
+    campaign_graph_flag,
+    territory_flag
+):
+
+    if not threat_actor:
+        return None
+
+    # Intelligence gathering
+    if technique == "T1046 Network Scan":
+        return "STRATEGIC_RECONNAISSANCE"
+
+    # Credential harvesting
+    if technique == "T1110 Brute Force":
+        return "CREDENTIAL_HARVESTING"
+
+    # phishing operations
+    if technique == "T1566 Phishing":
+        return "SOCIAL_ENGINEERING_CAMPAIGN"
+
+    # command execution
+    if technique == "T1059 Command Exec":
+        return "REMOTE_COMPROMISE_OPERATION"
+
+    # infrastructure expansion
+    if campaign_graph_flag == "APT_CAMPAIGN_EXPANSION":
+        return "INFRASTRUCTURE_EXPANSION"
+
+    # geopolitical cyber pressure
+    if territory_flag == "APT_TERRITORIAL_EXPANSION":
+        return "GEOPOLITICAL_CYBER_PRESSURE"
+
+    return "OPPORTUNISTIC_ACTIVITY"
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -2628,6 +2669,14 @@ async def report_devices(
         country
     )
 
+    # Layer 125 — strategic objective detection
+    strategic_objective = evaluate_adversary_strategy(
+        threat_actor,
+        technique,
+        campaign_graph_flag,
+        territory_flag
+    )
+
     # Layer 123 — Threat actor attribution
     threat_actor, actor_origin, actor_confidence = attribute_threat_actor(
         ip_addr,
@@ -2881,6 +2930,8 @@ async def report_devices(
 
         "territory_flag": territory_flag,
         "territory_size": territory_size,
+
+        "strategic_objective": strategic_objective,
 
         "actor_profile": actor_profile,
         "behavior": behavior_label,
