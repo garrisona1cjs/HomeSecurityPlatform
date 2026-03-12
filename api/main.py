@@ -2274,6 +2274,11 @@ async def autonomous_adversary_ai():
             "CRITICAL"
         ])
 
+        # Layer 130 — strategic targeting
+        target_sector, target_location = choose_strategic_target(actor)
+
+        target_lat, target_lng = target_location
+
         payload = {
 
             "severity": severity,
@@ -2283,6 +2288,10 @@ async def autonomous_adversary_ai():
 
             "latitude": lat,
             "longitude": lon,
+
+            "target_sector": target_sector,
+            "target_lat": target_lat,
+            "target_lng": target_lng,
 
             "country_code": country,
 
@@ -2342,6 +2351,113 @@ def detect_coalition_activity(actor):
             return coalition, None
 
     return None, None
+
+# =========================================================
+# CYBER WAR ESCALATION ENGINE
+# Layer 129
+# =========================================================
+
+cyber_war_state = {
+    "events": []
+}
+
+ESCALATION_WINDOW = 60
+
+
+def evaluate_cyber_war_state(
+    threat_score,
+    coalition_flag,
+    swarm_flag,
+    campaign_graph_flag
+):
+
+    now = datetime.utcnow().timestamp()
+
+    cyber_war_state["events"].append(now)
+
+    # remove old activity
+    cyber_war_state["events"] = [
+        t for t in cyber_war_state["events"]
+        if now - t < ESCALATION_WINDOW
+    ]
+
+    intensity = len(cyber_war_state["events"])
+
+    # escalation logic
+    if coalition_flag == "COALITION_OPERATION":
+        return "CYBER_LEVEL_5_FULL_WAR", intensity
+
+    if swarm_flag == "GLOBAL_BOTNET_SWARM":
+        return "CYBER_LEVEL_4_GLOBAL_CONFLICT", intensity
+
+    if campaign_graph_flag == "APT_CAMPAIGN_EXPANSION":
+        return "CYBER_LEVEL_3_CAMPAIGN_WARFARE", intensity
+
+    if intensity > 40:
+        return "CYBER_LEVEL_2_ELEVATED_THREAT", intensity
+
+    return "CYBER_LEVEL_1_NORMAL_ACTIVITY", intensity
+
+# =========================================================
+# STRATEGIC TARGETING AI
+# Layer 130
+# =========================================================
+
+strategic_targets = {
+
+    "ENERGY": [
+        (29.76, -95.36),  # Houston
+        (51.51, -0.13),   # London energy trading
+        (25.20, 55.27)    # Dubai oil hub
+    ],
+
+    "FINANCIAL": [
+        (40.71, -74.00),  # New York
+        (47.61, -122.33), # fintech hubs
+        (35.68, 139.69)   # Tokyo finance
+    ],
+
+    "GOVERNMENT": [
+        (38.90, -77.03),  # Washington DC
+        (55.75, 37.61),   # Moscow
+        (48.85, 2.35)     # Paris
+    ],
+
+    "TECHNOLOGY": [
+        (37.77, -122.41), # Silicon Valley
+        (47.61, -122.33), # Seattle
+        (31.23, 121.47)   # Shanghai tech
+    ],
+
+    "TELECOM": [
+        (52.52, 13.40),   # Berlin telecom
+        (1.35, 103.82),   # Singapore network hub
+        (28.61, 77.21)    # Delhi telecom
+    ]
+
+}
+
+actor_target_preferences = {
+
+    "APT28": "GOVERNMENT",
+    "SANDWORM": "ENERGY",
+    "LAZARUS": "FINANCIAL",
+    "FIN7": "FINANCIAL",
+    "VOLT_TYPHOON": "TELECOM"
+
+}
+
+
+def choose_strategic_target(actor):
+
+    sector = actor_target_preferences.get(actor)
+
+    if not sector:
+        sector = random.choice(list(strategic_targets.keys()))
+
+    location = random.choice(strategic_targets[sector])
+
+    return sector, location
 
 
 # =========================================================
@@ -2862,6 +2978,14 @@ async def report_devices(
         threat_actor
     )
 
+    # Layer 129 — cyber war escalation detection
+    cyber_war_level, war_intensity = evaluate_cyber_war_state(
+        threat_score,
+        coalition_flag,
+        swarm_flag,
+        campaign_graph_flag
+    )
+
     # Layer 123 — Threat actor attribution
     threat_actor, actor_origin, actor_confidence = attribute_threat_actor(
         ip_addr,
@@ -3122,6 +3246,9 @@ async def report_devices(
 
         "coalition": coalition,
         "coalition_flag": coalition_flag,
+
+        "cyber_war_level": cyber_war_level,
+        "war_intensity": war_intensity,
 
         "actor_profile": actor_profile,
         "behavior": behavior_label,
