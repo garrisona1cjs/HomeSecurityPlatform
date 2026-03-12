@@ -2310,7 +2310,7 @@ async def autonomous_adversary_ai():
 
         event_queue.append(payload)
 
-        await asyncio.sleep(random.uniform(0.25,0.8))
+        await asyncio.sleep(random.uniform(0.8,1.6))
 
 # =========================================================
 # GLOBAL CYBER WAR COMMAND ENGINE
@@ -4495,13 +4495,13 @@ function clamp(arr, limit){
 // SOC RENDER LIMIT CONFIG
 // ======================================
 const RENDER_LIMITS = {
-  arcs: 300,
-  points: 400,
-  rings: 150,
-  packets: 120,
-  heat: 40,
-  labels: 120,
-  queue: 150
+  arcs: 180,
+  points: 220,
+  rings: 90,
+  packets: 80,
+  heat: 30,
+  labels: 80,
+  queue: 120
 };
 
 let lastFrame = 0;
@@ -4690,7 +4690,11 @@ if(botnetStorms.length > MAX_STORMS){
   botnetStorms.splice(0, botnetStorms.length - MAX_STORMS);
 }
 
-globe.pointsData(points.concat(pressurePoints, satellitePoints, stormParticles, beaconPoints))
+const mergedPoints = points
+  .concat(pressurePoints, satellitePoints, stormParticles, beaconPoints)
+  .slice(-RENDER_LIMITS.points);
+
+globe.pointsData(mergedPoints)
   .pointRadius('size')
   .pointColor('color')
   .pointAltitude(d => Math.min(0.08, d.size * 0.02));
@@ -5479,6 +5483,23 @@ def dbinfo():
     return {
         "DATABASE_URL": DATABASE_URL
     }
+
+# =========================================================
+# SERVER STARTUP (Render Compatible)
+# =========================================================
+
+if __name__ == "__main__":
+
+    import uvicorn
+    import os
+
+    port = int(os.environ.get("PORT", 10000))
+
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port
+    )
 
 
 
