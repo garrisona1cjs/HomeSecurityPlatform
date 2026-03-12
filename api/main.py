@@ -2951,6 +2951,11 @@ async def report_devices(
 
     origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(ip_addr)
 
+    # fallback strategic target for real reports
+    target_sector = None
+    target_lat = lat
+    target_lng = lon
+
     heatmap_flag, heatmap_activity = track_heatmap(lat, lon, country)
 
     campaign = detect_campaign(ip_addr, asn, country)
@@ -2999,6 +3004,9 @@ async def report_devices(
         reputation_flag
     )
 
+    # initialize threat actor before evolution logic
+    threat_actor = None
+
     technique = random.choice([
         "T1110 Brute Force",
         "T1078 Valid Accounts",
@@ -3028,6 +3036,9 @@ async def report_devices(
         threat_actor,
         country
     )
+
+    # initialize threat score placeholder
+    threat_score = 0
 
     # Layer 125 — strategic objective detection
     strategic_objective = evaluate_adversary_strategy(
