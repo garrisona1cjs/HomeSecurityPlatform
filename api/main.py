@@ -2169,6 +2169,47 @@ def evaluate_adversary_strategy(
 
     return "OPPORTUNISTIC_ACTIVITY"
 
+# =========================================================
+# AI CAMPAIGN EVOLUTION ENGINE
+# Layer 126
+# =========================================================
+
+campaign_evolution = {}
+
+EVOLUTION_TRIGGER = 8
+
+
+def evolve_campaign(threat_actor, technique):
+
+    if not threat_actor:
+        return technique, None
+
+    campaign_evolution.setdefault(threat_actor, {
+        "techniques": set(),
+        "mutations": 0
+    })
+
+    memory = campaign_evolution[threat_actor]
+
+    memory["techniques"].add(technique)
+
+    if len(memory["techniques"]) >= EVOLUTION_TRIGGER:
+
+        memory["techniques"].clear()
+        memory["mutations"] += 1
+
+        evolved_technique = random.choice([
+            "T1046 Network Scan",
+            "T1110 Brute Force",
+            "T1078 Valid Accounts",
+            "T1059 Command Exec",
+            "T1566 Phishing"
+        ])
+
+        return evolved_technique, "TACTIC_EVOLUTION"
+
+    return technique, None
+
 
 # =========================================================
 # THREAT CAMPAIGN DETECTION ENGINE
@@ -2653,6 +2694,12 @@ async def report_devices(
         "T1566 Phishing"
     ])
 
+    # Layer 126 — adversary tactic evolution
+    technique, evolution_flag = evolve_campaign(
+        threat_actor,
+        technique
+    )
+
     timeline = update_attack_timeline(ip_addr, technique, severity)
 
     # Layer 124 — campaign graph intelligence
@@ -2932,6 +2979,8 @@ async def report_devices(
         "territory_size": territory_size,
 
         "strategic_objective": strategic_objective,
+
+        "evolution_flag": evolution_flag,
 
         "actor_profile": actor_profile,
         "behavior": behavior_label,
