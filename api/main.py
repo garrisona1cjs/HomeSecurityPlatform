@@ -86,8 +86,11 @@ async def start_dispatcher():
 
     asyncio.create_task(event_dispatcher())
 
-    # Layer 122 — Nation-State Campaign Simulator
+    # Layer 122 — Nation-State Campaigns
     asyncio.create_task(nation_state_campaign_simulator())
+
+    # Layer 127 — Autonomous Adversary AI
+    asyncio.create_task(autonomous_adversary_ai())
 
 
 # =========================================================
@@ -2209,6 +2212,96 @@ def evolve_campaign(threat_actor, technique):
         return evolved_technique, "TACTIC_EVOLUTION"
 
     return technique, None
+
+# =========================================================
+# AUTONOMOUS ADVERSARY AI ENGINE
+# Layer 127
+# =========================================================
+
+async def autonomous_adversary_ai():
+
+    targets = [
+        (41.59, -93.62),   # SOC
+        (38.90, -77.03),   # Washington
+        (51.50, -0.12),    # London
+        (35.68, 139.69),   # Tokyo
+        (37.77, -122.41)   # Silicon Valley
+    ]
+
+    actor_profiles = {
+
+        "APT28": [
+            "T1046 Network Scan",
+            "T1110 Brute Force",
+            "T1059 Command Exec"
+        ],
+
+        "LAZARUS": [
+            "T1566 Phishing",
+            "T1078 Valid Accounts",
+            "T1110 Brute Force"
+        ],
+
+        "VOLT_TYPHOON": [
+            "T1046 Network Scan",
+            "T1078 Valid Accounts"
+        ],
+
+        "SANDWORM": [
+            "T1059 Command Exec",
+            "T1046 Network Scan"
+        ],
+
+        "FIN7": [
+            "T1566 Phishing",
+            "T1110 Brute Force"
+        ]
+
+    }
+
+    while True:
+
+        actor = random.choice(list(actor_profiles.keys()))
+        technique = random.choice(actor_profiles[actor])
+
+        ip = ".".join(str(random.randint(1,254)) for _ in range(4))
+
+        origin_label, lat, lon, country, isp_name, asn = geo_lookup_ip(ip)
+
+        severity = random.choice([
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+        ])
+
+        payload = {
+
+            "severity": severity,
+            "technique": technique,
+
+            "origin_label": origin_label,
+
+            "latitude": lat,
+            "longitude": lon,
+
+            "country_code": country,
+
+            "source_ip": ip,
+            "isp": isp_name,
+            "asn": asn,
+
+            "threat_actor": actor,
+
+            "shockwave": severity == "CRITICAL",
+
+            "training": True,
+            "team": "red"
+
+        }
+
+        event_queue.append(payload)
+
+        await asyncio.sleep(random.uniform(0.25,0.8))
 
 
 # =========================================================
