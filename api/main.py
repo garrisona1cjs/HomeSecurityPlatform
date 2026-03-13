@@ -92,6 +92,9 @@ async def start_dispatcher():
     # Layer 127 — Autonomous Adversary AI
     asyncio.create_task(autonomous_adversary_ai())
 
+    # Layer 133 — Autonomous Threat Hunter
+    asyncio.create_task(autonomous_threat_hunter())
+
 
 # =========================================================
 # DATABASE MODEL
@@ -2786,6 +2789,138 @@ def detect_surge():
     return len(recent_alerts) >= SURGE_THRESHOLD
 
 # =========================================================
+# SOC EXECUTION GUARD
+# Layer 132
+# =========================================================
+
+SOC_ENGINE_ERRORS = []
+
+MAX_ENGINE_ERRORS = 200
+
+
+def soc_guard(engine_name, func, *args, **kwargs):
+
+    """
+    Executes SOC intelligence engines safely.
+    Prevents crashes in the threat pipeline.
+    """
+
+    try:
+
+        return func(*args, **kwargs)
+
+    except Exception as e:
+
+        SOC_ENGINE_ERRORS.append({
+            "engine": engine_name,
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+        if len(SOC_ENGINE_ERRORS) > MAX_ENGINE_ERRORS:
+            SOC_ENGINE_ERRORS.pop(0)
+
+        return None
+    
+# =========================================================
+# AUTONOMOUS THREAT HUNTER AI
+# Layer 133
+# =========================================================
+
+async def autonomous_threat_hunter():
+
+    """
+    Continuous SOC threat hunting engine.
+    Scans intelligence memory and launches
+    proactive investigation events.
+    """
+
+    while True:
+
+        try:
+
+            # hunt hostile ASN infrastructure
+            if infrastructure_clusters:
+
+                asn = random.choice(list(infrastructure_clusters.keys()))
+
+                cluster = infrastructure_clusters.get(asn)
+
+                if cluster and cluster["ips"]:
+
+                    ip = random.choice(list(cluster["ips"]))
+
+                    payload = {
+
+                        "severity": "MEDIUM",
+                        "technique": "Threat Hunt",
+                        "origin_label": "SOC Threat Hunter",
+
+                        "latitude": random.uniform(-60,60),
+                        "longitude": random.uniform(-180,180),
+
+                        "country_code": "SOC",
+
+                        "source_ip": ip,
+                        "asn": asn,
+                        "isp": "Threat Intelligence",
+
+                        "threat_actor": None,
+
+                        "shockwave": False,
+
+                        "training": False,
+                        "team": "blue",
+
+                        "hunt_type": "INFRASTRUCTURE_INVESTIGATION"
+
+                    }
+
+                    event_queue.append(payload)
+
+            # hunt persistent attackers
+            if adversary_persistence:
+
+                ip = random.choice(list(adversary_persistence.keys()))
+
+                payload = {
+
+                    "severity": "HIGH",
+                    "technique": "Threat Hunt",
+
+                    "origin_label": "Persistent Threat Investigation",
+
+                    "latitude": random.uniform(-60,60),
+                    "longitude": random.uniform(-180,180),
+
+                    "country_code": "SOC",
+
+                    "source_ip": ip,
+                    "asn": "Unknown",
+                    "isp": "Threat Intelligence",
+
+                    "shockwave": False,
+
+                    "training": False,
+                    "team": "blue",
+
+                    "hunt_type": "PERSISTENT_ADVERSARY_HUNT"
+
+                }
+
+                event_queue.append(payload)
+
+        except Exception as e:
+
+            SOC_ENGINE_ERRORS.append({
+                "engine": "THREAT_HUNTER_AI",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+        await asyncio.sleep(random.uniform(5,10))
+
+# =========================================================
 # EVENT BROADCAST QUEUE (Performance Layer)
 # =========================================================
 
@@ -3056,16 +3191,24 @@ async def report_devices(
     # initialize swarm flag before cyber war engine
     swarm_flag = None
 
-    # Layer 129 — cyber war escalation detection
-    cyber_war_level, war_intensity = evaluate_cyber_war_state(
+    result = soc_guard(
+        "CYBER_WAR_ENGINE",
+        evaluate_cyber_war_state,
         threat_score,
         coalition_flag,
         swarm_flag,
         campaign_graph_flag
     )
 
+    if result:
+        cyber_war_level, war_intensity = result
+    else:
+        cyber_war_level, war_intensity = "CYBER_LEVEL_1_NORMAL_ACTIVITY", 0
+
     # Layer 131 — infrastructure impact detection
-    infrastructure_impact = evaluate_infrastructure_impact(
+    infrastructure_impact = soc_guard(
+        "INFRASTRUCTURE_IMPACT_ENGINE",
+        evaluate_infrastructure_impact,
         target_sector,
         severity,
         strategic_objective,
@@ -3073,10 +3216,18 @@ async def report_devices(
     )
 
     # Layer 123 — Threat actor attribution
-    threat_actor, actor_origin, actor_confidence = attribute_threat_actor(
+    actor_result = soc_guard(
+        "THREAT_ACTOR_ATTRIBUTION",
+        attribute_threat_actor,
         ip_addr,
         technique
     )
+
+
+    if actor_result:
+        threat_actor, actor_origin, actor_confidence = actor_result
+    else:
+        threat_actor, actor_origin, actor_confidence = None, None, "LOW"
 
     pattern_flag = detect_attack_pattern(timeline)
 
@@ -5496,6 +5647,19 @@ def dbinfo():
 
     return {
         "DATABASE_URL": DATABASE_URL
+    }
+
+# =========================================================
+# SOC ENGINE HEALTH
+# Layer 132
+# =========================================================
+
+@app.get("/soc/engines")
+def soc_engine_status():
+
+    return {
+        "engine_errors": SOC_ENGINE_ERRORS[-20:],
+        "error_count": len(SOC_ENGINE_ERRORS)
     }
 
 # =========================================================
