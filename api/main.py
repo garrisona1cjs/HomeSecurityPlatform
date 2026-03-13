@@ -95,6 +95,9 @@ async def start_dispatcher():
     # Layer 133 — Autonomous Threat Hunter
     asyncio.create_task(autonomous_threat_hunter())
 
+    # Layer 134 — Botnet C2 Simulation
+    asyncio.create_task(botnet_c2_simulator())
+
 
 # =========================================================
 # DATABASE MODEL
@@ -2919,6 +2922,128 @@ async def autonomous_threat_hunter():
             })
 
         await asyncio.sleep(random.uniform(5,10))
+
+# =========================================================
+# GLOBAL BOTNET COMMAND & CONTROL NETWORK
+# Layer 134
+# =========================================================
+
+botnet_c2_network = {
+    "servers": [],
+    "bots": {}
+}
+
+MAX_C2_SERVERS = 6
+MAX_BOTS_PER_SERVER = 40
+
+
+def generate_botnet_c2():
+
+    """
+    Creates simulated botnet command servers.
+    """
+
+    while len(botnet_c2_network["servers"]) < MAX_C2_SERVERS:
+
+        ip = ".".join(str(random.randint(1,254)) for _ in range(4))
+
+        botnet_c2_network["servers"].append({
+            "ip": ip,
+            "asn": "BOTNET_C2",
+            "country": random.choice([
+                "RU","CN","KP","IR","BR","RO","VN"
+            ])
+        })
+
+def expand_botnet(server_ip):
+
+    """
+    Simulates botnet propagation from C2 servers.
+    """
+
+    botnet_c2_network["bots"].setdefault(server_ip, set())
+
+    if len(botnet_c2_network["bots"][server_ip]) >= MAX_BOTS_PER_SERVER:
+        return
+
+    new_bot = ".".join(str(random.randint(1,254)) for _ in range(4))
+
+    botnet_c2_network["bots"][server_ip].add(new_bot)
+
+async def botnet_c2_simulator():
+
+    """
+    Launches coordinated botnet attacks from C2 servers.
+    """
+
+    generate_botnet_c2()
+
+    targets = [
+        (41.59,-93.62),  # SOC
+        (38.90,-77.03),
+        (51.50,-0.12),
+        (35.68,139.69)
+    ]
+
+    while True:
+
+        try:
+
+            server = random.choice(botnet_c2_network["servers"])
+
+            expand_botnet(server["ip"])
+
+            bots = botnet_c2_network["bots"].get(server["ip"], [])
+
+            for bot in list(bots)[:10]:
+
+                origin_label, lat, lon, country, isp, asn = geo_lookup_ip(bot)
+
+                severity = random.choice([
+                    "MEDIUM","HIGH","CRITICAL"
+                ])
+
+                target = random.choice(targets)
+
+                payload = {
+
+                    "severity": severity,
+                    "technique": "Botnet Command",
+
+                    "origin_label": origin_label,
+
+                    "latitude": lat,
+                    "longitude": lon,
+
+                    "country_code": country,
+
+                    "source_ip": bot,
+                    "asn": asn,
+                    "isp": isp,
+
+                    "c2_server": server["ip"],
+
+                    "shockwave": severity == "CRITICAL",
+
+                    "training": True,
+                    "team": "red",
+
+                    "target_lat": target[0],
+                    "target_lng": target[1]
+
+                }
+
+                event_queue.append(payload)
+
+        except Exception as e:
+
+            SOC_ENGINE_ERRORS.append({
+                "engine": "BOTNET_C2_SIMULATOR",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+        await asyncio.sleep(random.uniform(2,4))
 
 # =========================================================
 # EVENT BROADCAST QUEUE (Performance Layer)
