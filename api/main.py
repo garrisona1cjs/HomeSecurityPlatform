@@ -98,6 +98,9 @@ async def start_dispatcher():
     # Layer 134 — Botnet C2 Simulation
     asyncio.create_task(botnet_c2_simulator())
 
+    # Layer 135 — Cyber War Scenario Engine
+    asyncio.create_task(cyber_war_scenario_engine())
+
 
 # =========================================================
 # DATABASE MODEL
@@ -3044,6 +3047,159 @@ async def botnet_c2_simulator():
             })
 
         await asyncio.sleep(random.uniform(2,4))
+
+# =========================================================
+# GLOBAL CYBER WAR SCENARIO ENGINE
+# Layer 135
+# =========================================================
+
+cyber_war_scenarios = {
+
+    "US_CHINA_TECH_WAR": {
+        "actors": ["VOLT_TYPHOON"],
+        "targets": ["TECHNOLOGY","TELECOM"]
+    },
+
+    "NATO_RUSSIA_ENERGY_CONFLICT": {
+        "actors": ["APT28","SANDWORM"],
+        "targets": ["ENERGY","GOVERNMENT"]
+    },
+
+    "GLOBAL_FINANCIAL_DISRUPTION": {
+        "actors": ["FIN7","LAZARUS"],
+        "targets": ["FINANCIAL"]
+    }
+
+}
+
+cyber_war_phase = {
+    "phase": "RECON",
+    "scenario": None,
+    "activity": 0
+}
+
+PHASE_THRESHOLD = 40
+
+def advance_cyber_war_phase():
+
+    phase_order = ["RECON","DISRUPTION","INFRASTRUCTURE"]
+
+    current = cyber_war_phase["phase"]
+
+    if current not in phase_order:
+        cyber_war_phase["phase"] = "RECON"
+        return
+
+    index = phase_order.index(current)
+
+    if index < len(phase_order) - 1:
+        cyber_war_phase["phase"] = phase_order[index+1]
+
+async def cyber_war_scenario_engine():
+
+    """
+    Simulates geopolitical cyber warfare campaigns
+    with escalating phases.
+    """
+
+    targets = [
+        (41.59,-93.62),
+        (38.90,-77.03),
+        (51.50,-0.12),
+        (35.68,139.69),
+        (37.77,-122.41)
+    ]
+
+    while True:
+
+        try:
+
+            # select scenario
+            if not cyber_war_phase["scenario"]:
+
+                cyber_war_phase["scenario"] = random.choice(
+                    list(cyber_war_scenarios.keys())
+                )
+
+            scenario = cyber_war_scenarios[
+                cyber_war_phase["scenario"]
+            ]
+
+            actor = random.choice(scenario["actors"])
+
+            technique = random.choice([
+                "T1046 Network Scan",
+                "T1110 Brute Force",
+                "T1078 Valid Accounts",
+                "T1059 Command Exec"
+            ])
+
+            ip = ".".join(str(random.randint(1,254)) for _ in range(4))
+
+            origin_label, lat, lon, country, isp, asn = geo_lookup_ip(ip)
+
+            severity = random.choice([
+                "MEDIUM","HIGH","CRITICAL"
+            ])
+
+            target_sector = random.choice(
+                scenario["targets"]
+            )
+
+            target = random.choice(targets)
+
+            payload = {
+
+                "severity": severity,
+                "technique": technique,
+
+                "origin_label": origin_label,
+
+                "latitude": lat,
+                "longitude": lon,
+
+                "country_code": country,
+
+                "source_ip": ip,
+                "asn": asn,
+                "isp": isp,
+
+                "threat_actor": actor,
+
+                "shockwave": severity == "CRITICAL",
+
+                "training": True,
+                "team": "red",
+
+                "cyber_war_scenario": cyber_war_phase["scenario"],
+                "cyber_war_phase": cyber_war_phase["phase"],
+
+                "target_sector": target_sector,
+                "target_lat": target[0],
+                "target_lng": target[1]
+
+            }
+
+            event_queue.append(payload)
+
+            cyber_war_phase["activity"] += 1
+
+            # phase escalation
+            if cyber_war_phase["activity"] > PHASE_THRESHOLD:
+
+                advance_cyber_war_phase()
+
+                cyber_war_phase["activity"] = 0
+
+        except Exception as e:
+
+            SOC_ENGINE_ERRORS.append({
+                "engine": "CYBER_WAR_SCENARIO_ENGINE",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+        await asyncio.sleep(random.uniform(3,6))
 
 # =========================================================
 # EVENT BROADCAST QUEUE (Performance Layer)
