@@ -101,6 +101,9 @@ async def start_dispatcher():
     # Layer 135 — Cyber War Scenario Engine
     asyncio.create_task(cyber_war_scenario_engine())
 
+    # Layer 136 — Strategic War Planner
+    asyncio.create_task(strategic_war_planner())
+
 
 # =========================================================
 # DATABASE MODEL
@@ -3200,6 +3203,136 @@ async def cyber_war_scenario_engine():
             })
 
         await asyncio.sleep(random.uniform(3,6))
+
+# =========================================================
+# AI STRATEGIC WAR PLANNER
+# Layer 136
+# =========================================================
+
+strategic_campaigns = {}
+
+MAX_ACTIVE_CAMPAIGNS = 5
+
+
+def create_strategic_campaign():
+
+    scenario = random.choice(list(cyber_war_scenarios.keys()))
+
+    actors = cyber_war_scenarios[scenario]["actors"]
+
+    campaign_id = str(uuid.uuid4())[:8]
+
+    campaign = {
+
+        "id": campaign_id,
+        "scenario": scenario,
+        "actors": actors,
+
+        "phase": 0,
+
+        "plan": [
+            "T1046 Network Scan",
+            "T1110 Brute Force",
+            "T1078 Valid Accounts",
+            "T1059 Command Exec"
+        ],
+
+        "progress": 0
+
+    }
+
+    strategic_campaigns[campaign_id] = campaign
+
+async def strategic_war_planner():
+
+    """
+    Generates and executes structured cyber campaigns.
+    """
+
+    targets = [
+        (41.59,-93.62),
+        (38.90,-77.03),
+        (51.50,-0.12),
+        (35.68,139.69),
+        (37.77,-122.41)
+    ]
+
+    while True:
+
+        try:
+
+            if len(strategic_campaigns) < MAX_ACTIVE_CAMPAIGNS:
+
+                create_strategic_campaign()
+
+            campaign = random.choice(
+                list(strategic_campaigns.values())
+            )
+
+            actor = random.choice(campaign["actors"])
+
+            technique = campaign["plan"][campaign["phase"]]
+
+            ip = ".".join(str(random.randint(1,254)) for _ in range(4))
+
+            origin_label, lat, lon, country, isp, asn = geo_lookup_ip(ip)
+
+            target = random.choice(targets)
+
+            payload = {
+
+                "severity": "HIGH",
+
+                "technique": technique,
+
+                "origin_label": origin_label,
+
+                "latitude": lat,
+                "longitude": lon,
+
+                "country_code": country,
+
+                "source_ip": ip,
+                "asn": asn,
+                "isp": isp,
+
+                "threat_actor": actor,
+
+                "shockwave": True,
+
+                "training": True,
+                "team": "red",
+
+                "campaign_id": campaign["id"],
+                "campaign_scenario": campaign["scenario"],
+                "campaign_phase": campaign["phase"],
+
+                "target_lat": target[0],
+                "target_lng": target[1]
+
+            }
+
+            event_queue.append(payload)
+
+            campaign["progress"] += 1
+
+            if campaign["progress"] > 20:
+
+                campaign["progress"] = 0
+
+                if campaign["phase"] < len(campaign["plan"]) - 1:
+
+                    campaign["phase"] += 1
+
+        except Exception as e:
+
+            SOC_ENGINE_ERRORS.append({
+                "engine": "AI_STRATEGIC_WAR_PLANNER",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+        await asyncio.sleep(random.uniform(4,8))
 
 # =========================================================
 # EVENT BROADCAST QUEUE (Performance Layer)
