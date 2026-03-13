@@ -3053,6 +3053,9 @@ async def report_devices(
         threat_actor
     )
 
+    # initialize swarm flag before cyber war engine
+    swarm_flag = None
+
     # Layer 129 — cyber war escalation detection
     cyber_war_level, war_intensity = evaluate_cyber_war_state(
         threat_score,
