@@ -138,7 +138,10 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id = Column(String, primary_key=True)
+
     agent_id = Column(String)
+    organization_id = Column(Integer)
+
     risk_score = Column(Integer)
     severity = Column(String)
     technique = Column(String)
@@ -162,7 +165,10 @@ class Agent(Base):
     hostname = Column(String)
     ip_address = Column(String)
     api_key = Column(String)
-    created_at = Column(String) 
+
+    organization_id = Column(Integer)
+
+    created_at = Column(String)
 
 # =========================================================
 # ORGANIZATION MODEL
@@ -3986,9 +3992,14 @@ async def report_devices(
 
     shockwave_flag = severity == "CRITICAL"
 
+    agent = db.query(Agent).filter(
+        Agent.agent_id == report.agent_id
+    ).first()
+
     alert = Alert(
         id=str(uuid.uuid4()),
         agent_id=report.agent_id,
+        organization_id=agent.organization_id,
         risk_score=risk,
         severity=severity,
         technique=technique,
