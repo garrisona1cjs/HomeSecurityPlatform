@@ -128,6 +128,8 @@ async def start_dispatcher():
     # Layer 136 — Strategic War Planner
     asyncio.create_task(strategic_war_planner())
 
+    asyncio.create_task(agent_health_daemon())
+
 
 # =========================================================
 # DATABASE MODEL
@@ -171,6 +173,9 @@ class Agent(Base):
     organization_id = Column(Integer)
 
     created_at = Column(String)
+
+    last_heartbeat = Column(DateTime)
+    status = Column(String, default="ACTIVE")
 
 # =========================================================
 # ENROLLMENT TOKENS (Layer P4)
@@ -285,6 +290,7 @@ if "alerts" in inspector.get_table_names():
 
         if "shockwave" not in existing:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN shockwave VARCHAR"))
+
         # Layer P5 — ensure agent_secret column exists
         if "agents" in inspector.get_table_names():
 
@@ -294,6 +300,23 @@ if "alerts" in inspector.get_table_names():
                 with engine.connect() as conn:
                     conn.execute(
                         text("ALTER TABLE agents ADD COLUMN agent_secret VARCHAR")
+                    )
+
+         # Layer P6 — Agent heartbeat tracking
+        if "agents" in inspector.get_table_names():
+
+             agent_cols = [c["name"] for c in inspector.get_columns("agents")]
+
+             with engine.connect() as conn:
+
+                if "last_heartbeat" not in agent_cols:
+                    conn.execute(
+                         text("ALTER TABLE agents ADD COLUMN last_heartbeat TIMESTAMP")
+                     )
+
+                if "status" not in agent_cols:
+                    conn.execute(
+                        text("ALTER TABLE agents ADD COLUMN status VARCHAR DEFAULT 'ACTIVE'")
                     )
 
 Base.metadata.create_all(bind=engine)
@@ -312,6 +335,10 @@ class AgentRegistration(BaseModel):
 class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
+
+class AgentHeartbeat(BaseModel):
+
+    agent_id: str
 
 class OrganizationCreate(BaseModel):
 
@@ -361,8 +388,47 @@ def correlate_incident(db, source_ip, asn, country_code, severity):
     return incident
 
 # =========================================================
+# AGENT HEALTH MONITOR
+# Layer P6
+# =========================================================
+
+AGENT_HEARTBEAT_TIMEOUT = 120  # seconds
+
+
+def evaluate_agent_health():
+
+    db = SessionLocal()
+
+    agents = db.query(Agent).all()
+
+    now = datetime.utcnow()
+
+    for agent in agents:
+
+        if not agent.last_heartbeat:
+            continue
+
+        delta = (now - agent.last_heartbeat).total_seconds()
+
+        if delta > AGENT_HEARTBEAT_TIMEOUT:
+
+            agent.status = "OFFLINE"
+
+        elif delta > 60:
+
+            agent.status = "STALE"
+
+        else:
+
+            agent.status = "ACTIVE"
+
+    db.commit()
+    db.close()
+
+# =========================================================
 # TRAINING + SURGE DETECTION
 # =========================================================
+
 
 
 # =========================================================
@@ -3040,6 +3106,28 @@ async def autonomous_threat_hunter():
         await asyncio.sleep(random.uniform(5,10))
 
 # =========================================================
+# AGENT HEALTH DAEMON
+# Layer P6
+# =========================================================
+
+async def agent_health_daemon():
+
+    while True:
+
+        try:
+            evaluate_agent_health()
+
+        except Exception as e:
+
+            SOC_ENGINE_ERRORS.append({
+                "engine": "AGENT_HEALTH_MONITOR",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+        await asyncio.sleep(30)
+
+# =========================================================
 # GLOBAL BOTNET COMMAND & CONTROL NETWORK
 # Layer 134
 # =========================================================
@@ -3539,6 +3627,53 @@ def authenticate_agent(db, agent_id, api_key, agent_secret, request_ip):
         return False
 
     return True
+
+# =========================================================
+# AGENT HEARTBEAT
+# Layer P6
+# =========================================================
+
+@app.post("/agent/heartbeat")
+def agent_heartbeat(
+    hb: AgentHeartbeat,
+    request: Request,
+    x_api_key: str = Header(None),
+    x_agent_secret: str = Header(None)
+):
+
+    db = SessionLocal()
+
+    client_ip = request.client.host
+
+    if not authenticate_agent(
+        db,
+        hb.agent_id,
+        x_api_key,
+        x_agent_secret,
+        client_ip
+    ):
+        db.close()
+
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized agent"
+        )
+
+    agent = db.query(Agent).filter(
+        Agent.agent_id == hb.agent_id
+    ).first()
+
+    if not agent:
+        db.close()
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    agent.last_heartbeat = datetime.utcnow()
+    agent.status = "ACTIVE"
+
+    db.commit()
+    db.close()
+
+    return {"heartbeat": "ok"}
 
 # =========================================================
 # USER REGISTRATION
