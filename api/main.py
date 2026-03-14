@@ -22,8 +22,8 @@ from passlib.context import CryptContext
 import uuid, secrets, os, random, asyncio
 import geoip2.database
 
-from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, inspect, text
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, Boolean, ForeignKey, inspect, text
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 from ipwhois import IPWhois
 
@@ -171,6 +171,31 @@ class Agent(Base):
     created_at = Column(String)
 
 # =========================================================
+# ENROLLMENT TOKENS (Layer P4)
+# =========================================================
+
+class EnrollmentToken(Base):
+    __tablename__ = "enrollment_tokens"
+
+    id = Column(String, primary_key=True, index=True)
+
+    organization_id = Column(
+        String,
+        ForeignKey("organizations.id"),
+        index=True
+    )
+
+    token = Column(String, unique=True, index=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    expires_at = Column(DateTime)
+
+    revoked = Column(Boolean, default=False)
+
+    organization = relationship("Organization")
+
+# =========================================================
 # ORGANIZATION MODEL
 # Layer P2
 # =========================================================
@@ -269,6 +294,7 @@ Base.metadata.create_all(bind=engine)
 class AgentRegistration(BaseModel):
     hostname: str
     ip_address: str
+    enrollment_token: str
 
 
 class DeviceReport(BaseModel):
@@ -3574,6 +3600,36 @@ def create_organization(req: OrganizationCreate):
 
     }
 
+# =========================================================
+# CREATE ENROLLMENT TOKEN
+# Layer P4
+# =========================================================
+
+@app.post("/org/enrollment-token/{org_id}")
+def create_enrollment_token(org_id: int):
+
+    db = SessionLocal()
+
+    token_value = secrets.token_urlsafe(32)
+
+    token = EnrollmentToken(
+        id=str(uuid.uuid4()),
+        organization_id=org_id,
+        token=token_value,
+        expires_at=datetime.utcnow() + timedelta(days=7),
+        revoked=False
+    )
+
+    db.add(token)
+    db.commit()
+
+    db.close()
+
+    return {
+        "enrollment_token": token_value,
+        "expires_at": token.expires_at
+    }
+
 
 # =========================================================
 # REGISTER
@@ -3584,21 +3640,47 @@ def register(agent: AgentRegistration):
 
     db = SessionLocal()
 
+    # =====================================================
+    # Layer P4 — Validate Enrollment Token
+    # =====================================================
 
+    token = db.query(EnrollmentToken).filter(
+        EnrollmentToken.token == agent.enrollment_token,
+        EnrollmentToken.revoked == False
+    ).first()
+
+    if not token:
+        db.close()
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid enrollment token"
+        )
+
+    if token.expires_at < datetime.utcnow():
+        db.close()
+        raise HTTPException(
+            status_code=403,
+            detail="Enrollment token expired"
+        )
 
     agent_id = str(uuid.uuid4())
     api_key = secrets.token_hex(32)
 
     new_agent = Agent(
-        agent_id=agent_id,
-        hostname=agent.hostname,
-        ip_address=agent.ip_address,
-        api_key=api_key,
-        created_at=datetime.utcnow().isoformat()
-    )
+    agent_id=agent_id,
+    hostname=agent.hostname,
+    ip_address=agent.ip_address,
+    api_key=api_key,
+    organization_id=token.organization_id,
+    created_at=datetime.utcnow().isoformat()
+)
 
     db.add(new_agent)
     db.commit()
+
+    token.revoked = True
+    db.commit()
+
     db.close()
 
     return {
