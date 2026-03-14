@@ -2,12 +2,23 @@
 # IMPORTS
 # =========================================================
 
+# =========================================================
+# IMPORTS
+# =========================================================
+
 from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordBearer
+
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List
+
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+
 import uuid, secrets, os, random, asyncio
 import geoip2.database
 
@@ -15,6 +26,19 @@ from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, 
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from ipwhois import IPWhois
+
+# =========================================================
+# AUTH CONFIG
+# Layer P1
+# =========================================================
+
+SECRET_KEY = os.getenv("JWT_SECRET", "change_this_secret")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 # =========================================================
@@ -140,6 +164,44 @@ class Agent(Base):
     api_key = Column(String)
     created_at = Column(String) 
 
+# =========================================================
+# ORGANIZATION MODEL
+# Layer P2
+# =========================================================
+
+class Organization(Base):
+
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    name = Column(String, unique=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# =========================================================
+# USER AUTHENTICATION TABLE
+# Layer P1
+# =========================================================
+
+class User(Base):
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    username = Column(String, unique=True, index=True)
+
+    email = Column(String, unique=True, index=True)
+
+    password_hash = Column(String)
+
+    role = Column(String, default="analyst")
+
+    organization_id = Column(Integer)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 # =========================================================
 # INCIDENT MODEL
@@ -206,6 +268,10 @@ class AgentRegistration(BaseModel):
 class DeviceReport(BaseModel):
     agent_id: str
     devices: List[dict]
+
+class OrganizationCreate(BaseModel):
+
+    name: str
 
 
 # =========================================================
@@ -3426,6 +3492,87 @@ def authenticate_agent(db, agent_id, api_key, request_ip):
         return False
 
     return True
+
+# =========================================================
+# USER REGISTRATION
+# Layer P1
+# =========================================================
+
+class RegisterRequest(BaseModel):
+
+    username: str
+    email: str
+    password: str
+    organization_id: int
+
+
+@app.post("/auth/register")
+def register_user(req: RegisterRequest):
+
+    db = SessionLocal()
+
+    existing = db.query(User).filter(User.username == req.username).first()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="Username exists")
+
+    hashed = get_password_hash(req.password)
+
+    user = User(
+        username=req.username,
+        email=req.email,
+        password_hash=hashed,
+        role="analyst",
+        organization_id=req.organization_id
+    )
+
+    db.add(user)
+
+    db.commit()
+
+    db.close()
+
+    return {"status": "user created"}
+
+# =========================================================
+# CREATE ORGANIZATION
+# Layer P2
+# =========================================================
+
+@app.post("/org/create")
+def create_organization(req: OrganizationCreate):
+
+    db = SessionLocal()
+
+    existing = db.query(Organization).filter(
+        Organization.name == req.name
+    ).first()
+
+    if existing:
+        db.close()
+        raise HTTPException(status_code=400, detail="Organization exists")
+
+    org = Organization(
+        name=req.name
+    )
+
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    db.close()
+
+    return {
+        "organization_id": org.id,
+        "name": org.name
+    }
+
+
+# =========================================================
+# REGISTER
+# =========================================================
+
+@app.post("/register")
+def register(agent: AgentRegistration):
 
 
 # =========================================================
