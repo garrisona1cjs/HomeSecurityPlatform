@@ -164,7 +164,9 @@ class Agent(Base):
     agent_id = Column(String, primary_key=True)
     hostname = Column(String)
     ip_address = Column(String)
+
     api_key = Column(String)
+    agent_secret = Column(String)
 
     organization_id = Column(Integer)
 
@@ -283,6 +285,16 @@ if "alerts" in inspector.get_table_names():
 
         if "shockwave" not in existing:
             conn.execute(text("ALTER TABLE alerts ADD COLUMN shockwave VARCHAR"))
+        # Layer P5 — ensure agent_secret column exists
+        if "agents" in inspector.get_table_names():
+
+            agent_cols = [c["name"] for c in inspector.get_columns("agents")]
+
+            if "agent_secret" not in agent_cols:
+                with engine.connect() as conn:
+                    conn.execute(
+                        text("ALTER TABLE agents ADD COLUMN agent_secret VARCHAR")
+                    )
 
 Base.metadata.create_all(bind=engine)
 
@@ -3507,7 +3519,7 @@ async def ws_endpoint(ws: WebSocket):
 # AGENT AUTHENTICATION
 # =========================================================
 
-def authenticate_agent(db, agent_id, api_key, request_ip):
+def authenticate_agent(db, agent_id, api_key, agent_secret, request_ip):
 
     agent = db.query(Agent).filter(
         Agent.agent_id == agent_id
@@ -3517,6 +3529,9 @@ def authenticate_agent(db, agent_id, api_key, request_ip):
         return False
 
     if agent.api_key != api_key:
+        return False
+    
+    if agent.agent_secret != agent_secret:
         return False
 
     # IP binding validation
@@ -3665,12 +3680,14 @@ def register(agent: AgentRegistration):
 
     agent_id = str(uuid.uuid4())
     api_key = secrets.token_hex(32)
+    agent_secret = secrets.token_hex(32)
 
     new_agent = Agent(
     agent_id=agent_id,
     hostname=agent.hostname,
     ip_address=agent.ip_address,
     api_key=api_key,
+    agent_secret=agent_secret,
     organization_id=token.organization_id,
     created_at=datetime.utcnow().isoformat()
 )
@@ -3685,7 +3702,8 @@ def register(agent: AgentRegistration):
 
     return {
         "agent_id": agent_id,
-        "api_key": api_key
+        "api_key": api_key,
+        "agent_secret": agent_secret
     }
 
 
@@ -3697,14 +3715,21 @@ def register(agent: AgentRegistration):
 async def report_devices(
     report: DeviceReport,
     request: Request,
-    x_api_key: str = Header(None)
+    x_api_key: str = Header(None),
+    x_agent_secret: str = Header(None)
 ):
     
 
     db = SessionLocal()
     client_ip = request.client.host
 
-    if not authenticate_agent(db, report.agent_id, x_api_key, client_ip):
+    if not authenticate_agent(
+        db,
+        report.agent_id,
+        x_api_key,
+        x_agent_secret,
+        client_ip
+    ):
 
       db.close()
 
