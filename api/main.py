@@ -182,7 +182,7 @@ class EnrollmentToken(Base):
     id = Column(String, primary_key=True, index=True)
 
     organization_id = Column(
-        String,
+        Integer,
         ForeignKey("organizations.id"),
         index=True
     )
