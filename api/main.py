@@ -3443,7 +3443,7 @@ async def broadcast(payload):
     
     dead = []
 
-    for ws in connections:
+    for ws in list(connections):
         
         try:
             await ws.send_json(payload)
@@ -3564,15 +3564,9 @@ def create_organization(req: OrganizationCreate):
     return {
         "organization_id": org.id,
         "name": org.name
+
+
     }
-
-
-# =========================================================
-# REGISTER
-# =========================================================
-
-@app.post("/register")
-def register(agent: AgentRegistration):
 
 
 # =========================================================
