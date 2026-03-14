@@ -10,3 +10,6 @@ mac-vendor-lookup
 geoip2
 ipwhois
 websockets
+python-jose
+passlib[bcrypt]
+python-jose[cryptography]
