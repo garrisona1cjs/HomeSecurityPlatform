@@ -177,6 +177,13 @@ class Agent(Base):
     last_heartbeat = Column(DateTime)
     status = Column(String, default="ACTIVE")
 
+    agent_version = Column(String)
+    agent_uptime = Column(Integer)
+    agent_hash = Column(String)
+
+    tamper_flag = Column(String)
+    tamper_count = Column(Integer, default=0)
+
 # =========================================================
 # ENROLLMENT TOKENS (Layer P4)
 # =========================================================
@@ -319,6 +326,28 @@ if "alerts" in inspector.get_table_names():
                         text("ALTER TABLE agents ADD COLUMN status VARCHAR DEFAULT 'ACTIVE'")
                     )
 
+        # Layer P7 — Agent tamper detection fields
+        if "agents" in inspector.get_table_names():
+
+            agent_cols = [c["name"] for c in inspector.get_columns("agents")]
+
+            with engine.connect() as conn:
+
+                if "agent_version" not in agent_cols:
+                    conn.execute(text("ALTER TABLE agents ADD COLUMN agent_version VARCHAR"))
+
+                if "agent_uptime" not in agent_cols:
+                    conn.execute(text("ALTER TABLE agents ADD COLUMN agent_uptime INTEGER"))
+
+                if "agent_hash" not in agent_cols:
+                    conn.execute(text("ALTER TABLE agents ADD COLUMN agent_hash VARCHAR"))
+
+                if "tamper_flag" not in agent_cols:
+                    conn.execute(text("ALTER TABLE agents ADD COLUMN tamper_flag VARCHAR"))
+
+                if "tamper_count" not in agent_cols:
+                    conn.execute(text("ALTER TABLE agents ADD COLUMN tamper_count INTEGER DEFAULT 0"))
+
 Base.metadata.create_all(bind=engine)
 
 
@@ -339,6 +368,9 @@ class DeviceReport(BaseModel):
 class AgentHeartbeat(BaseModel):
 
     agent_id: str
+    agent_version: str
+    agent_uptime: int
+    agent_hash: str
 
 class OrganizationCreate(BaseModel):
 
@@ -3669,6 +3701,50 @@ def agent_heartbeat(
 
     agent.last_heartbeat = datetime.utcnow()
     agent.status = "ACTIVE"
+
+    # Layer P7 — Tamper Detection
+
+    tamper_flag = None
+
+    # version change
+    if agent.agent_version and agent.agent_version != hb.agent_version:
+        tamper_flag = "VERSION_CHANGE"
+
+    # binary hash change
+    if agent.agent_hash and agent.agent_hash != hb.agent_hash:
+        tamper_flag = "BINARY_MODIFICATION"
+
+    # uptime reset (possible restart)
+    if agent.agent_uptime and hb.agent_uptime < agent.agent_uptime:
+        tamper_flag = "AGENT_RESTART"
+
+    if tamper_flag:
+
+        agent.tamper_flag = tamper_flag
+        agent.tamper_count = (agent.tamper_count or 0) + 1
+    
+    if tamper_flag:
+
+        payload = {
+            "severity": "HIGH",
+            "technique": "Agent Tamper Detection",
+            "origin_label": "Sensor Integrity Monitor",
+            "latitude": 41.59,
+            "longitude": -93.62,
+            "country_code": "SOC",
+            "source_ip": request.client.host,
+            "shockwave": True,
+            "training": False,
+            "team": "blue",
+            "tamper_flag": tamper_flag
+        }
+
+    event_queue.append(payload)
+
+    # update telemetry
+    agent.agent_version = hb.agent_version
+    agent.agent_uptime = hb.agent_uptime
+    agent.agent_hash = hb.agent_hash
 
     db.commit()
     db.close()
