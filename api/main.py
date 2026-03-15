@@ -110,13 +110,13 @@ Base = declarative_base()
 # =========================================================
 
 
-app = FastAPI(title="LayerSeven Security Platform")
+
 
 
 @app.on_event("startup")
 async def start_dispatcher():
 
-    await asyncio.sleep(2)  # allow server to bind port first
+    run_schema_update()
 
     asyncio.create_task(event_dispatcher())
     asyncio.create_task(nation_state_campaign_simulator())
@@ -141,10 +141,10 @@ async def start_dispatcher():
 
 
     asyncio.create_task(cyber_war_scenario_engine())
-    
+
 
     asyncio.create_task(strategic_war_planner())
-
+    
     asyncio.create_task(agent_health_daemon())
 
 
@@ -369,28 +369,30 @@ class AgentTask(Base):
 # SAFE SCHEMA UPDATE
 # =========================================================
 
-inspector = inspect(engine)
+def run_schema_update():
 
-if "alerts" in inspector.get_table_names():
-    
-    existing = [c["name"] for c in inspector.get_columns("alerts")]
+    inspector = inspect(engine)
 
-    with engine.connect() as conn:
-        
-        if "origin_label" not in existing:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN origin_label VARCHAR"))
+    if "alerts" in inspector.get_table_names():
 
-        if "latitude" not in existing:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN latitude FLOAT"))
+        existing = [c["name"] for c in inspector.get_columns("alerts")]
 
-        if "longitude" not in existing:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN longitude FLOAT"))
+        with engine.connect() as conn:
 
-        if "country_code" not in existing:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN country_code VARCHAR"))
+            if "origin_label" not in existing:
+                conn.execute(text("ALTER TABLE alerts ADD COLUMN origin_label VARCHAR"))
 
-        if "shockwave" not in existing:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN shockwave VARCHAR"))
+            if "latitude" not in existing:
+                conn.execute(text("ALTER TABLE alerts ADD COLUMN latitude FLOAT"))
+
+            if "longitude" not in existing:
+                conn.execute(text("ALTER TABLE alerts ADD COLUMN longitude FLOAT"))
+
+            if "country_code" not in existing:
+                conn.execute(text("ALTER TABLE alerts ADD COLUMN country_code VARCHAR"))
+
+            if "shockwave" not in existing:
+                conn.execute(text("ALTER TABLE alerts ADD COLUMN shockwave VARCHAR"))
 
         # Layer P5 — ensure agent_secret column exists
         if "agents" in inspector.get_table_names():
