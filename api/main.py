@@ -32,11 +32,21 @@ from ipwhois import IPWhois
 # Layer P1
 # =========================================================
 
-SECRET_KEY = os.getenv("JWT_SECRET", "change_this_secret")
+SECRET_KEY = os.getenv("JWT_SECRET")
+
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET environment variable not set")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password: str):
+    return pwd_context.hash(password)
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -381,10 +391,9 @@ if "alerts" in inspector.get_table_names():
             agent_cols = [c["name"] for c in inspector.get_columns("agents")]
 
             if "agent_secret" not in agent_cols:
-                with engine.connect() as conn:
-                    conn.execute(
-                        text("ALTER TABLE agents ADD COLUMN agent_secret VARCHAR")
-                    )
+                conn.execute(
+                    text("ALTER TABLE agents ADD COLUMN agent_secret VARCHAR")
+                )
 
          # Layer P6 — Agent heartbeat tracking
         if "agents" in inspector.get_table_names():
@@ -3730,9 +3739,12 @@ def authenticate_agent(db, agent_id, api_key, agent_secret, request_ip):
     if not agent:
         return False
 
+    if agent.status != "ACTIVE":
+        return False
+
     if agent.api_key != api_key:
         return False
-    
+
     if agent.agent_secret != agent_secret:
         return False
     
@@ -3786,7 +3798,7 @@ def create_agent_task(
 
 
     db.add(new_task)
-    
+
     audit = CommandAudit(
         id=str(uuid.uuid4()),
         user_id=current_user.id,
@@ -3938,21 +3950,21 @@ def agent_heartbeat(
     
     if tamper_flag:
 
-        payload = {
-            "severity": "HIGH",
-            "technique": "Agent Tamper Detection",
-            "origin_label": "Sensor Integrity Monitor",
-            "latitude": 41.59,
-            "longitude": -93.62,
-            "country_code": "SOC",
-            "source_ip": request.client.host,
-            "shockwave": True,
-            "training": False,
-            "team": "blue",
-            "tamper_flag": tamper_flag
-        }
+            payload = {
+                "severity": "HIGH",
+                "technique": "Agent Tamper Detection",
+                "origin_label": "Sensor Integrity Monitor",
+                "latitude": 41.59,
+                "longitude": -93.62,
+                "country_code": "SOC",
+                "source_ip": request.client.host,
+                "shockwave": True,
+                "training": False,
+                "team": "blue",
+                "tamper_flag": tamper_flag
+            }
 
-    event_queue.append(payload)
+            event_queue.append(payload)
 
     # update telemetry
     agent.agent_version = hb.agent_version
@@ -4004,6 +4016,43 @@ def register_user(req: RegisterRequest):
     db.close()
 
     return {"status": "user created"}
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/auth/login")
+def login(req: LoginRequest):
+
+    db = SessionLocal()
+
+    user = db.query(User).filter(
+        User.username == req.username
+    ).first()
+
+    if not user:
+        db.close()
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not verify_password(req.password, user.password_hash):
+        db.close()
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    token = jwt.encode(
+        {"sub": user.username, "exp": expire},
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
+
+    db.close()
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 # =========================================================
 # CREATE ORGANIZATION
