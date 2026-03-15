@@ -116,24 +116,33 @@ app = FastAPI(title="LayerSeven Security Platform")
 @app.on_event("startup")
 async def start_dispatcher():
 
-    asyncio.create_task(event_dispatcher())
+    await asyncio.sleep(2)  # allow server to bind port first
 
-    # Layer 122 — Nation-State Campaigns
+    asyncio.create_task(event_dispatcher())
     asyncio.create_task(nation_state_campaign_simulator())
 
-    # Layer 127 — Autonomous Adversary AI
+
     asyncio.create_task(autonomous_adversary_ai())
 
-    # Layer 133 — Autonomous Threat Hunter
+
+
+
+
+
     asyncio.create_task(autonomous_threat_hunter())
 
-    # Layer 134 — Botnet C2 Simulation
+
     asyncio.create_task(botnet_c2_simulator())
 
-    # Layer 135 — Cyber War Scenario Engine
-    asyncio.create_task(cyber_war_scenario_engine())
 
-    # Layer 136 — Strategic War Planner
+
+
+
+
+
+    asyncio.create_task(cyber_war_scenario_engine())
+    
+
     asyncio.create_task(strategic_war_planner())
 
     asyncio.create_task(agent_health_daemon())
@@ -3682,7 +3691,7 @@ async def event_dispatcher():
 # WEBSOCKET HUB
 # =========================================================
 
-connections = set()
+connections: set[WebSocket] = set()
 
 
 
@@ -3715,7 +3724,7 @@ async def broadcast(payload):
 async def ws_endpoint(ws: WebSocket):
 
     await ws.accept()
-    
+
     connections.add(ws)
 
     try:
