@@ -270,6 +270,29 @@ class Incident(Base):
     first_seen = Column(DateTime)
     last_seen = Column(DateTime)
 
+# =========================================================
+# AGENT TASK MODEL
+# Layer P8
+# =========================================================
+
+class AgentTask(Base):
+
+    __tablename__ = "agent_tasks"
+
+    id = Column(String, primary_key=True)
+
+    agent_id = Column(String, index=True)
+
+    command = Column(String)
+
+    status = Column(String, default="PENDING")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    completed_at = Column(DateTime)
+
+    result = Column(String)
+
 
 # =========================================================
 # SAFE SCHEMA UPDATE
@@ -375,6 +398,11 @@ class AgentHeartbeat(BaseModel):
 class OrganizationCreate(BaseModel):
 
     name: str
+
+class AgentTaskCreate(BaseModel):
+
+    agent_id: str
+    command: str
 
 
 # =========================================================
@@ -3701,6 +3729,106 @@ def agent_heartbeat(
 
     agent.last_heartbeat = datetime.utcnow()
     agent.status = "ACTIVE"
+
+    # =========================================================
+    # CREATE AGENT TASK
+    # Layer P8
+    # =========================================================
+
+    @app.post("/soc/task")
+    def create_agent_task(task: AgentTaskCreate):
+
+        db = SessionLocal()
+
+        new_task = AgentTask(
+            id=str(uuid.uuid4()),
+            agent_id=task.agent_id,
+            command=task.command
+        )
+
+        db.add(new_task)
+        db.commit()
+
+        db.close()
+
+        return {"task_id": new_task.id}
+    
+    # =========================================================
+    # AGENT FETCH TASKS
+    # Layer P8
+    # =========================================================
+
+    @app.get("/agent/tasks/{agent_id}")
+    def get_agent_tasks(
+        agent_id: str,
+        request: Request,
+        x_api_key: str = Header(None),
+        x_agent_secret: str = Header(None)
+    ):
+
+        db = SessionLocal()
+
+        client_ip = request.client.host
+
+        if not authenticate_agent(
+            db,
+            agent_id,
+            x_api_key,
+            x_agent_secret,
+            client_ip
+        ):
+            db.close()
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        tasks = db.query(AgentTask).filter(
+            AgentTask.agent_id == agent_id,
+            AgentTask.status == "PENDING"
+        ).all()
+
+        results = [
+            {
+                "task_id": t.id,
+                "command": t.command
+            }
+            for t in tasks
+        ]
+
+        db.close()
+
+        return results
+    
+    # =========================================================
+    # AGENT TASK RESULT
+    # Layer P8
+    # =========================================================
+
+    class AgentTaskResult(BaseModel):
+
+        task_id: str
+        result: str
+
+
+    @app.post("/agent/task-result")
+    def submit_task_result(res: AgentTaskResult):
+
+        db = SessionLocal()
+
+        task = db.query(AgentTask).filter(
+            AgentTask.id == res.task_id
+        ).first()
+
+        if not task:
+            db.close()
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        task.status = "COMPLETED"
+        task.result = res.result
+        task.completed_at = datetime.utcnow()
+
+        db.commit()
+        db.close()
+
+        return {"status": "recorded"}
 
     # Layer P7 — Tamper Detection
 
