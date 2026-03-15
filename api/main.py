@@ -1,12 +1,10 @@
-# =========================================================
-# IMPORTS
-# =========================================================
 
-# =========================================================
-# IMPORTS
-# =========================================================
+
+
+
 
 from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends
+
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
@@ -3709,22 +3707,24 @@ async def broadcast(payload):
     for ws in dead:
         connections.remove(ws)
 
+    for ws in dead:
+        connections.discard(ws)
+
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
-    
-    await ws.accept()
 
+    await ws.accept()
+    
     connections.add(ws)
 
     try:
-        
+
         while True:
             await ws.receive_text()
 
     except WebSocketDisconnect:
-        
-        connections.remove(ws)
+        connections.discard(ws)
 
 # =========================================================
 # AGENT AUTHENTICATION
@@ -5140,6 +5140,23 @@ def intel_incidents():
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     return """
+
+# =========================================================
+# SERVER STARTUP (Render Compatible)
+# =========================================================
+
+if __name__ == "__main__":
+
+    import uvicorn
+    import os
+
+    port = int(os.environ.get("PORT", 10000))
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port
+    )
 
     
 <!DOCTYPE html>
