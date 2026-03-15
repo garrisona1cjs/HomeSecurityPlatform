@@ -12,6 +12,10 @@ from .database import engine, Base
 from .websocket_manager import connections
 from .websocket_manager import broadcast
 from .websocket_manager import event_queue
+from .database import get_db
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from .models import Alert
 
 # models
 from .models import *
@@ -125,6 +129,59 @@ def root():
         "platform": "LayerSeven Security Platform",
         "status": "online"
     }
+
+# =========================================================
+# ALERTS API
+# =========================================================
+
+@app.get("/alerts")
+def get_alerts(db: Session = Depends(get_db)):
+
+    alerts = db.query(Alert).order_by(
+        Alert.timestamp.desc()
+    ).limit(500).all()
+
+    results = []
+
+    for a in alerts:
+
+        results.append({
+            "severity": a.severity,
+            "technique": a.technique,
+            "latitude": a.latitude,
+            "longitude": a.longitude,
+            "country_code": a.country_code,
+            "origin_label": a.origin_label,
+            "timestamp": str(a.timestamp)
+        })
+
+    return results
+
+# =========================================================
+# SIMULATION TEST EVENT
+# =========================================================
+
+import random
+import uuid
+from datetime import datetime
+
+@app.get("/simulate")
+def simulate_attack():
+
+    event = {
+        "id": str(uuid.uuid4()),
+        "severity": random.choice(["LOW","MEDIUM","HIGH","CRITICAL"]),
+        "technique": "Simulation Attack",
+        "latitude": random.uniform(-60, 60),
+        "longitude": random.uniform(-180, 180),
+        "country_code": "US",
+        "origin_label": "Simulation",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    event_queue.append(event)
+
+    return {"status": "event generated"}
 
 
 # =========================================================
