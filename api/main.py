@@ -98,11 +98,19 @@ async def ws_endpoint(ws: WebSocket):
 # DASHBOARD
 # =========================================================
 
+import os
+
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
 
-    with open("dashboard.html", "r", encoding="utf-8") as f:
+    dashboard_path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "dashboard",
+        "dashboard.html"
+    )
 
+    with open(dashboard_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 
@@ -126,7 +134,7 @@ def root():
 if __name__ == "__main__":
 
     import uvicorn
-    
+
 
     port = int(os.environ.get("PORT", 10000))
 
