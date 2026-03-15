@@ -6,7 +6,7 @@
 # IMPORTS
 # =========================================================
 
-from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, Request, HTTPException
+from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
@@ -247,6 +247,41 @@ class User(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
+# =========================================================
+# CURRENT USER AUTH
+# Layer P9
+# =========================================================
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+
+    db = SessionLocal()
+
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials"
+    )
+
+    try:
+
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+        username: str = payload.get("sub")
+
+        if username is None:
+            raise credentials_exception
+
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.username == username).first()
+
+    db.close()
+
+    if user is None:
+        raise credentials_exception
+
+    return user
+
 
 # =========================================================
 # INCIDENT MODEL
@@ -269,6 +304,25 @@ class Incident(Base):
 
     first_seen = Column(DateTime)
     last_seen = Column(DateTime)
+
+# =========================================================
+# SOC COMMAND AUDIT LOG
+# Layer P9
+# =========================================================
+
+class CommandAudit(Base):
+
+    __tablename__ = "command_audit"
+
+    id = Column(String, primary_key=True)
+
+    user_id = Column(Integer)
+
+    agent_id = Column(String)
+
+    command = Column(String)
+
+    timestamp = Column(DateTime, default=datetime.utcnow)
 
 # =========================================================
 # AGENT TASK MODEL
@@ -3696,9 +3750,33 @@ def authenticate_agent(db, agent_id, api_key, agent_secret, request_ip):
 # =========================================================
 
 @app.post("/soc/task")
-def create_agent_task(task: AgentTaskCreate):
+def create_agent_task(
+    task: AgentTaskCreate,
+    current_user: User = Depends(get_current_user)
+):
+    
+    if current_user.role not in ["admin", "soc_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="SOC command privileges required"
+        )
 
     db = SessionLocal()
+
+    agent = db.query(Agent).filter(
+        Agent.agent_id == task.agent_id
+    ).first()
+
+    if not agent:
+        db.close()
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    if agent.organization_id != current_user.organization_id:
+        db.close()
+        raise HTTPException(
+            status_code=403,
+            detail="Cross-organization command denied"
+        )
 
     new_task = AgentTask(
         id=str(uuid.uuid4()),
@@ -3706,7 +3784,18 @@ def create_agent_task(task: AgentTaskCreate):
         command=task.command
     )
 
+
     db.add(new_task)
+    
+    audit = CommandAudit(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        agent_id=task.agent_id,
+        command=task.command
+    )
+
+    db.add(audit)
+
     db.commit()
 
     db.close()
