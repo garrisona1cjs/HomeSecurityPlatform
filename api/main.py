@@ -18,20 +18,25 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import List
 import uuid, secrets, os, asyncio, random
-
-
-
-# =========================================================
-# FASTAPI APPLICATION
-# =========================================================
-
-app = FastAPI(title="LayerSeven Security Platform")
 import geoip2.database
 
 from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, Boolean, ForeignKey, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 from ipwhois import IPWhois
+
+# =========================================================
+# FASTAPI APPLICATION
+# =========================================================
+
+app = FastAPI(title="LayerSeven Security Platform")
+
+
+
+
+
+
+
 
 # =========================================================
 # AUTH CONFIG
