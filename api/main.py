@@ -126,82 +126,49 @@ def dashboard():
 # ROOT
 # =========================================================
 
-@app.get("/")
-def root():
-
-    return {
-        "platform": "LayerSeven Security Platform",
-        "status": "online"
-    }
-
-
-# =========================================================
-# ALERTS API
-# =========================================================
-
-@app.get("/alerts")
-def get_alerts(db: Session = Depends(get_db)):
-
-    alerts = db.query(Alert).order_by(
-        Alert.timestamp.desc()
-    ).limit(500).all()
-
-    results = []
-
-    for a in alerts:
-
-        results.append({
-            "severity": a.severity,
-            "technique": a.technique,
-            "latitude": float(a.latitude) if a.latitude else 0,
-            "longitude": float(a.longitude) if a.longitude else 0,
-            "country_code": a.country_code,
-            "origin_label": a.origin_label,
-            "timestamp": str(a.timestamp)
-        })
-
-    return results
-
-
-# =========================================================
-# SIMULATION TEST EVENT
-# =========================================================
-
-
-
 @app.get("/simulate")
 def simulate_attack(db: Session = Depends(get_db)):
 
     severity = random.choice(["LOW", "MEDIUM", "HIGH", "CRITICAL"])
 
+    lat = random.uniform(-60, 60)
+    lon = random.uniform(-180, 180)
+
+    event_id = str(uuid.uuid4())
+
     event = {
-        "id": str(uuid.uuid4()),
+        "id": event_id,
         "severity": severity,
         "technique": "Simulation Attack",
-        "latitude": random.uniform(-60, 60),
-        "longitude": random.uniform(-180, 180),
+        "latitude": lat,
+        "longitude": lon,
         "country_code": "US",
         "origin_label": "Simulation",
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # Send to websocket dashboard
+    # Send to websocket
     event_queue.append(event)
 
-    # Save to database
-    alert = Alert(
-        id=event["id"],
-        severity=severity,
-        technique=event["technique"],
-        latitude=event["latitude"],
-        longitude=event["longitude"],
-        country_code=event["country_code"],
-        origin_label=event["origin_label"],
-        timestamp=datetime.utcnow()
-    )
+    try:
 
-    db.add(alert)
-    db.commit()
+        alert = Alert(
+            id=event_id,
+            severity=severity,
+            technique="Simulation Attack",
+            latitude=lat,
+            longitude=lon,
+            country_code="US",
+            origin_label="Simulation",
+            timestamp=datetime.utcnow()
+        )
+
+        db.add(alert)
+        db.commit()
+
+    except Exception as e:
+
+        print("SIMULATE DB ERROR:", e)
 
     return {"status": "event generated"}
 
