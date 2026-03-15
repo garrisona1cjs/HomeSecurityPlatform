@@ -386,77 +386,66 @@ def run_schema_update():
 
     inspector = inspect(engine)
 
-    if "alerts" in inspector.get_table_names():
+    with engine.connect() as conn:
 
-        existing = [c["name"] for c in inspector.get_columns("alerts")]
+        tables = inspector.get_table_names()
 
-        with engine.connect() as conn:
+        # =============================
+        # ALERTS TABLE
+        # =============================
 
-            if "origin_label" not in existing:
+        if "alerts" in tables:
+
+            cols = [c["name"] for c in inspector.get_columns("alerts")]
+
+            if "origin_label" not in cols:
                 conn.execute(text("ALTER TABLE alerts ADD COLUMN origin_label VARCHAR"))
 
-            if "latitude" not in existing:
+            if "latitude" not in cols:
                 conn.execute(text("ALTER TABLE alerts ADD COLUMN latitude FLOAT"))
 
-            if "longitude" not in existing:
+            if "longitude" not in cols:
                 conn.execute(text("ALTER TABLE alerts ADD COLUMN longitude FLOAT"))
 
-            if "country_code" not in existing:
+            if "country_code" not in cols:
                 conn.execute(text("ALTER TABLE alerts ADD COLUMN country_code VARCHAR"))
 
-            if "shockwave" not in existing:
+            if "shockwave" not in cols:
                 conn.execute(text("ALTER TABLE alerts ADD COLUMN shockwave VARCHAR"))
 
-        # Layer P5 — ensure agent_secret column exists
-        if "agents" in inspector.get_table_names():
+        # =============================
+        # AGENTS TABLE
+        # =============================
+
+        if "agents" in tables:
 
             agent_cols = [c["name"] for c in inspector.get_columns("agents")]
 
             if "agent_secret" not in agent_cols:
-                conn.execute(
-                    text("ALTER TABLE agents ADD COLUMN agent_secret VARCHAR")
-                )
+                conn.execute(text("ALTER TABLE agents ADD COLUMN agent_secret VARCHAR"))
 
-         # Layer P6 — Agent heartbeat tracking
-        if "agents" in inspector.get_table_names():
+            if "last_heartbeat" not in agent_cols:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN last_heartbeat TIMESTAMP"))
 
-             agent_cols = [c["name"] for c in inspector.get_columns("agents")]
+            if "status" not in agent_cols:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN status VARCHAR DEFAULT 'ACTIVE'"))
 
-             with engine.connect() as conn:
+            if "agent_version" not in agent_cols:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN agent_version VARCHAR"))
 
-                if "last_heartbeat" not in agent_cols:
-                    conn.execute(
-                         text("ALTER TABLE agents ADD COLUMN last_heartbeat TIMESTAMP")
-                     )
+            if "agent_uptime" not in agent_cols:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN agent_uptime INTEGER"))
 
-                if "status" not in agent_cols:
-                    conn.execute(
-                        text("ALTER TABLE agents ADD COLUMN status VARCHAR DEFAULT 'ACTIVE'")
-                    )
+            if "agent_hash" not in agent_cols:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN agent_hash VARCHAR"))
 
-        # Layer P7 — Agent tamper detection fields
-        if "agents" in inspector.get_table_names():
+            if "tamper_flag" not in agent_cols:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN tamper_flag VARCHAR"))
 
-            agent_cols = [c["name"] for c in inspector.get_columns("agents")]
+            if "tamper_count" not in agent_cols:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN tamper_count INTEGER DEFAULT 0"))
 
-            with engine.connect() as conn:
-
-                if "agent_version" not in agent_cols:
-                    conn.execute(text("ALTER TABLE agents ADD COLUMN agent_version VARCHAR"))
-
-                if "agent_uptime" not in agent_cols:
-                    conn.execute(text("ALTER TABLE agents ADD COLUMN agent_uptime INTEGER"))
-
-                if "agent_hash" not in agent_cols:
-                    conn.execute(text("ALTER TABLE agents ADD COLUMN agent_hash VARCHAR"))
-
-                if "tamper_flag" not in agent_cols:
-                    conn.execute(text("ALTER TABLE agents ADD COLUMN tamper_flag VARCHAR"))
-
-                if "tamper_count" not in agent_cols:
-                    conn.execute(text("ALTER TABLE agents ADD COLUMN tamper_count INTEGER DEFAULT 0"))
-
-Base.metadata.create_all(bind=engine)
+        conn.commit()
 
 
 # =========================================================
