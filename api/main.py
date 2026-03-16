@@ -65,6 +65,33 @@ async def event_dispatcher():
                 "events": batch
             })
 
+async def attack_generator():
+
+    while True:
+
+        severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
+
+        lat = random.uniform(-60, 60)
+        lon = random.uniform(-180, 180)
+
+        event_id = str(uuid.uuid4())
+
+        event = {
+            "id": event_id,
+            "severity": severity,
+            "technique": "Automated Attack",
+            "latitude": lat,
+            "longitude": lon,
+            "country_code": random.choice(["US","RU","CN","IR","KP","BR","DE"]),
+            "origin_label": "Autonomous Threat Engine",
+            "timestamp": datetime.utcnow().isoformat(),
+            "shockwave": "False"
+        }
+
+        event_queue.append(event)
+
+        await asyncio.sleep(random.uniform(1.5,4))
+
         await asyncio.sleep(QUEUE_FLUSH_INTERVAL)
 
 
@@ -76,6 +103,8 @@ async def event_dispatcher():
 async def start_dispatcher():
 
     asyncio.create_task(event_dispatcher())
+
+    asyncio.create_task(attack_generator())
 
 
 # =========================================================
