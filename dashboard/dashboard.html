@@ -129,6 +129,9 @@ let points = []
 // heatmap attack density
 let heatmap = []
 
+// animated network packets
+let packets = []
+
 // ======================================================
 // SOC STATISTICS
 // ======================================================
@@ -182,6 +185,12 @@ const globe = Globe()
 .pointColor("color")
 
 // ======================================================
+// PACKET STREAM LAYER
+// ======================================================
+
+.pointsData(points.concat(packets))
+
+// ======================================================
 // HEATMAP LAYER
 // ======================================================
 
@@ -222,6 +231,63 @@ arcs.shift()
 globe.arcsData(arcs)
 
 }
+
+// ======================================================
+// PACKET STREAM GENERATOR
+// ======================================================
+
+function createPacketStream(lat,lng){
+
+const count = 6
+
+for(let i=0;i<count;i++){
+
+packets.push({
+
+startLat:lat,
+startLng:lng,
+
+lat:lat,
+lng:lng,
+
+progress:0,
+
+size:0.35,
+color:"#00ffff"
+
+})
+
+}
+
+}
+
+// ======================================================
+// PACKET ANIMATION ENGINE
+// ======================================================
+
+function animatePackets(){
+
+for(let i=packets.length-1;i>=0;i--){
+
+let p = packets[i]
+
+p.progress += 0.02
+
+p.lat = p.startLat + (SOC_LAT - p.startLat) * p.progress
+p.lng = p.startLng + (SOC_LON - p.startLng) * p.progress
+
+if(p.progress >= 1){
+packets.splice(i,1)
+}
+
+}
+
+// update render layer
+globe.pointsData(points.concat(packets))
+
+}
+
+setInterval(animatePackets,50)
 
 // ======================================================
 // FOCUS CAMERA ON ATTACK
@@ -342,6 +408,7 @@ createSwarmBurst(lat,lng)
 createThreatFlash(lat,lng)
 addHeat(lat,lng)
 focusAttack(lat,lng)
+createPacketStream(lat,lng)
 
 // track severity
 
