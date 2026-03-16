@@ -230,16 +230,18 @@ def get_alerts(db: Session = Depends(get_db)):
         for a in alerts:
 
             results.append({
-                "severity": getattr(a, "severity", "LOW"),
-                "technique": getattr(a, "technique", "Unknown"),
 
-                "latitude": float(a.latitude) if getattr(a, "latitude", None) else 0,
-                "longitude": float(a.longitude) if getattr(a, "longitude", None) else 0,
+                "severity": str(a.severity) if a.severity else "LOW",
+                "technique": str(a.technique) if a.technique else "Unknown",
 
-                "country_code": getattr(a, "country_code", "??"),
-                "origin_label": getattr(a, "origin_label", "Unknown"),
+                "latitude": float(a.latitude) if a.latitude else 0.0,
+                "longitude": float(a.longitude) if a.longitude else 0.0,
 
-                "timestamp": a.timestamp.isoformat() if getattr(a, "timestamp", None) else ""
+                "country_code": str(a.country_code) if a.country_code else "??",
+                "origin_label": str(a.origin_label) if a.origin_label else "Unknown",
+
+                "timestamp": a.timestamp.isoformat() if a.timestamp else ""
+
             })
 
         return results
@@ -257,7 +259,7 @@ def get_alerts(db: Session = Depends(get_db)):
 
 @app.get("/simulate")
 def simulate_attack(db: Session = Depends(get_db)):
-    
+
 
     severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
 
