@@ -175,29 +175,36 @@ def root():
 @app.get("/alerts")
 def get_alerts(db: Session = Depends(get_db)):
 
-    alerts = db.query(Alert).order_by(
-        Alert.timestamp.desc()
-    ).limit(500).all()
+    try:
 
-    results = []
+        alerts = db.query(Alert).order_by(
+            Alert.timestamp.desc()
+        ).limit(500).all()
 
-    for a in alerts:
+        results = []
 
-        results.append({
+        for a in alerts:
 
-            "severity": a.severity or "LOW",
-            "technique": a.technique or "Unknown",
+            results.append({
+                "severity": getattr(a, "severity", "LOW"),
+                "technique": getattr(a, "technique", "Unknown"),
 
-            "latitude": float(a.latitude) if a.latitude else 0,
-            "longitude": float(a.longitude) if a.longitude else 0,
+                "latitude": float(a.latitude) if getattr(a, "latitude", None) else 0,
+                "longitude": float(a.longitude) if getattr(a, "longitude", None) else 0,
 
-            "country_code": a.country_code or "??",
-            "origin_label": a.origin_label or "Unknown",
+                "country_code": getattr(a, "country_code", "??"),
+                "origin_label": getattr(a, "origin_label", "Unknown"),
 
-            "timestamp": a.timestamp.isoformat() if a.timestamp else ""
-        })
+                "timestamp": a.timestamp.isoformat() if getattr(a, "timestamp", None) else ""
+            })
 
-    return results
+        return results
+
+    except Exception as e:
+
+        print("ALERT API ERROR:", str(e))
+
+        return []
 
 
 # =========================================================
