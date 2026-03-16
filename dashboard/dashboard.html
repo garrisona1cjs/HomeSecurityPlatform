@@ -17,6 +17,55 @@ body{
   font-family:Arial;
 }
 
+/* ======================================================
+SOC PANEL
+====================================================== */
+
+#socPanel{
+
+position:absolute;
+top:20px;
+left:20px;
+
+width:220px;
+
+background:rgba(0,0,0,0.7);
+border:1px solid #00ffff;
+
+padding:14px;
+
+color:#00ffff;
+font-size:14px;
+
+backdrop-filter:blur(6px);
+
+}
+
+.panelTitle{
+
+font-weight:bold;
+margin-top:10px;
+margin-bottom:6px;
+
+color:#ffffff;
+
+}
+
+.metric{
+
+display:flex;
+justify-content:space-between;
+margin-bottom:4px;
+
+}
+
+#countryList{
+
+margin-top:8px;
+font-size:13px;
+
+}
+
 #globeViz{
   width:100vw;
   height:100vh;
@@ -30,7 +79,34 @@ body{
 
 <div id="globeViz"></div>
 
+<!-- ======================================================
+SOC INTELLIGENCE PANEL
+====================================================== -->
 
+<div id="socPanel">
+
+<div class="panelTitle">SOC LIVE TELEMETRY</div>
+
+<div class="metric">
+<span>CRITICAL</span>
+<span id="criticalCount">0</span>
+</div>
+
+<div class="metric">
+<span>HIGH</span>
+<span id="highCount">0</span>
+</div>
+
+<div class="metric">
+<span>MEDIUM</span>
+<span id="mediumCount">0</span>
+</div>
+
+<div class="panelTitle">TOP ATTACK COUNTRIES</div>
+
+<div id="countryList"></div>
+
+</div>
 
 <script>
 
@@ -49,6 +125,20 @@ const SOC_LON = -93.6250
 let arcs = []
 let rings = []
 let points = []
+
+// ======================================================
+// SOC STATISTICS
+// ======================================================
+
+let severityStats = {
+
+CRITICAL:0,
+HIGH:0,
+MEDIUM:0
+
+}
+
+let countryStats = {}
 
 let alertQueue = []
 
@@ -201,6 +291,54 @@ if(!lat || !lng) return
 createAttackBeam(lat,lng,alert.severity)
 createSwarmBurst(lat,lng)
 createThreatFlash(lat,lng)
+
+}
+
+// track severity
+
+if(alert.severity && severityStats[alert.severity] !== undefined){
+
+severityStats[alert.severity]++
+
+}
+
+// track country
+
+if(alert.country_code){
+
+countryStats[alert.country_code] =
+
+(countryStats[alert.country_code] || 0) + 1
+
+}
+
+updateSOCPanel()
+
+// ======================================================
+// UPDATE SOC PANEL
+// ======================================================
+
+function updateSOCPanel(){
+
+document.getElementById("criticalCount").innerText = severityStats.CRITICAL
+document.getElementById("highCount").innerText = severityStats.HIGH
+document.getElementById("mediumCount").innerText = severityStats.MEDIUM
+
+const list = Object.entries(countryStats)
+
+.sort((a,b)=>b[1]-a[1])
+
+.slice(0,5)
+
+let html=""
+
+list.forEach(([country,count])=>{
+
+html += `<div>${country} : ${count}</div>`
+
+})
+
+document.getElementById("countryList").innerHTML = html
 
 }
 
