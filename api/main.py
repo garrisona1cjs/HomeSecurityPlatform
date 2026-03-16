@@ -257,58 +257,56 @@ def get_alerts(db: Session = Depends(get_db)):
 
 @app.get("/simulate")
 def simulate_attack(db: Session = Depends(get_db)):
+    
+
+    severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
+
+    lat = random.uniform(-60, 60)
+    lon = random.uniform(-180, 180)
+
+    event_id = str(uuid.uuid4())
+
+    event = {
+        "id": event_id,
+        "severity": severity,
+        "technique": "Simulation Attack",
+        "latitude": lat,
+        "longitude": lon,
+        "country_code": "US",
+        "origin_label": "Simulation",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    # push to websocket
+    event_queue.append(event)
 
     try:
 
-        severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
-
-        lat = random.uniform(-60, 60)
-        lon = random.uniform(-180, 180)
-
-        event_id = str(uuid.uuid4())
-
-        event = {
-            "id": event_id,
-            "severity": severity,
-            "technique": "Simulation Attack",
-            "latitude": lat,
-            "longitude": lon,
-            "country_code": "US",
-            "origin_label": "Simulation",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-        # send to websocket
-        event_queue.append(event)
-
-        # store in database
-        alert = Alert()
-
-        alert.id = event_id
-        alert.severity = severity
-        alert.technique = "Simulation Attack"
-
-        alert.latitude = lat
-        alert.longitude = lon
-
-        alert.country_code = "US"
-        alert.origin_label = "Simulation"
-
-        alert.timestamp = datetime.utcnow()
+        alert = Alert(
+            id=event_id,
+            severity=severity,
+            technique="Simulation Attack",
+            latitude=lat,
+            longitude=lon,
+            country_code="US",
+            origin_label="Simulation",
+            timestamp=datetime.utcnow()
+        )
 
         db.add(alert)
         db.commit()
+        db.refresh(alert)
 
-        return {"status": "event generated"}
+        print("ALERT STORED:", event_id)
 
     except Exception as e:
 
-        print("SIMULATE ERROR:", str(e))
+        db.rollback()
+        print("DATABASE ERROR:", str(e))
 
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status":"db_error","error":str(e)}
+
+    return {"status":"event generated"}
 
 
 
