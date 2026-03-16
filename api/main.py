@@ -260,6 +260,38 @@ def get_alerts(db: Session = Depends(get_db)):
 @app.get("/simulate")
 def simulate_attack(db: Session = Depends(get_db)):
 
+    from sqlalchemy import text
+
+    # -------------------------------------------------
+    # DATABASE SCHEMA FIX (runs safely every time)
+    # -------------------------------------------------
+
+    try:
+
+        with engine.connect() as conn:
+
+            conn.execute(text("""
+            ALTER TABLE alerts
+            ALTER COLUMN latitude TYPE DOUBLE PRECISION
+            USING latitude::double precision
+            """))
+
+            conn.execute(text("""
+            ALTER TABLE alerts
+            ALTER COLUMN longitude TYPE DOUBLE PRECISION
+            USING longitude::double precision
+            """))
+
+            conn.commit()
+
+    except Exception as e:
+
+        print("Schema already correct or skipped:", e)
+
+
+    # -------------------------------------------------
+    # GENERATE SIMULATION EVENT
+    # -------------------------------------------------
 
     severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
 
@@ -279,8 +311,13 @@ def simulate_attack(db: Session = Depends(get_db)):
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # push to websocket
+    # push event to websocket queue
     event_queue.append(event)
+
+
+    # -------------------------------------------------
+    # STORE ALERT IN DATABASE
+    # -------------------------------------------------
 
     try:
 
@@ -297,14 +334,15 @@ def simulate_attack(db: Session = Depends(get_db)):
 
         db.add(alert)
         db.commit()
-        db.refresh(alert)
+        
 
         print("ALERT STORED:", event_id)
 
     except Exception as e:
 
         db.rollback()
-        print("DATABASE ERROR:", str(e))
+
+        print("DATABASE ERROR:", e)
 
         return {"status":"db_error","error":str(e)}
 
