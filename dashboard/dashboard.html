@@ -126,6 +126,9 @@ let arcs = []
 let rings = []
 let points = []
 
+// heatmap attack density
+let heatmap = []
+
 // ======================================================
 // SOC STATISTICS
 // ======================================================
@@ -178,6 +181,14 @@ const globe = Globe()
 .pointRadius("size")
 .pointColor("color")
 
+// ======================================================
+// HEATMAP LAYER
+// ======================================================
+
+.heatmapsData([heatmap])
+.heatmapBandwidth(2.5)
+.heatmapColorSaturation(0.9)
+
 
 // ======================================================
 // ATTACK BEAM
@@ -209,6 +220,22 @@ arcs.shift()
 }
 
 globe.arcsData(arcs)
+
+}
+
+// ======================================================
+// FOCUS CAMERA ON ATTACK
+// ======================================================
+
+function focusAttack(lat,lng){
+
+globe.pointOfView({
+
+lat:lat,
+lng:lng,
+altitude:1.5
+
+},800)
 
 }
 
@@ -276,6 +303,27 @@ globe.pointsData(points)
 
 }
 
+// ======================================================
+// HEATMAP UPDATE
+// ======================================================
+
+function addHeat(lat,lng){
+
+heatmap.push({
+lat:lat,
+lng:lng,
+weight:1
+})
+
+// limit heatmap growth
+if(heatmap.length > 1500){
+heatmap.shift()
+}
+
+globe.heatmapsData([heatmap])
+
+}
+
 
 // ======================================================
 // PROCESS ALERT
@@ -288,17 +336,19 @@ const lng=parseFloat(alert.longitude)
 
 if(!lat || !lng) return
 
+// visualization
 createAttackBeam(lat,lng,alert.severity)
 createSwarmBurst(lat,lng)
 createThreatFlash(lat,lng)
-
-}
+addHeat(lat,lng)
+focusAttack(lat,lng)
 
 // track severity
 
 if(alert.severity && severityStats[alert.severity] !== undefined){
 
 severityStats[alert.severity]++
+
 
 }
 
@@ -313,6 +363,8 @@ countryStats[alert.country_code] =
 }
 
 updateSOCPanel()
+
+}
 
 // ======================================================
 // UPDATE SOC PANEL
@@ -436,6 +488,25 @@ processAlert(alert)
 // ======================================================
 
 load()
+
+// ======================================================
+// GLOBE ROTATION
+// ======================================================
+
+let rotationSpeed = 0.02
+
+function rotateGlobe(){
+
+const controls = globe.controls()
+
+if(!controls) return
+
+controls.autoRotate = true
+controls.autoRotateSpeed = rotationSpeed
+
+}
+
+rotateGlobe()
 
 
 // ======================================================
