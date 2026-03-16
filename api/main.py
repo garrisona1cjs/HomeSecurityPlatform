@@ -219,36 +219,44 @@ def root():
 @app.get("/alerts")
 def get_alerts(db: Session = Depends(get_db)):
 
+    from sqlalchemy import text
+
     try:
 
-        alerts = db.query(Alert).order_by(
-            Alert.timestamp.desc()
-        ).limit(500).all()
+        result = db.execute(text("""
+            SELECT severity,
+                   technique,
+                   latitude,
+                   longitude,
+                   country_code,
+                   origin_label,
+                   timestamp
+            FROM alerts
+            ORDER BY timestamp DESC
+            LIMIT 500
+        """))
 
-        results = []
+        rows = result.fetchall()
 
-        for a in alerts:
+        alerts = []
 
-            results.append({
+        for r in rows:
 
-                "severity": str(a.severity) if a.severity else "LOW",
-                "technique": str(a.technique) if a.technique else "Unknown",
-
-                "latitude": float(a.latitude) if a.latitude else 0.0,
-                "longitude": float(a.longitude) if a.longitude else 0.0,
-
-                "country_code": str(a.country_code) if a.country_code else "??",
-                "origin_label": str(a.origin_label) if a.origin_label else "Unknown",
-
-                "timestamp": a.timestamp.isoformat() if a.timestamp else ""
-
+            alerts.append({
+                "severity": r[0],
+                "technique": r[1],
+                "latitude": float(r[2]) if r[2] else 0,
+                "longitude": float(r[3]) if r[3] else 0,
+                "country_code": r[4],
+                "origin_label": r[5],
+                "timestamp": str(r[6])
             })
 
-        return results
+        return alerts
 
     except Exception as e:
 
-        print("ALERT API ERROR:", str(e))
+        print("ALERT API ERROR:", e)
 
         return []
 
