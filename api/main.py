@@ -42,6 +42,26 @@ app = FastAPI(title="LayerSeven Security Platform")
 
 Base.metadata.create_all(bind=engine)
 
+from sqlalchemy import text
+
+def update_alert_schema():
+
+    with engine.connect() as conn:
+
+        conn.execute(text("""
+        ALTER TABLE alerts
+        ADD COLUMN IF NOT EXISTS organization_id INTEGER
+        """))
+
+        conn.execute(text("""
+        ALTER TABLE alerts
+        ADD COLUMN IF NOT EXISTS risk_score INTEGER
+        """))
+
+        conn.commit()
+
+update_alert_schema()
+
 
 # =========================================================
 # EVENT DISPATCHER
