@@ -65,11 +65,18 @@ async def event_dispatcher():
                 "events": batch
             })
 
+        await asyncio.sleep(QUEUE_FLUSH_INTERVAL)
+
+
+# =========================================================
+# BACKGROUND ATTACK GENERATOR
+# =========================================================
+
 async def attack_generator():
 
     while True:
 
-        severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
+        severity = random.choice(["LOW", "MEDIUM", "HIGH", "CRITICAL"])
 
         lat = random.uniform(-60, 60)
         lon = random.uniform(-180, 180)
@@ -82,17 +89,14 @@ async def attack_generator():
             "technique": "Automated Attack",
             "latitude": lat,
             "longitude": lon,
-            "country_code": random.choice(["US","RU","CN","IR","KP","BR","DE"]),
+            "country_code": "US",
             "origin_label": "Autonomous Threat Engine",
-            "timestamp": datetime.utcnow().isoformat(),
-            "shockwave": "False"
+            "timestamp": datetime.utcnow().isoformat()
         }
 
         event_queue.append(event)
 
-        await asyncio.sleep(random.uniform(1.5,4))
-
-        await asyncio.sleep(QUEUE_FLUSH_INTERVAL)
+        await asyncio.sleep(random.uniform(2,5))
 
 
 # =========================================================
@@ -100,7 +104,7 @@ async def attack_generator():
 # =========================================================
 
 @app.on_event("startup")
-async def start_dispatcher():
+async def start_engines():
 
     asyncio.create_task(event_dispatcher())
 
@@ -155,6 +159,47 @@ def dashboard():
 # ROOT
 # =========================================================
 
+@app.get("/")
+def root():
+
+    return {
+        "platform": "LayerSeven Security Platform",
+        "status": "online"
+    }
+
+
+# =========================================================
+# ALERTS API
+# =========================================================
+
+@app.get("/alerts")
+def get_alerts(db: Session = Depends(get_db)):
+
+    alerts = db.query(Alert).order_by(
+        Alert.timestamp.desc()
+    ).limit(500).all()
+
+    results = []
+
+    for a in alerts:
+
+        results.append({
+            "severity": a.severity,
+            "technique": a.technique,
+            "latitude": float(a.latitude) if a.latitude else 0,
+            "longitude": float(a.longitude) if a.longitude else 0,
+            "country_code": a.country_code,
+            "origin_label": a.origin_label,
+            "timestamp": str(a.timestamp)
+        })
+
+    return results
+
+
+# =========================================================
+# SIMULATION ENDPOINT
+# =========================================================
+
 @app.get("/simulate")
 def simulate_attack(db: Session = Depends(get_db)):
 
@@ -176,28 +221,29 @@ def simulate_attack(db: Session = Depends(get_db)):
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # Send to websocket
+
     event_queue.append(event)
 
-    try:
 
-        alert = Alert(
-            id=event_id,
-            severity=severity,
-            technique="Simulation Attack",
-            latitude=lat,
-            longitude=lon,
-            country_code="US",
-            origin_label="Simulation",
-            timestamp=datetime.utcnow()
-        )
 
-        db.add(alert)
-        db.commit()
+    alert = Alert(
+        id=event_id,
+        severity=severity,
+        technique="Simulation Attack",
+        latitude=lat,
+        longitude=lon,
+        country_code="US",
+        origin_label="Simulation",
+        timestamp=datetime.utcnow()
+    )
 
-    except Exception as e:
+    db.add(alert)
+    db.commit()
 
-        print("SIMULATE DB ERROR:", e)
+    
+
+
+
 
     return {"status": "event generated"}
 
@@ -205,23 +251,7 @@ def simulate_attack(db: Session = Depends(get_db)):
 
 
 
-# =========================================================
-# SERVER STARTUP (LOCAL RUN)
-# =========================================================
 
-if __name__ == "__main__":
-
-    import uvicorn
-
-
-    port = int(os.environ.get("PORT", 10000))
-
-    uvicorn.run(
-        "api.main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=True
-    )
 
 
 
