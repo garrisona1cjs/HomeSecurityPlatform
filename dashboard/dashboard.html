@@ -132,6 +132,12 @@ let heatmap = []
 // animated network packets
 let packets = []
 
+// global shockwaves
+let shockwaves = []
+
+// security satellites
+let satellites = []
+
 // ======================================================
 // SOC STATISTICS
 // ======================================================
@@ -175,20 +181,20 @@ const globe = Globe()
 .arcDashGap(4)
 .arcDashAnimateTime(1200)
 
-.ringsData(rings)
+.ringsData(rings.concat(shockwaves))
 .ringMaxRadius("maxR")
 .ringPropagationSpeed(2)
+.ringColor(d => d.color || "#ff0033")
 
-.pointsData(points)
+.pointsData(points.concat(packets).concat(satellites))
 .pointAltitude(0)
 .pointRadius("size")
 .pointColor("color")
 
-// ======================================================
-// PACKET STREAM LAYER
-// ======================================================
 
-.pointsData(points.concat(packets))
+
+
+
 
 // ======================================================
 // HEATMAP LAYER
@@ -224,6 +230,32 @@ color:[color,color]
 })
 
 // keep arc list bounded
+if(arcs.length > MAX_ARCS){
+arcs.shift()
+}
+
+globe.arcsData(arcs)
+
+}
+
+// ======================================================
+// REVERSE ATTACK TRACE
+// ======================================================
+
+function createReverseTrace(lat,lng){
+
+arcs.push({
+
+startLat:SOC_LAT,
+startLng:SOC_LON,
+
+endLat:lat,
+endLng:lng,
+
+color:["#00ffff","#00ffff"]
+
+})
+
 if(arcs.length > MAX_ARCS){
 arcs.shift()
 }
@@ -283,7 +315,7 @@ packets.splice(i,1)
 }
 
 // update render layer
-globe.pointsData(points.concat(packets))
+globe.pointsData(points.concat(packets).concat(satellites))
 
 }
 
@@ -305,6 +337,76 @@ altitude:1.5
 
 }
 
+// ======================================================
+// GLOBAL ATTACK SHOCKWAVE
+// ======================================================
+
+function createShockwave(lat,lng){
+
+shockwaves.push({
+
+lat:lat,
+lng:lng,
+maxR:30,
+color:"#ff0033"
+
+})
+
+if(shockwaves.length > 50){
+shockwaves.shift()
+}
+
+globe.ringsData(rings.concat(shockwaves))
+
+}
+
+// ======================================================
+// SATELLITE NETWORK
+// ======================================================
+
+function initSatellites(){
+
+for(let i=0;i<12;i++){
+
+satellites.push({
+
+lat:(Math.random()*180)-90,
+lng:(Math.random()*360)-180,
+size:0.6,
+color:"#00ffff",
+altitude:0.25
+
+})
+
+}
+
+globe.pointsData(points.concat(packets).concat(satellites))
+
+}
+
+initSatellites()
+
+// ======================================================
+// SATELLITE ORBIT ENGINE
+// ======================================================
+
+function animateSatellites(){
+
+satellites.forEach(s => {
+
+s.lng += 0.15
+
+if(s.lng > 180){
+s.lng = -180
+}
+
+})
+
+globe.pointsData(points.concat(packets).concat(satellites))
+
+}
+
+setInterval(animateSatellites,60)
 
 // ======================================================
 // SWARM BURST
@@ -329,7 +431,7 @@ if(rings.length > MAX_RINGS){
 rings.shift()
 }
 
-globe.ringsData(rings)
+globe.ringsData(rings.concat(shockwaves))
 
 },i*120)
 
@@ -358,12 +460,12 @@ if(points.length > MAX_POINTS){
 points.shift()
 }
 
-globe.pointsData(points)
+globe.pointsData(points.concat(packets).concat(satellites))
 
 setTimeout(()=>{
 
 points.shift()
-globe.pointsData(points)
+globe.pointsData(points.concat(packets).concat(satellites))
 
 },800)
 
@@ -404,11 +506,15 @@ if(!lat || !lng) return
 
 // visualization
 createAttackBeam(lat,lng,alert.severity)
+createReverseTrace(lat,lng)
 createSwarmBurst(lat,lng)
 createThreatFlash(lat,lng)
 addHeat(lat,lng)
 focusAttack(lat,lng)
 createPacketStream(lat,lng)
+if(alert.severity === "CRITICAL"){
+createShockwave(lat,lng)
+}
 
 // track severity
 
