@@ -282,16 +282,19 @@ def simulate_attack(db: Session = Depends(get_db)):
         event_queue.append(event)
 
         # store in database
-        alert = Alert(
-            id=event_id,
-            severity=severity,
-            technique="Simulation Attack",
-            latitude=lat,
-            longitude=lon,
-            country_code="US",
-            origin_label="Simulation",
-            timestamp=datetime.utcnow()
-        )
+        alert = Alert()
+
+        alert.id = event_id
+        alert.severity = severity
+        alert.technique = "Simulation Attack"
+
+        alert.latitude = lat
+        alert.longitude = lon
+
+        alert.country_code = "US"
+        alert.origin_label = "Simulation"
+
+        alert.timestamp = datetime.utcnow()
 
         db.add(alert)
         db.commit()
