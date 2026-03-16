@@ -74,29 +74,53 @@ async def event_dispatcher():
 
 async def attack_generator():
 
+    botnet_centers = [
+        ("CN", 35, 103),
+        ("RU", 60, 90),
+        ("IR", 32, 53),
+        ("BR", -10, -55),
+        ("US", 37, -95),
+        ("DE", 51, 10)
+    ]
+
     while True:
 
-        severity = random.choice(["LOW", "MEDIUM", "HIGH", "CRITICAL"])
+        # choose a botnet region
+        country, base_lat, base_lon = random.choice(botnet_centers)
 
-        lat = random.uniform(-60, 60)
-        lon = random.uniform(-180, 180)
+        # burst size (storm)
+        burst = random.randint(6, 20)
 
-        event_id = str(uuid.uuid4())
+        for _ in range(burst):
 
-        event = {
-            "id": event_id,
-            "severity": severity,
-            "technique": "Automated Attack",
-            "latitude": lat,
-            "longitude": lon,
-            "country_code": "US",
-            "origin_label": "Autonomous Threat Engine",
-            "timestamp": datetime.utcnow().isoformat()
-        }
+            severity = random.choices(
+                ["LOW","MEDIUM","HIGH","CRITICAL"],
+                weights=[50,30,15,5]
+            )[0]
 
-        event_queue.append(event)
+            lat = base_lat + random.uniform(-6,6)
+            lon = base_lon + random.uniform(-6,6)
 
-        await asyncio.sleep(random.uniform(2,5))
+            event_id = str(uuid.uuid4())
+
+            event = {
+                "id": event_id,
+                "severity": severity,
+                "technique": "Botnet Storm",
+                "latitude": lat,
+                "longitude": lon,
+                "country_code": country,
+                "origin_label": f"Botnet Cluster ({country})",
+                "timestamp": datetime.utcnow().isoformat(),
+                "botnet_flag": "BOTNET_CLUSTER"
+            }
+
+            event_queue.append(event)
+
+            await asyncio.sleep(random.uniform(0.2,0.8))
+
+        # cooldown between storms
+        await asyncio.sleep(random.uniform(6,12))
 
 
 # =========================================================
