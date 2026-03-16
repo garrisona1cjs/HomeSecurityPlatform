@@ -238,49 +238,54 @@ def get_alerts(db: Session = Depends(get_db)):
 @app.get("/simulate")
 def simulate_attack(db: Session = Depends(get_db)):
 
-    severity = random.choice(["LOW", "MEDIUM", "HIGH", "CRITICAL"])
+    try:
 
-    lat = random.uniform(-60, 60)
-    lon = random.uniform(-180, 180)
+        severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
 
-    event_id = str(uuid.uuid4())
+        lat = random.uniform(-60, 60)
+        lon = random.uniform(-180, 180)
 
-    event = {
-        "id": event_id,
-        "severity": severity,
-        "technique": "Simulation Attack",
-        "latitude": lat,
-        "longitude": lon,
-        "country_code": "US",
-        "origin_label": "Simulation",
-        "timestamp": datetime.utcnow().isoformat()
-    }
+        event_id = str(uuid.uuid4())
 
+        event = {
+            "id": event_id,
+            "severity": severity,
+            "technique": "Simulation Attack",
+            "latitude": lat,
+            "longitude": lon,
+            "country_code": "US",
+            "origin_label": "Simulation",
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
-    event_queue.append(event)
+        # send to websocket
+        event_queue.append(event)
 
+        # store in database
+        alert = Alert(
+            id=event_id,
+            severity=severity,
+            technique="Simulation Attack",
+            latitude=lat,
+            longitude=lon,
+            country_code="US",
+            origin_label="Simulation",
+            timestamp=datetime.utcnow()
+        )
 
+        db.add(alert)
+        db.commit()
 
-    alert = Alert(
-        id=event_id,
-        severity=severity,
-        technique="Simulation Attack",
-        latitude=lat,
-        longitude=lon,
-        country_code="US",
-        origin_label="Simulation",
-        timestamp=datetime.utcnow()
-    )
+        return {"status": "event generated"}
 
-    db.add(alert)
-    db.commit()
+    except Exception as e:
 
+        print("SIMULATE ERROR:", str(e))
 
-
-
-
-
-    return {"status": "event generated"}
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 
