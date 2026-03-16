@@ -321,20 +321,38 @@ def simulate_attack(db: Session = Depends(get_db)):
 
     try:
 
-        alert = Alert(
-            id=event_id,
-            severity=severity,
-            technique="Simulation Attack",
-            latitude=lat,
-            longitude=lon,
-            country_code="US",
-            origin_label="Simulation",
-            timestamp=datetime.utcnow()
-        )
+        from sqlalchemy import text
 
-        db.add(alert)
-        db.commit()
-        
+        try:
+
+            db.execute(text("""
+                INSERT INTO alerts
+                (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp)
+                VALUES
+                (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp)
+            """), {
+                "id": event_id,
+                "severity": severity,
+                "technique": "Simulation Attack",
+                "latitude": lat,
+                "longitude": lon,
+                "country_code": "US",
+                "origin_label": "Simulation",
+                "timestamp": datetime.utcnow()
+            })
+
+            db.commit()
+
+            print("ALERT STORED:", event_id)
+
+        except Exception as e:
+
+            db.rollback()
+
+            print("DATABASE ERROR:", e)
+
+            return {"status":"db_error","error":str(e)}
+
 
         print("ALERT STORED:", event_id)
 
