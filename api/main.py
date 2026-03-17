@@ -223,20 +223,18 @@ def get_alerts(db: Session = Depends(get_db)):
 
     try:
 
-        from .database import safe_db_call
-
-        result = safe_db_call(lambda: db.execute(text("""
+        result = db.execute(text("""
             SELECT severity,
-                   technique,
-                   latitude,
-                   longitude,
-                   country_code,
-                   origin_label,
-                   timestamp
+                technique,
+                latitude,
+                longitude,
+                country_code,
+                origin_label,
+                timestamp
             FROM alerts
             ORDER BY timestamp DESC
             LIMIT 500
-        """)))
+        """))
 
         rows = result.fetchall()
 
@@ -335,21 +333,21 @@ def simulate_attack(db: Session = Depends(get_db)):
 
         try:
 
-            safe_db_call(lambda: db.execute(text("""
-    INSERT INTO alerts
-                (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp)
-                VALUES
-                (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp)
-            """), {
-                "id": event_id,
-                "severity": severity,
-                "technique": "Simulation Attack",
-                "latitude": lat,
-                "longitude": lon,
-                "country_code": "US",
-                "origin_label": "Simulation",
-                "timestamp": datetime.utcnow()
-            }))
+            db.execute(text("""
+                    INSERT INTO alerts
+                    (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp)
+                    VALUES
+                    (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp)
+                """), {
+                    "id": event_id,
+                    "severity": severity,
+                    "technique": "Simulation Attack",
+                    "latitude": lat,
+                    "longitude": lon,
+                    "country_code": "US",
+                    "origin_label": "Simulation",
+                    "timestamp": datetime.utcnow()
+                })
 
             db.commit()
 
