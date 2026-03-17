@@ -6,6 +6,7 @@
 <title>LayerSeven Security Platform</title>
 
 
+<script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
@@ -219,11 +220,12 @@ const globe = Globe()
 .heatmapColorSaturation(0.9)
 
 
-// ======================================================
-// SAFE THREE ACCESS (REQUIRED FOR 3D OBJECTS)
-// ======================================================
 
-const THREE = globe.scene().constructor.prototype.constructor
+
+
+
+
+
 
 
 
@@ -301,9 +303,10 @@ const scene = globe.scene()
 const geometry = new THREE.ConeGeometry(0.5, 5, 16)
 
 const color =
-  severity === "CRITICAL" ? 0xff0033 :
-  severity === "HIGH" ? 0xff5500 :
-  0x00ffff
+severity === "CRITICAL" ? "#ff0033" :
+severity === "HIGH" ? "#ff5500" :
+severity === "MEDIUM" ? "#ffaa00" :
+"#00ffff"
 
 const material = new THREE.MeshBasicMaterial({
 color: color,
