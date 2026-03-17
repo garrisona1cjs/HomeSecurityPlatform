@@ -139,12 +139,11 @@ let shockwaves = []
 // security satellites
 let satellites = []
 
-// ======================================================
-// 3D VISUAL OBJECTS
-// ======================================================
 
-let attackCones = []
-let shieldMeshes = []
+
+
+
+
 
 // ======================================================
 // ADVANCED SYSTEMS
@@ -185,16 +184,7 @@ let EVENT_DROP_COUNT = 0
 const globe = Globe()(document.getElementById("globeViz"))
 
 
-// ======================================================
-// DELAYED THREE ACCESS (FIXES INITIALIZATION ISSUE)
-// ======================================================
 
-let THREE = null
-
-setTimeout(() => {
-    THREE = globe.scene().children[0]?.__proto__?.constructor
-    console.log("THREE loaded:", THREE)
-}, 500)
 
 
 // ======================================================
@@ -310,52 +300,38 @@ globe.arcsData(arcs)
 }
 
 // ======================================================
-// 3D ATTACK CONE (STABLE VERSION)
+// VOLUMETRIC ATTACK (STABLE - NO THREE)
 // ======================================================
 
-function createAttackCone(lat, lng, severity){
+function createAttackVolume(lat, lng, severity){
 
-    // prevent crash if THREE not ready yet
-    if (!THREE) return
-
-    const scene = globe.scene()
-
-    // geometry
-    const geometry = new THREE.ConeGeometry(0.5, 5, 16)
-
-    // color by severity
     const color =
-        severity === "CRITICAL" ? 0xff0033 :
-        severity === "HIGH" ? 0xff5500 :
-        severity === "MEDIUM" ? 0xffaa00 :
-        0x00ffff
+        severity === "CRITICAL" ? "#ff0033" :
+        severity === "HIGH" ? "#ff5500" :
+        severity === "MEDIUM" ? "#ffaa00" :
+        "#00ffff"
 
-    // material
-    const material = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.6
-    })
+    // layered rings = fake 3D cone
+    for(let i = 0; i < 4; i++){
 
-    // mesh
-    const cone = new THREE.Mesh(geometry, material)
+        setTimeout(() => {
 
-    // position on globe
-    const pos = globe.getCoords(lat, lng, 0.01)
-    cone.position.set(pos.x, pos.y, pos.z)
+            rings.push({
+                lat: lat,
+                lng: lng,
+                maxR: 4 + (i * 2),
+                color: color
+            })
 
-    // aim toward SOC
-    const target = globe.getCoords(SOC_LAT, SOC_LON, 0.01)
-    cone.lookAt(target)
+            if(rings.length > MAX_RINGS){
+                rings.shift()
+            }
 
-    // add to scene
-    scene.add(cone)
+            globe.ringsData(rings.concat(shockwaves))
 
-    // track for cleanup
-    attackCones.push({
-        mesh: cone,
-        created: Date.now()
-    })
+        }, i * 120)
+
+    }
 }
 
 // ======================================================
@@ -430,32 +406,7 @@ globe.pointsData(points.concat(packets).concat(satellites) || [])
 
 setInterval(animateStorms,80)
 
-// ======================================================
-// CONE CLEANUP ENGINE
-// ======================================================
 
-function animateCones(){
-
-const now = Date.now()
-
-for(let i=attackCones.length-1;i>=0;i--){
-
-let c = attackCones[i]
-
-let age = now - c.created
-
-c.mesh.material.opacity = Math.max(0,0.6 - age/3000)
-
-if(age > 3000){
-globe.scene().remove(c.mesh)
-attackCones.splice(i,1)
-}
-
-}
-
-}
-
-setInterval(animateCones,60)
 
 // ======================================================
 // PACKET STREAM GENERATOR
@@ -554,65 +505,34 @@ globe.ringsData(rings.concat(shockwaves))
 }
 
 // ======================================================
-// SOC DEFENSE SHIELD (STABLE VERSION)
+// SOC DEFENSE SHIELD (STABLE)
 // ======================================================
 
 function createShieldPulse(){
 
-    // prevent crash if THREE not ready yet
-    if (!THREE) return
+    for(let i = 0; i < 3; i++){
 
-    const scene = globe.scene()
+        setTimeout(() => {
 
-    const geometry = new THREE.SphereGeometry(1.2, 32, 32)
+            rings.push({
+                lat: SOC_LAT,
+                lng: SOC_LON,
+                maxR: 8 + (i * 6),
+                color: "#00ffff"
+            })
 
-    const material = new THREE.MeshBasicMaterial({
-        color: 0x00ffff,
-        transparent: true,
-        opacity: 0.4,
-        wireframe: true
-    })
+            if(rings.length > MAX_RINGS){
+                rings.shift()
+            }
 
-    const sphere = new THREE.Mesh(geometry, material)
+            globe.ringsData(rings.concat(shockwaves))
 
-    // position at SOC
-    const pos = globe.getCoords(SOC_LAT, SOC_LON, 0.01)
-    sphere.position.set(pos.x, pos.y, pos.z)
+        }, i * 150)
 
-    scene.add(sphere)
-
-    shieldMeshes.push({
-        mesh: sphere,
-        scale: 1
-    })
+    }
 }
 
-// ======================================================
-// SHIELD ANIMATION
-// ======================================================
 
-function animateShield(){
-
-for(let i=shieldMeshes.length-1;i>=0;i--){
-
-let s = shieldMeshes[i]
-
-s.scale += 0.05
-
-s.mesh.scale.set(s.scale,s.scale,s.scale)
-
-s.mesh.material.opacity -= 0.01
-
-if(s.mesh.material.opacity <= 0){
-globe.scene().remove(s.mesh)
-shieldMeshes.splice(i,1)
-}
-
-}
-
-}
-
-setInterval(animateShield,50)
 
 // ======================================================
 // SATELLITE NETWORK
@@ -820,17 +740,17 @@ createPacketStream(lat,lng)
 createStorm(lat,lng)
 createSatelliteBeam(lat,lng)
 
-// 3D cones for serious attacks
+// volumetric + shield
 if(alert.severity === "HIGH" || alert.severity === "CRITICAL"){
-createAttackCone(lat,lng,alert.severity)
+    createAttackVolume(lat, lng, alert.severity)
+    createShieldPulse()
 }
 
-// SOC defense shield reacts to all attacks
-createShieldPulse()
+
 
 // critical shockwave
 if(alert.severity === "CRITICAL"){
-createShockwave(lat,lng)
+    createShockwave(lat,lng)
 }
 
 // track severity
