@@ -223,7 +223,9 @@ def get_alerts(db: Session = Depends(get_db)):
 
     try:
 
-        result = db.execute(text("""
+        from .database import safe_db_call
+
+        result = safe_db_call(lambda: db.execute(text("""
             SELECT severity,
                    technique,
                    latitude,
@@ -234,7 +236,7 @@ def get_alerts(db: Session = Depends(get_db)):
             FROM alerts
             ORDER BY timestamp DESC
             LIMIT 500
-        """))
+        """)))
 
         rows = result.fetchall()
 
@@ -333,8 +335,8 @@ def simulate_attack(db: Session = Depends(get_db)):
 
         try:
 
-            db.execute(text("""
-                INSERT INTO alerts
+            safe_db_call(lambda: db.execute(text("""
+    INSERT INTO alerts
                 (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp)
                 VALUES
                 (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp)
@@ -347,7 +349,7 @@ def simulate_attack(db: Session = Depends(get_db)):
                 "country_code": "US",
                 "origin_label": "Simulation",
                 "timestamp": datetime.utcnow()
-            })
+            }))
 
             db.commit()
 
