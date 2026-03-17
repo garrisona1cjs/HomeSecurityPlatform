@@ -139,6 +139,13 @@ let shockwaves = []
 let satellites = []
 
 // ======================================================
+// 3D VISUAL OBJECTS
+// ======================================================
+
+let attackCones = []
+let shieldMeshes = []
+
+// ======================================================
 // SOC STATISTICS
 // ======================================================
 
@@ -265,6 +272,73 @@ globe.arcsData(arcs)
 }
 
 // ======================================================
+// 3D ATTACK CONE
+// ======================================================
+
+function createAttackCone(lat,lng,severity){
+
+const scene = globe.scene()
+
+const geometry = new THREE.ConeGeometry(0.5, 5, 16)
+
+const color =
+severity === "CRITICAL" ? 0xff0033 :
+severity === "HIGH" ? 0xff5500 :
+0x00ffff
+
+const material = new THREE.MeshBasicMaterial({
+color: color,
+transparent:true,
+opacity:0.6
+})
+
+const cone = new THREE.Mesh(geometry, material)
+
+// position on globe
+const pos = globe.getCoords(lat,lng,0.01)
+cone.position.set(pos.x,pos.y,pos.z)
+
+// aim toward SOC
+const target = globe.getCoords(SOC_LAT,SOC_LON,0.01)
+cone.lookAt(target)
+
+scene.add(cone)
+
+attackCones.push({
+mesh:cone,
+created:Date.now()
+})
+
+}
+
+// ======================================================
+// CONE CLEANUP ENGINE
+// ======================================================
+
+function animateCones(){
+
+const now = Date.now()
+
+for(let i=attackCones.length-1;i>=0;i--){
+
+let c = attackCones[i]
+
+let age = now - c.created
+
+c.mesh.material.opacity = Math.max(0,0.6 - age/3000)
+
+if(age > 3000){
+globe.scene().remove(c.mesh)
+attackCones.splice(i,1)
+}
+
+}
+
+}
+
+setInterval(animateCones,60)
+
+// ======================================================
 // PACKET STREAM GENERATOR
 // ======================================================
 
@@ -359,6 +433,65 @@ shockwaves.shift()
 globe.ringsData(rings.concat(shockwaves))
 
 }
+
+// ======================================================
+// SOC DEFENSE SHIELD
+// ======================================================
+
+function createShieldPulse(){
+
+const scene = globe.scene()
+
+const geometry = new THREE.SphereGeometry(1.2, 32, 32)
+
+const material = new THREE.MeshBasicMaterial({
+color:0x00ffff,
+transparent:true,
+opacity:0.4,
+wireframe:true
+})
+
+const sphere = new THREE.Mesh(geometry, material)
+
+// position at SOC
+const pos = globe.getCoords(SOC_LAT,SOC_LON,0.01)
+sphere.position.set(pos.x,pos.y,pos.z)
+
+scene.add(sphere)
+
+shieldMeshes.push({
+mesh:sphere,
+scale:1
+})
+
+}
+
+// ======================================================
+// SHIELD ANIMATION
+// ======================================================
+
+function animateShield(){
+
+for(let i=shieldMeshes.length-1;i>=0;i--){
+
+let s = shieldMeshes[i]
+
+s.scale += 0.05
+
+s.mesh.scale.set(s.scale,s.scale,s.scale)
+
+s.mesh.material.opacity -= 0.01
+
+if(s.mesh.material.opacity <= 0){
+globe.scene().remove(s.mesh)
+shieldMeshes.splice(i,1)
+}
+
+}
+
+}
+
+setInterval(animateShield,50)
 
 // ======================================================
 // SATELLITE NETWORK
@@ -512,6 +645,16 @@ createThreatFlash(lat,lng)
 addHeat(lat,lng)
 focusAttack(lat,lng)
 createPacketStream(lat,lng)
+
+// 3D cones for serious attacks
+if(alert.severity === "HIGH" || alert.severity === "CRITICAL"){
+createAttackCone(lat,lng,alert.severity)
+}
+
+// SOC defense shield reacts to all attacks
+createShieldPulse()
+
+// critical shockwave
 if(alert.severity === "CRITICAL"){
 createShockwave(lat,lng)
 }
