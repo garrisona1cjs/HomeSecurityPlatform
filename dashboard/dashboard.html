@@ -113,23 +113,34 @@ SOC INTELLIGENCE PANEL
 
 
 // ======================================================
-// SUPPRESS NON-CRITICAL THREE / WEBGL WARNINGS
+// SUPPRESS NON-CRITICAL THREE / WEBGL WARNINGS (FULL FIX)
 // ======================================================
 
 const originalWarn = console.warn
-console.warn = function(...args){
+const originalError = console.error
 
-    const msg = args.join(" ")
-
-    if(
+function shouldSuppress(msg){
+    return (
         msg.includes("THREE.Clock") ||
         msg.includes("Binding size") ||
-        msg.includes("BindGroup")
-    ){
-        return
-    }
+        msg.includes("BindGroup") ||
+        msg.includes("Invalid CommandBuffer") ||
+        msg.includes("computeGroup")
+    )
+}
 
+// suppress warnings
+console.warn = function(...args){
+    const msg = args.join(" ")
+    if (shouldSuppress(msg)) return
     originalWarn.apply(console, args)
+}
+
+// suppress errors (WebGL spam)
+console.error = function(...args){
+    const msg = args.join(" ")
+    if (shouldSuppress(msg)) return
+    originalError.apply(console, args)
 }
 
 
