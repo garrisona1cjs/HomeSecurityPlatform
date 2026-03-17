@@ -146,6 +146,13 @@ let attackCones = []
 let shieldMeshes = []
 
 // ======================================================
+// ADVANCED SYSTEMS
+// ======================================================
+
+let storms = []
+let satelliteBeams = []
+
+// ======================================================
 // SOC STATISTICS
 // ======================================================
 
@@ -218,23 +225,22 @@ const globe = Globe()
 
 function createAttackBeam(lat,lng,severity){
 
-const color =
+// AI classification by technique
+let color = "#00ffff"
+
+if(alertTechniqueMap){
+
+color = alertTechniqueMap
+
+}else{
+
+color =
 severity === "CRITICAL" ? "#ff0033" :
 severity === "HIGH" ? "#ff5500" :
 severity === "MEDIUM" ? "#ffaa00" :
 "#00ffff"
 
-arcs.push({
-
-startLat:lat,
-startLng:lng,
-
-endLat:SOC_LAT,
-endLng:SOC_LON,
-
-color:[color,color]
-
-})
+}
 
 // keep arc list bounded
 if(arcs.length > MAX_ARCS){
@@ -275,16 +281,19 @@ globe.arcsData(arcs)
 // 3D ATTACK CONE
 // ======================================================
 
-function createAttackCone(lat,lng,severity){
+function createAttackBeam(lat,lng,severity,classifiedColor){
 
 const scene = globe.scene()
 
 const geometry = new THREE.ConeGeometry(0.5, 5, 16)
 
-const color =
-severity === "CRITICAL" ? 0xff0033 :
-severity === "HIGH" ? 0xff5500 :
-0x00ffff
+const color = classifiedColor ||
+(
+severity === "CRITICAL" ? "#ff0033" :
+severity === "HIGH" ? "#ff5500" :
+severity === "MEDIUM" ? "#ffaa00" :
+"#00ffff"
+)
 
 const material = new THREE.MeshBasicMaterial({
 color: color,
@@ -310,6 +319,78 @@ created:Date.now()
 })
 
 }
+
+// ======================================================
+// CYBER STORM ENGINE
+// ======================================================
+
+function createStorm(lat,lng){
+
+// find nearby storm
+let storm = storms.find(s =>
+Math.abs(s.lat - lat) < 5 &&
+Math.abs(s.lng - lng) < 5
+)
+
+if(!storm){
+
+storm = {
+lat:lat,
+lng:lng,
+points:[],
+rotation:0
+}
+
+storms.push(storm)
+
+}
+
+// add point to storm
+storm.points.push({
+angle:Math.random()*Math.PI*2,
+radius:0.5 + Math.random()
+})
+
+}
+
+// animate storms
+function animateStorms(){
+
+const scene = globe.scene()
+
+storms.forEach(storm => {
+
+storm.rotation += 0.05
+
+storm.points.forEach(p => {
+
+p.angle += 0.05
+
+const x = storm.lat + Math.cos(p.angle) * p.radius
+const y = storm.lng + Math.sin(p.angle) * p.radius
+
+// reuse packet visual
+points.push({
+lat:x,
+lng:y,
+size:0.3,
+color:"#ff0033"
+})
+
+})
+
+})
+
+// limit points
+if(points.length > MAX_POINTS){
+points.splice(0, points.length - MAX_POINTS)
+}
+
+globe.pointsData(points.concat(packets).concat(satellites))
+
+}
+
+setInterval(animateStorms,80)
 
 // ======================================================
 // CONE CLEANUP ENGINE
@@ -542,6 +623,37 @@ globe.pointsData(points.concat(packets).concat(satellites))
 setInterval(animateSatellites,60)
 
 // ======================================================
+// SATELLITE TRACKING BEAMS
+// ======================================================
+
+function createSatelliteBeam(lat,lng){
+
+satellites.forEach(s => {
+
+arcs.push({
+
+startLat:s.lat,
+startLng:s.lng,
+
+endLat:lat,
+endLng:lng,
+
+color:["#00ffff","#00ffff"]
+
+})
+
+})
+
+// limit arcs
+if(arcs.length > MAX_ARCS){
+arcs.splice(0, arcs.length - MAX_ARCS)
+}
+
+globe.arcsData(arcs)
+
+}
+
+// ======================================================
 // SWARM BURST
 // ======================================================
 
@@ -605,6 +717,24 @@ globe.pointsData(points.concat(packets).concat(satellites))
 }
 
 // ======================================================
+// AI THREAT CLASSIFIER
+// ======================================================
+
+function classifyThreat(alert){
+
+if(!alert.technique) return null
+
+const t = alert.technique.toLowerCase()
+
+if(t.includes("scan")) return "#00ffff"
+if(t.includes("exploit")) return "#ff5500"
+if(t.includes("beacon")) return "#aa00ff"
+
+return null
+
+}
+
+// ======================================================
 // HEATMAP UPDATE
 // ======================================================
 
@@ -638,13 +768,17 @@ const lng=parseFloat(alert.longitude)
 if(!lat || !lng) return
 
 // visualization
-createAttackBeam(lat,lng,alert.severity)
+const classifiedColor = classifyThreat(alert)
+
+createAttackBeam(lat,lng,alert.severity, classifiedColor)
 createReverseTrace(lat,lng)
 createSwarmBurst(lat,lng)
 createThreatFlash(lat,lng)
 addHeat(lat,lng)
 focusAttack(lat,lng)
 createPacketStream(lat,lng)
+createStorm(lat,lng)
+createSatelliteBeam(lat,lng)
 
 // 3D cones for serious attacks
 if(alert.severity === "HIGH" || alert.severity === "CRITICAL"){
