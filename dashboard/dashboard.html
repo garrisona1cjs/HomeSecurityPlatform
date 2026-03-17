@@ -107,6 +107,32 @@ SOC INTELLIGENCE PANEL
 
 <div id="countryList"></div>
 
+
+<!-- ======================================================
+REPLAY CONTROLS
+====================================================== -->
+
+<div class="panelTitle">REPLAY CONTROLS</div>
+
+<button onclick="startReplay()">▶ Play</button>
+<button onclick="pauseReplay()">⏸ Pause</button>
+<button onclick="resetReplay()">🔄 Reset</button>
+
+
+<!-- ======================================================
+TIMELINE SLIDER
+====================================================== -->
+
+<div class="panelTitle">TIMELINE</div>
+
+<input id="timelineSlider"
+       type="range"
+       min="0"
+       max="0"
+       value="0"
+       style="width:100%"
+       oninput="scrubTimeline(this.value)">
+
 </div>
 
 <script>
