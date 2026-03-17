@@ -111,6 +111,29 @@ SOC INTELLIGENCE PANEL
 
 <script>
 
+
+// ======================================================
+// SUPPRESS NON-CRITICAL THREE / WEBGL WARNINGS
+// ======================================================
+
+const originalWarn = console.warn
+console.warn = function(...args){
+
+    const msg = args.join(" ")
+
+    if(
+        msg.includes("THREE.Clock") ||
+        msg.includes("Binding size") ||
+        msg.includes("BindGroup")
+    ){
+        return
+    }
+
+    originalWarn.apply(console, args)
+}
+
+
+
 // ======================================================
 // SOC LOCATION
 // ======================================================
