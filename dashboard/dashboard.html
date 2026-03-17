@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <title>LayerSeven Security Platform</title>
 
-<script src="https://unpkg.com/three"></script>
+
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
@@ -220,27 +220,40 @@ const globe = Globe()
 
 
 // ======================================================
+// SAFE THREE ACCESS (REQUIRED FOR 3D OBJECTS)
+// ======================================================
+
+const THREE = globe.scene().constructor.prototype.constructor
+
+
+
+
+
+// ======================================================
 // ATTACK BEAM
 // ======================================================
 
-function createAttackBeam(lat,lng,severity){
+function createAttackBeam(lat,lng,severity,classifiedColor){
 
-// AI classification by technique
-let color = "#00ffff"
-
-if(alertTechniqueMap){
-
-color = alertTechniqueMap
-
-}else{
-
-color =
+const color = classifiedColor ||
+(
 severity === "CRITICAL" ? "#ff0033" :
 severity === "HIGH" ? "#ff5500" :
 severity === "MEDIUM" ? "#ffaa00" :
 "#00ffff"
+)
 
-}
+arcs.push({
+
+startLat:lat,
+startLng:lng,
+
+endLat:SOC_LAT,
+endLng:SOC_LON,
+
+color:[color,color]
+
+})
 
 // keep arc list bounded
 if(arcs.length > MAX_ARCS){
@@ -281,19 +294,16 @@ globe.arcsData(arcs)
 // 3D ATTACK CONE
 // ======================================================
 
-function createAttackBeam(lat,lng,severity,classifiedColor){
+function createAttackCone(lat,lng,severity){
 
 const scene = globe.scene()
 
 const geometry = new THREE.ConeGeometry(0.5, 5, 16)
 
-const color = classifiedColor ||
-(
-severity === "CRITICAL" ? "#ff0033" :
-severity === "HIGH" ? "#ff5500" :
-severity === "MEDIUM" ? "#ffaa00" :
-"#00ffff"
-)
+const color =
+  severity === "CRITICAL" ? 0xff0033 :
+  severity === "HIGH" ? 0xff5500 :
+  0x00ffff
 
 const material = new THREE.MeshBasicMaterial({
 color: color,
@@ -386,7 +396,7 @@ if(points.length > MAX_POINTS){
 points.splice(0, points.length - MAX_POINTS)
 }
 
-globe.pointsData(points.concat(packets).concat(satellites))
+globe.pointsData(points.concat(packets).concat(satellites) || [])
 
 }
 
@@ -470,7 +480,7 @@ packets.splice(i,1)
 }
 
 // update render layer
-globe.pointsData(points.concat(packets).concat(satellites))
+globe.pointsData(points.concat(packets).concat(satellites) || [])
 
 }
 
@@ -594,7 +604,7 @@ altitude:0.25
 
 }
 
-globe.pointsData(points.concat(packets).concat(satellites))
+globe.pointsData(points.concat(packets).concat(satellites) || [])
 
 }
 
@@ -616,7 +626,7 @@ s.lng = -180
 
 })
 
-globe.pointsData(points.concat(packets).concat(satellites))
+globe.pointsData(points.concat(packets).concat(satellites) || [])
 
 }
 
@@ -705,12 +715,12 @@ if(points.length > MAX_POINTS){
 points.shift()
 }
 
-globe.pointsData(points.concat(packets).concat(satellites))
+globe.pointsData(points.concat(packets).concat(satellites) || [])
 
 setTimeout(()=>{
 
 points.shift()
-globe.pointsData(points.concat(packets).concat(satellites))
+globe.pointsData(points.concat(packets).concat(satellites) || [])
 
 },800)
 
