@@ -6,7 +6,7 @@
 <title>LayerSeven Security Platform</title>
 
 
-<script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+
 <script src="https://unpkg.com/globe.gl"></script>
 
 <style>
@@ -182,9 +182,26 @@ let EVENT_DROP_COUNT = 0
 // CREATE GLOBE
 // ======================================================
 
-const globe = Globe()
-(document.getElementById("globeViz"))
+const globe = Globe()(document.getElementById("globeViz"))
 
+
+// ======================================================
+// DELAYED THREE ACCESS (FIXES INITIALIZATION ISSUE)
+// ======================================================
+
+let THREE = null
+
+setTimeout(() => {
+    THREE = globe.scene().children[0]?.__proto__?.constructor
+    console.log("THREE loaded:", THREE)
+}, 500)
+
+
+// ======================================================
+// CONFIGURE GLOBE
+// ======================================================
+
+globe
 .globeImageUrl("//unpkg.com/three-globe/example/img/earth-night.jpg")
 .backgroundColor("black")
 
@@ -293,44 +310,52 @@ globe.arcsData(arcs)
 }
 
 // ======================================================
-// 3D ATTACK CONE
+// 3D ATTACK CONE (STABLE VERSION)
 // ======================================================
 
-function createAttackCone(lat,lng,severity){
+function createAttackCone(lat, lng, severity){
 
-const scene = globe.scene()
+    // prevent crash if THREE not ready yet
+    if (!THREE) return
 
-const geometry = new THREE.ConeGeometry(0.5, 5, 16)
+    const scene = globe.scene()
 
-const color =
-severity === "CRITICAL" ? "#ff0033" :
-severity === "HIGH" ? "#ff5500" :
-severity === "MEDIUM" ? "#ffaa00" :
-"#00ffff"
+    // geometry
+    const geometry = new THREE.ConeGeometry(0.5, 5, 16)
 
-const material = new THREE.MeshBasicMaterial({
-color: color,
-transparent:true,
-opacity:0.6
-})
+    // color by severity
+    const color =
+        severity === "CRITICAL" ? 0xff0033 :
+        severity === "HIGH" ? 0xff5500 :
+        severity === "MEDIUM" ? 0xffaa00 :
+        0x00ffff
 
-const cone = new THREE.Mesh(geometry, material)
+    // material
+    const material = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.6
+    })
 
-// position on globe
-const pos = globe.getCoords(lat,lng,0.01)
-cone.position.set(pos.x,pos.y,pos.z)
+    // mesh
+    const cone = new THREE.Mesh(geometry, material)
 
-// aim toward SOC
-const target = globe.getCoords(SOC_LAT,SOC_LON,0.01)
-cone.lookAt(target)
+    // position on globe
+    const pos = globe.getCoords(lat, lng, 0.01)
+    cone.position.set(pos.x, pos.y, pos.z)
 
-scene.add(cone)
+    // aim toward SOC
+    const target = globe.getCoords(SOC_LAT, SOC_LON, 0.01)
+    cone.lookAt(target)
 
-attackCones.push({
-mesh:cone,
-created:Date.now()
-})
+    // add to scene
+    scene.add(cone)
 
+    // track for cleanup
+    attackCones.push({
+        mesh: cone,
+        created: Date.now()
+    })
 }
 
 // ======================================================
@@ -529,35 +554,37 @@ globe.ringsData(rings.concat(shockwaves))
 }
 
 // ======================================================
-// SOC DEFENSE SHIELD
+// SOC DEFENSE SHIELD (STABLE VERSION)
 // ======================================================
 
 function createShieldPulse(){
 
-const scene = globe.scene()
+    // prevent crash if THREE not ready yet
+    if (!THREE) return
 
-const geometry = new THREE.SphereGeometry(1.2, 32, 32)
+    const scene = globe.scene()
 
-const material = new THREE.MeshBasicMaterial({
-color:0x00ffff,
-transparent:true,
-opacity:0.4,
-wireframe:true
-})
+    const geometry = new THREE.SphereGeometry(1.2, 32, 32)
 
-const sphere = new THREE.Mesh(geometry, material)
+    const material = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.4,
+        wireframe: true
+    })
 
-// position at SOC
-const pos = globe.getCoords(SOC_LAT,SOC_LON,0.01)
-sphere.position.set(pos.x,pos.y,pos.z)
+    const sphere = new THREE.Mesh(geometry, material)
 
-scene.add(sphere)
+    // position at SOC
+    const pos = globe.getCoords(SOC_LAT, SOC_LON, 0.01)
+    sphere.position.set(pos.x, pos.y, pos.z)
 
-shieldMeshes.push({
-mesh:sphere,
-scale:1
-})
+    scene.add(sphere)
 
+    shieldMeshes.push({
+        mesh: sphere,
+        scale: 1
+    })
 }
 
 // ======================================================
