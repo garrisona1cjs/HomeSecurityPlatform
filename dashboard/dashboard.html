@@ -133,6 +133,8 @@ TIMELINE SLIDER
        style="width:100%"
        oninput="scrubTimeline(this.value)">
 
+<div id="timelineTime" style="margin-top:6px; font-size:12px; color:#ffffff;">
+--:--:--
 </div>
 
 <script>
@@ -227,6 +229,17 @@ MEDIUM:0
 let countryStats = {}
 
 let alertQueue = []
+
+// ======================================================
+// REPLAY SYSTEM
+// ======================================================
+
+let replayEvents = []
+let replayIndex = 0
+let isReplaying = false
+let replaySpeed = 300
+
+let isScrubbing = false   // ✅ ADD THIS LINE RIGHT HERE
 
 // SOC visual safety limits
 const MAX_ARCS = 500
@@ -775,12 +788,53 @@ globe.heatmapsData([heatmap])
 
 }
 
+// ======================================================
+// TIMELINE SCRUB
+// ======================================================
+
+function scrubTimeline(index){
+
+    isReplaying = false
+
+    isScrubbing = true   // ✅ ADD HERE (VERY TOP, after stopping replay)
+
+    replayIndex = parseInt(index)
+
+    // RESET VISUAL STATE
+    arcs = []
+    rings = []
+    points = []
+    heatmap = []
+
+    globe.arcsData(arcs)
+    globe.ringsData([])
+    globe.pointsData([])
+
+    // rebuild timeline up to selected point
+    for(let i = 0; i <= replayIndex; i++){
+
+        processAlert(replayEvents[i])
+
+    }
+
+    // update displayed time
+    const current = replayEvents[replayIndex]
+
+    if(current){
+        document.getElementById("timelineTime").innerText =
+            formatTime(current.ts)
+    }
+
+    isScrubbing = false   // ✅ ADD HERE (VERY BOTTOM, before function ends)
+}
+
 
 // ======================================================
 // PROCESS ALERT
 // ======================================================
 
 function processAlert(alert){
+
 
 const lat=parseFloat(alert.latitude)
 const lng=parseFloat(alert.longitude)
@@ -881,6 +935,70 @@ processAlert(alert)
 
 setInterval(processQueue,120)
 
+function formatTime(date){
+    if(!date) return "--:--:--"
+    return new Date(date).toLocaleTimeString()
+}
+
+// ======================================================
+// REPLAY ENGINE
+// ======================================================
+
+function startReplay(){
+
+    if(replayEvents.length === 0){
+        console.warn("No events to replay")
+        return
+    }
+
+    // RESET VISUAL STATE
+    arcs = []
+    rings = []
+    points = []
+    heatmap = []
+
+    globe.arcsData(arcs)
+    globe.ringsData([])
+    globe.pointsData([])
+
+    isReplaying = true
+    replayIndex = 0
+}
+
+function pauseReplay(){
+    isReplaying = false
+}
+
+function resetReplay(){
+    isReplaying = false
+    replayIndex = 0
+}
+
+function replayLoop(){
+
+    if(!isReplaying) return
+
+    if(replayIndex >= replayEvents.length){
+        isReplaying = false
+        return
+    }
+
+    const event = replayEvents[replayIndex]
+
+    processAlert(event)
+
+    // update slider
+    document.getElementById("timelineSlider").value = replayIndex
+
+    // update time display
+    document.getElementById("timelineTime").innerText =
+        formatTime(event.ts)
+
+    replayIndex++
+}
+
+setInterval(replayLoop, replaySpeed)
+
 
 // ======================================================
 // WEBSOCKET STREAM
@@ -900,27 +1018,21 @@ if(msg.type==="batch" && Array.isArray(msg.events)){
 
 msg.events.forEach(alert=>{
 
-if(alertQueue.length>MAX_QUEUE){
-EVENT_DROP_COUNT++
-}else{
-alertQueue.push(alert)
-}
+    // STORE FOR REPLAY (ONLY HERE)
+    replayEvents.push({
+        ...alert,
+        ts: new Date(alert.timestamp || Date.now())
+    })
 
-})
+    document.getElementById("timelineSlider").max = replayEvents.length - 1
 
-}else{
+    if(alertQueue.length>MAX_QUEUE){
+        EVENT_DROP_COUNT++
+    }else{
+        alertQueue.push(alert)
+    }
 
-if(msg.latitude && msg.longitude){
-
-if(alertQueue.length>MAX_QUEUE){
-EVENT_DROP_COUNT++
-}else{
-alertQueue.push(msg)
-}
-
-}
-
-}
+})}
 
 }catch(err){
 
@@ -946,7 +1058,15 @@ return
 
 data.forEach(alert=>{
 
-processAlert(alert)
+    // STORE FOR REPLAY
+    replayEvents.push({
+        ...alert,
+        ts: new Date(alert.timestamp || Date.now())
+    })
+
+    document.getElementById("timelineSlider").max = replayEvents.length - 1
+
+    processAlert(alert)
 
 })
 
