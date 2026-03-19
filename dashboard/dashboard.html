@@ -172,6 +172,45 @@ SOC PANEL
 
 </div> <!-- END socPanel -->
 
+<!-- ======================================================
+FILTER PANEL
+====================================================== -->
+<div id="filterPanel" class="attack-panel" style="top: 750px; width: 320px;">
+
+    <div class="panel-header">
+        <span>🎯 Filters</span>
+    </div>
+
+    <div class="panel-content">
+
+        <!-- Severity -->
+        <div>
+            <strong>Severity</strong><br>
+            <label><input type="checkbox" checked onchange="toggleSeverity('CRITICAL')"> CRITICAL</label><br>
+            <label><input type="checkbox" checked onchange="toggleSeverity('HIGH')"> HIGH</label><br>
+            <label><input type="checkbox" checked onchange="toggleSeverity('MEDIUM')"> MEDIUM</label><br>
+        </div>
+
+        <hr>
+
+        <!-- Country -->
+        <div>
+            <strong>Country</strong><br>
+            <input id="countryFilter" placeholder="US, CN..." oninput="applyFilters()" style="width:100%">
+        </div>
+
+        <hr>
+
+        <!-- Technique -->
+        <div>
+            <strong>Technique</strong><br>
+            <input id="techniqueFilter" placeholder="brute_force..." oninput="applyFilters()" style="width:100%">
+        </div>
+
+    </div>
+
+</div>
+
 
 <!-- ======================================================
 ATTACK DETAILS PANEL
@@ -314,6 +353,19 @@ let alertQueue = []
 // ======================================================
 
 let alertUIQueue = []
+
+// ======================================================
+// FILTER STATE
+// ======================================================
+
+let activeSeverities = {
+    CRITICAL: true,
+    HIGH: true,
+    MEDIUM: true
+}
+
+let activeCountryFilter = ""
+let activeTechniqueFilter = ""
 
 // ======================================================
 // REPLAY SYSTEM
@@ -974,6 +1026,18 @@ function processAlert(alert){
     if(!lat || !lng) return
 
     // ==================================================
+    // APPLY FILTER BEFORE RENDERING
+    // ==================================================
+
+    if(!activeSeverities[alert.severity]) return
+
+    if(activeCountryFilter &&
+    !(alert.country_code || "").includes(activeCountryFilter)) return
+
+    if(activeTechniqueFilter &&
+    !(alert.technique || "").toLowerCase().includes(activeTechniqueFilter)) return
+
+    // ==================================================
     // ✅ ADD TO UI QUEUE (AFTER VALIDATION)
     // ==================================================
 
@@ -1046,7 +1110,20 @@ function renderAlertQueue(){
 
     let html = ""
 
-    alertUIQueue.forEach((alert) => {
+    alertUIQueue
+    .filter(alert => {
+
+        if(!activeSeverities[alert.severity]) return false
+
+        if(activeCountryFilter &&
+           !(alert.country_code || "").includes(activeCountryFilter)) return false
+
+        if(activeTechniqueFilter &&
+           !(alert.technique || "").toLowerCase().includes(activeTechniqueFilter)) return false
+
+        return true
+    })
+    .forEach((alert) => {
 
         const color =
             alert.severity === "CRITICAL" ? "#ff0033" :
@@ -1123,6 +1200,23 @@ function escalateAlert(id){
             status: "ESCALATED"
         })
     })
+
+    renderAlertQueue()
+}
+
+// ======================================================
+// FILTER LOGIC
+// ======================================================
+
+function toggleSeverity(level){
+    activeSeverities[level] = !activeSeverities[level]
+    applyFilters()
+}
+
+function applyFilters(){
+
+    activeCountryFilter = document.getElementById("countryFilter").value.toUpperCase()
+    activeTechniqueFilter = document.getElementById("techniqueFilter").value.toLowerCase()
 
     renderAlertQueue()
 }
