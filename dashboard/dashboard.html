@@ -293,19 +293,26 @@ ALERT QUEUE PANEL
 <!-- ======================================================
 INCIDENT PANEL
 ====================================================== -->
-<div id="incidentPanel" class="attack-panel hidden" style="top: 720px; width: 320px;">
+<div class="panel-content">
+    <p><strong>ID:</strong> <span id="incId"></span></p>
+    <p><strong>Events:</strong> <span id="incCount"></span></p>
+    <p><strong>Risk:</strong> <span id="incRisk"></span></p>
+    <p><strong>Last Seen:</strong> <span id="incTime"></span></p>
 
-    <div class="panel-header">
-        <span>🧠 Incident Intelligence</span>
-        <button onclick="closeIncidentPanel()">✖</button>
-    </div>
+    <hr>
 
-    <div class="panel-content">
-        <p><strong>ID:</strong> <span id="incId"></span></p>
-        <p><strong>Events:</strong> <span id="incCount"></span></p>
-        <p><strong>Risk:</strong> <span id="incRisk"></span></p>
-        <p><strong>Last Seen:</strong> <span id="incTime"></span></p>
-    </div>
+    <!-- 🔥 SOC WORKFLOW -->
+    <h3 style="margin-top:10px;">Workflow</h3>
+
+    <button onclick="updateIncidentStatus('INVESTIGATING')">Investigate</button>
+    <button onclick="updateIncidentStatus('CONTAINED')">Contain</button>
+    <button onclick="updateIncidentStatus('RESOLVED')">Resolve</button>
+
+    <br><br>
+
+    <input id="analystName" placeholder="Assign analyst" style="width:100%">
+    <button onclick="assignIncident()">Assign</button>
+</div>
 
 </div>
 
@@ -1784,6 +1791,9 @@ function closeAttackPanel(){
 
 function openIncidentPanel(inc){
 
+    // 🔥 ADD THIS LINE (FIRST LINE)
+    selectedIncidentId = inc.incident_id
+
     document.getElementById("incidentPanel").classList.remove("hidden")
 
     document.getElementById("incId").innerText = inc.incident_id
@@ -1792,8 +1802,8 @@ function openIncidentPanel(inc){
 
     document.getElementById("incTime").innerText =
         new Date(inc.last_seen).toLocaleString()
+        
 
-    // 🔥 highlight area
     createShockwave(inc.lat, inc.lng)
 }
 
@@ -1962,6 +1972,54 @@ controls.autoRotateSpeed = rotationSpeed
 }
 
 rotateGlobe()
+
+// ======================================================
+// INCIDENT WORKFLOW STATE
+// ======================================================
+
+let selectedIncidentId = null
+
+// ======================================================
+// UPDATE STATUS
+// ======================================================
+
+function updateIncidentStatus(status){
+
+    if(!selectedIncidentId){
+        console.warn("No incident selected")
+        return
+    }
+
+    fetch(`/incidents/${selectedIncidentId}/status?status=${status}`, {
+        method: "POST"
+    })
+    .then(res => res.json())
+    .then(data => {
+        console.log("Status updated:", data)
+    })
+}
+
+// ======================================================
+// ASSIGN INCIDENT
+// ======================================================
+
+function assignIncident(){
+
+    const analyst = document.getElementById("analystName").value
+
+    if(!selectedIncidentId || !analyst){
+        console.warn("Missing incident or analyst")
+        return
+    }
+
+    fetch(`/incidents/${selectedIncidentId}/assign?analyst=${analyst}`, {
+        method: "POST"
+    })
+    .then(res => res.json())
+    .then(data => {
+        console.log("Assigned:", data)
+    })
+}
 
 
 // ======================================================
