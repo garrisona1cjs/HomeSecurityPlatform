@@ -219,7 +219,7 @@ ALERT QUEUE PANEL
 
 
 // ======================================================
-// SUPPRESS NON-CRITICAL THREE / WEBGL WARNINGS (FULL FIX)
+// SUPPRESS NON-CRITICAL THREE / WEBGL WARNINGS
 // ======================================================
 
 const originalWarn = console.warn
@@ -230,8 +230,9 @@ function shouldSuppress(msg){
         msg.includes("THREE.Clock") ||
         msg.includes("Binding size") ||
         msg.includes("BindGroup") ||
-        msg.includes("Invalid CommandBuffer") ||
-        msg.includes("computeGroup")
+        msg.includes("CommandBuffer") ||
+        msg.includes("computeGroup") ||
+        msg.includes("WebGPU")
     )
 }
 
@@ -242,7 +243,7 @@ console.warn = function(...args){
     originalWarn.apply(console, args)
 }
 
-// suppress errors (WebGL spam)
+// suppress errors
 console.error = function(...args){
     const msg = args.join(" ")
     if (shouldSuppress(msg)) return
@@ -1057,7 +1058,16 @@ function ackAlert(id){
 
     alert.status = "ACK"
 
-    console.log("ACK:", alert)
+    fetch("/alerts/update-status", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            id: id,
+            status: "ACK"
+        })
+    })
 
     renderAlertQueue()
 }
@@ -1069,7 +1079,16 @@ function escalateAlert(id){
 
     alert.status = "ESCALATED"
 
-    console.log("ESCALATED:", alert)
+    fetch("/alerts/update-status", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            id: id,
+            status: "ESCALATED"
+        })
+    })
 
     renderAlertQueue()
 }
