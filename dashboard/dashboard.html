@@ -271,6 +271,7 @@ ATTACK DETAILS PANEL
 
         <p><strong>Country:</strong> <span id="panelCountry"></span></p>
         <p><strong>Timestamp:</strong> <span id="panelTime"></span></p>
+        <p><strong>Risk Score:</strong> <span id="panelRisk"></span></p>
     </div>
 </div>
 
@@ -502,13 +503,17 @@ globe
 
 function createAttackBeam(lat, lng, severity, classifiedColor, alert){
 
-const color = classifiedColor ||
-(
-severity === "CRITICAL" ? "#ff0033" :
-severity === "HIGH" ? "#ff5500" :
-severity === "MEDIUM" ? "#ffaa00" :
-"#00ffff"
-)
+let color = "#00ffff"
+
+if(alert.riskScore >= 80) color = "#ff0033"
+else if(alert.riskScore >= 50) color = "#ff5500"
+else if(alert.riskScore >= 25) color = "#ffaa00"
+else color = "#00ffff"
+
+// allow classifier override
+if(classifiedColor){
+    color = classifiedColor
+}
 
 arcs.push({
 
@@ -993,6 +998,42 @@ return null
 }
 
 // ======================================================
+// THREAT SCORING ENGINE
+// ======================================================
+
+function calculateRiskScore(alert){
+
+    let score = 0
+
+    // severity weight
+    if(alert.severity === "CRITICAL") score += 50
+    else if(alert.severity === "HIGH") score += 30
+    else if(alert.severity === "MEDIUM") score += 15
+
+    // technique weighting
+    if(alert.technique){
+        const t = alert.technique.toLowerCase()
+
+        if(t.includes("exploit")) score += 25
+        if(t.includes("brute")) score += 15
+        if(t.includes("scan")) score += 5
+        if(t.includes("lateral")) score += 20
+    }
+
+    // repeat offender boost (cluster proximity)
+    const nearby = clusters.find(c =>
+        Math.abs(c.lat - alert.latitude) < 2 &&
+        Math.abs(c.lng - alert.longitude) < 2
+    )
+
+    if(nearby){
+        score += Math.min(nearby.count * 2, 20)
+    }
+
+    return Math.min(score, 100)
+}
+
+// ======================================================
 // HEATMAP UPDATE
 // ======================================================
 
@@ -1097,6 +1138,7 @@ function processAlert(alert){
 
     const lat = parseFloat(alert.latitude)
     const lng = parseFloat(alert.longitude)
+    alert.riskScore = calculateRiskScore(alert)
 
     // ❌ DO NOT PROCESS INVALID DATA
     if(!lat || !lng) return
@@ -1189,6 +1231,8 @@ function processAlert(alert){
 
 function renderReplayEvent(alert){
 
+    alert.riskScore = calculateRiskScore(alert)
+
     const lat = alert.latitude
     const lng = alert.longitude
 
@@ -1247,15 +1291,14 @@ function detectCluster(alert){
             lng: alert.longitude,
             count: 0,
             lastSeen: now,
-            events: []
+            events: [],
+            risk: 0
         }
-
-        clusters.push(cluster)
-    }
 
     cluster.count++
     cluster.lastSeen = now
     cluster.events.push(alert)
+    cluster.risk += alert.riskScore
 
     // 🔴 TRIGGER CLUSTER EVENT
     if(cluster.count >= CLUSTER_THRESHOLD && !cluster.triggered){
@@ -1276,19 +1319,24 @@ function detectCluster(alert){
 
 function createClusterMarker(cluster){
 
+    let color = "#ff00ff"
+
+    if(cluster.risk > 300) color = "#ff0033"
+    else if(cluster.risk > 150) color = "#ff5500"
+
     rings.push({
         lat: cluster.lat,
         lng: cluster.lng,
         maxR: 12,
-        color: "#ff00ff"
+        color: color
     })
+    
 
-    // 🔥 ADD FLASH POINT
     points.push({
         lat: cluster.lat,
         lng: cluster.lng,
         size: 2,
-        color: "#ff00ff"
+        color: color
     })
 
     globe.ringsData(rings.concat(shockwaves))
@@ -1668,6 +1716,9 @@ function openAttackPanel(attack){
     document.getElementById("panelCountry").innerText = attack.country || "Unknown"
     document.getElementById("panelTime").innerText =
         new Date(attack.timestamp || Date.now()).toLocaleString()
+
+    document.getElementById("panelRisk").innerText =
+        attack.riskScore !== undefined ? attack.riskScore : "N/A"
 
     // Normalize technique → key
     const key = (attack.technique || "")
