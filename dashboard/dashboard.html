@@ -360,10 +360,7 @@ let shockwaves = []
 // security satellites
 let satellites = []
 
-
-
-
-
+let incidents = []
 
 
 // ======================================================
@@ -468,7 +465,7 @@ globe
 .ringPropagationSpeed(2)
 .ringColor(d => d.color || "#ff0033")
 
-.pointsData(points.concat(packets).concat(satellites))
+.pointsData(points.concat(packets).concat(satellites).concat(incidents))
 .pointAltitude(0)
 .pointRadius("size")
 .pointColor("color")
@@ -1854,12 +1851,45 @@ data.forEach(alert=>{
 
 }
 
+async function loadIncidents(){
+
+    try{
+
+        const data = await fetch("/incidents").then(r => r.json())
+
+        incidents = data.map(i => ({
+
+            lat: i.lat,
+            lng: i.lng,
+
+            size: 1.8 + (i.count * 0.25),
+
+            color:
+                i.risk > 200 ? "#ff0033" :
+                i.risk > 100 ? "#ff5500" :
+                "#ff00ff"
+
+        }))
+
+        globe.pointsData(
+            points.concat(packets).concat(satellites).concat(incidents)
+        )
+
+    }catch(err){
+        console.error("Incident load failed", err)
+    }
+}
+
 
 // ======================================================
 // INITIAL LOAD
 // ======================================================
 
 load()
+loadIncidents()
+
+// refresh every 5 seconds
+setInterval(loadIncidents, 5000)
 
 // ======================================================
 // GLOBE ROTATION
