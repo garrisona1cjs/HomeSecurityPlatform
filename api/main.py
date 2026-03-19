@@ -35,7 +35,7 @@ from .models import Alert, Incident
 
 app = FastAPI(title="LayerSeven Security Platform")
 
-from api import incidents
+from . import incidents
 
 app.include_router(incidents.router)
 
