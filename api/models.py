@@ -41,25 +41,7 @@ from datetime import datetime
 
 class Incident(Base):
     __tablename__ = "incidents"
-
-    id = Column(String, primary_key=True)
-
-    agent_id = Column(String, index=True)
-    organization_id = Column(String, index=True)
-
-    severity = Column(String)
-    risk_score = Column(Integer)
-
-    # 🔥 SOC WORKFLOW FIELDS
-    status = Column(String, default="NEW")  # NEW → INVESTIGATING → CONTAINED → RESOLVED
-    priority = Column(Integer, default=0)
-    assigned_to = Column(String, nullable=True)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    class Incident(Base):
-    __tablename__ = "incidents"
+    
 
     id = Column(String, primary_key=True)
     lat = Column(Float)
@@ -69,6 +51,15 @@ class Incident(Base):
     risk = Column(Integer, default=0)
 
     last_seen = Column(DateTime)
+
+    # ======================================================
+    # INCIDENT WORKFLOW FIELDS (PHASE 9)
+    # ======================================================
+    status = Column(String, default="NEW")
+    assigned_to = Column(String, nullable=True)
+    priority = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # ======================================================
     # INCIDENT WORKFLOW FIELDS (PHASE 9)
