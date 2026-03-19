@@ -565,13 +565,15 @@ arcs.push({
     endLng:SOC_LON,
 
     color:[color,color],
+    
 
-    // ✅ REAL DATA FROM BACKEND
     severity: alert.severity,
     technique: alert.technique,
     country: alert.country_code || "Unknown",
-    timestamp: alert.timestamp || Date.now()
+    timestamp: alert.timestamp || Date.now(),
 
+    // 🔥 ADD THIS LINE
+    riskScore: alert.riskScore
 })
 
 // limit arcs
