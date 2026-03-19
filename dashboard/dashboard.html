@@ -164,7 +164,8 @@ SOC PANEL
        max="0"
        value="0"
        style="width:100%"
-       oninput="scrubTimeline(this.value)">
+       oninput="scrubTimeline(this.value)"
+       onchange="selectTimelineEvent(this.value)">
 
 <div id="timelineTime" style="margin-top:6px; font-size:12px; color:#ffffff;">
 --:--:--
@@ -1012,6 +1013,30 @@ function scrubTimeline(index){
     isScrubbing = false   // ✅ ADD HERE (VERY BOTTOM, before function ends)
 }
 
+// ======================================================
+// TIMELINE EVENT SELECTION (INTELLIGENCE MODE)
+// ======================================================
+
+function selectTimelineEvent(index){
+
+    const event = replayEvents[index]
+
+    if(!event) return
+
+    console.log("Selected timeline event:", event)
+
+    // focus camera
+    focusAttack(event.latitude, event.longitude)
+
+    // open attack panel
+    openAttackPanel({
+        severity: event.severity,
+        technique: event.technique,
+        country: event.country_code,
+        timestamp: event.timestamp
+    })
+}
+
 
 // ======================================================
 // PROCESS ALERT
@@ -1316,6 +1341,9 @@ function replayLoop(){
 
     const event = replayEvents[replayIndex]
 
+    // highlight selected event
+    createThreatFlash(event.latitude, event.longitude)
+
     processAlert(event)
 
     // update slider
@@ -1323,10 +1351,10 @@ function replayLoop(){
 
     // update time display
     document.getElementById("timelineTime").innerText =
-        formatTime(event.ts)
+        `${formatTime(event.ts)} | ${event.technique || "unknown"}`
 
-    replayIndex++
-}
+        replayIndex++
+    }
 
 setInterval(replayLoop, replaySpeed)
 
