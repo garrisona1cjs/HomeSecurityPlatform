@@ -290,6 +290,25 @@ ALERT QUEUE PANEL
 
 </div>
 
+<!-- ======================================================
+INCIDENT PANEL
+====================================================== -->
+<div id="incidentPanel" class="attack-panel hidden" style="top: 720px; width: 320px;">
+
+    <div class="panel-header">
+        <span>🧠 Incident Intelligence</span>
+        <button onclick="closeIncidentPanel()">✖</button>
+    </div>
+
+    <div class="panel-content">
+        <p><strong>ID:</strong> <span id="incId"></span></p>
+        <p><strong>Events:</strong> <span id="incCount"></span></p>
+        <p><strong>Risk:</strong> <span id="incRisk"></span></p>
+        <p><strong>Last Seen:</strong> <span id="incTime"></span></p>
+    </div>
+
+</div>
+
 
 <script>
 
@@ -469,6 +488,15 @@ globe
 .pointAltitude(0)
 .pointRadius("size")
 .pointColor("color")
+.onPointClick(d => {
+
+    if(!d.incident_id) return  // ignore normal points
+
+    openIncidentPanel(d)
+
+    focusAttack(d.lat, d.lng)
+
+})
 
 
 
@@ -675,7 +703,7 @@ if(points.length > MAX_POINTS){
 points.splice(0, points.length - MAX_POINTS)
 }
 
-const allPoints = points.concat(packets).concat(satellites)
+const allPoints = points.concat(packets).concat(satellites).concat(incidents)
 
 if(allPoints.length > 0){
     globe.pointsData(allPoints)
@@ -738,7 +766,7 @@ packets.splice(i,1)
 }
 
 // update render layer
-const allPoints = points.concat(packets).concat(satellites)
+const allPoints = points.concat(packets).concat(satellites).concat(incidents)
 
 if(allPoints.length > 0){
     globe.pointsData(allPoints)
@@ -845,7 +873,7 @@ altitude:0.25
 
 }
 
-const allPoints = points.concat(packets).concat(satellites)
+const allPoints = points.concat(packets).concat(satellites).concat(incidents)
 
 if(allPoints.length > 0){
     globe.pointsData(allPoints)
@@ -871,7 +899,7 @@ s.lng = -180
 
 })
 
-const allPoints = points.concat(packets).concat(satellites)
+const allPoints = points.concat(packets).concat(satellites).concat(incidents)
 
 if(allPoints.length > 0){
     globe.pointsData(allPoints)
@@ -966,12 +994,12 @@ if(points.length > MAX_POINTS){
 points.shift()
 }
 
-globe.pointsData(points.concat(packets).concat(satellites) || [])
+globe.pointsData(points.concat(packets).concat(satellites).concat(incidents) || [])
 
 setTimeout(()=>{
 
 points.shift()
-globe.pointsData(points.concat(packets).concat(satellites) || [])
+globe.pointsData(points.concat(packets).concat(satellites).concat(incidents) || [])
 
 },800)
 
@@ -1343,7 +1371,7 @@ function createClusterMarker(cluster){
     })
 
     globe.ringsData(rings.concat(shockwaves))
-    globe.pointsData(points.concat(packets).concat(satellites))
+   globe.pointsData(points.concat(packets).concat(satellites).concat(incidents) || [])
 }
 
 // ======================================================
@@ -1754,6 +1782,25 @@ function closeAttackPanel(){
     document.getElementById("attackPanel").classList.add("hidden")
 }
 
+function openIncidentPanel(inc){
+
+    document.getElementById("incidentPanel").classList.remove("hidden")
+
+    document.getElementById("incId").innerText = inc.incident_id
+    document.getElementById("incCount").innerText = inc.count
+    document.getElementById("incRisk").innerText = inc.risk
+
+    document.getElementById("incTime").innerText =
+        new Date(inc.last_seen).toLocaleString()
+
+    // 🔥 highlight area
+    createShockwave(inc.lat, inc.lng)
+}
+
+function closeIncidentPanel(){
+    document.getElementById("incidentPanel").classList.add("hidden")
+}
+
 
 // ======================================================
 // WEBSOCKET STREAM
@@ -1862,12 +1909,18 @@ async function loadIncidents(){
             lat: i.lat,
             lng: i.lng,
 
-            size: 1.8 + (i.count * 0.25),
+            size: 2 + Math.min(i.count * 0.3, 6),
 
             color:
                 i.risk > 200 ? "#ff0033" :
                 i.risk > 100 ? "#ff5500" :
-                "#ff00ff"
+                "#ff00ff",
+
+            // 🔥 NEW (IMPORTANT)
+            incident_id: i.id,
+            count: i.count,
+            risk: i.risk,
+            last_seen: i.last_seen
 
         }))
 
