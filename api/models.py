@@ -61,14 +61,7 @@ class Incident(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # ======================================================
-    # INCIDENT WORKFLOW FIELDS (PHASE 9)
-    # ======================================================
-    status = Column(String, default="NEW")
-    assigned_to = Column(String, nullable=True)
-    priority = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+   
 
 
 # =========================================================
