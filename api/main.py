@@ -58,6 +58,11 @@ def update_alert_schema():
         ADD COLUMN IF NOT EXISTS risk_score INTEGER
         """))
 
+        conn.execute(text("""
+        ALTER TABLE alerts
+        ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'NEW'
+        """))
+
         conn.commit()
 
 update_alert_schema()
@@ -86,6 +91,32 @@ async def event_dispatcher():
             })
 
         await asyncio.sleep(QUEUE_FLUSH_INTERVAL)
+
+# =========================================================
+# TECHNIQUE CLASSIFIER (MITRE MAPPING INPUT)
+# =========================================================
+
+def classify_technique(severity, country):
+
+    # simple simulation logic (expand later)
+
+    if severity == "CRITICAL":
+        return "data_exfiltration"
+
+    if severity == "HIGH":
+        return random.choice([
+            "brute_force",
+            "command_and_control",
+            "lateral_movement"
+        ])
+
+    if severity == "MEDIUM":
+        return random.choice([
+            "port_scan",
+            "brute_force"
+        ])
+
+    return "port_scan"
 
 
 # =========================================================
@@ -123,10 +154,12 @@ async def attack_generator():
 
             event_id = str(uuid.uuid4())
 
+            technique = classify_technique(severity, country)
+
             event = {
                 "id": event_id,
                 "severity": severity,
-                "technique": "Botnet Storm",
+                "technique": technique,
                 "latitude": lat,
                 "longitude": lon,
                 "country_code": country,
@@ -231,6 +264,7 @@ def get_alerts(db: Session = Depends(get_db)):
                 country_code,
                 origin_label,
                 timestamp
+                status
             FROM alerts
             ORDER BY timestamp DESC
             LIMIT 500
@@ -249,7 +283,8 @@ def get_alerts(db: Session = Depends(get_db)):
                 "longitude": float(r[3]) if r[3] else 0,
                 "country_code": r[4],
                 "origin_label": r[5],
-                "timestamp": str(r[6])
+                "timestamp": str(r[6]),
+                "status": r[7] or "NEW"
             })
 
         return alerts
@@ -259,6 +294,40 @@ def get_alerts(db: Session = Depends(get_db)):
         print("ALERT API ERROR:", e)
 
         return []
+    
+# =========================================================
+# UPDATE ALERT STATUS (ACK / ESCALATE)
+# =========================================================
+
+@app.post("/alerts/update-status")
+def update_alert_status(data: dict, db: Session = Depends(get_db)):
+
+    try:
+
+        alert_id = data.get("id")
+        status = data.get("status")
+
+        if not alert_id or not status:
+            return {"error": "missing id or status"}
+
+        from sqlalchemy import text
+
+        db.execute(text("""
+            UPDATE alerts
+            SET status = :status
+            WHERE id = :id
+        """), {
+            "id": alert_id,
+            "status": status
+        })
+
+        db.commit()
+
+        return {"status": "updated"}
+
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
 
 
 # =========================================================
@@ -308,10 +377,12 @@ def simulate_attack(db: Session = Depends(get_db)):
 
     event_id = str(uuid.uuid4())
 
+    technique = classify_technique(severity, "US")
+
     event = {
         "id": event_id,
         "severity": severity,
-        "technique": "Simulation Attack",
+        "technique": technique,
         "latitude": lat,
         "longitude": lon,
         "country_code": "US",
@@ -341,7 +412,7 @@ def simulate_attack(db: Session = Depends(get_db)):
                 """), {
                     "id": event_id,
                     "severity": severity,
-                    "technique": "Simulation Attack",
+                    "technique": technique,
                     "latitude": lat,
                     "longitude": lon,
                     "country_code": "US",
