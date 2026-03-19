@@ -1371,15 +1371,26 @@ function createClusterMarker(cluster){
 
 
     points.push({
+
         lat: cluster.lat,
         lng: cluster.lng,
-        size: 2,
-        color: color
+
+        size: 2.5,
+        color: color,
+
+        // 🔥 MAKE IT CLICKABLE AS INCIDENT
+        incident_id: "INC-" + Date.now(),
+
+        count: cluster.count,
+        risk: cluster.risk,
+        last_seen: cluster.lastSeen
     })
 
     globe.ringsData(rings.concat(shockwaves))
-   globe.pointsData(points.concat(packets).concat(satellites).concat(incidents) || [])
-}
+    globe.pointsData(
+        points.concat(packets).concat(satellites).concat(incidents)
+    )
+
 
 // ======================================================
 // TIMELINE MARKERS
