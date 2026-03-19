@@ -440,7 +440,9 @@ if(arcs.length > MAX_ARCS){
     arcs.shift()
 }
 
-globe.arcsData(arcs)
+if(arcs.length > 0){
+    globe.arcsData(arcs)
+}
 
 }
 
@@ -466,7 +468,9 @@ if(arcs.length > MAX_ARCS){
 arcs.shift()
 }
 
-globe.arcsData(arcs)
+if(arcs.length > 0){
+    globe.arcsData(arcs)
+}
 
 }
 
@@ -498,7 +502,11 @@ function createAttackVolume(lat, lng, severity){
                 rings.shift()
             }
 
-            globe.ringsData(rings.concat(shockwaves))
+            const allRings = rings.concat(shockwaves)
+
+            if(allRings.length > 0){
+                globe.ringsData(allRings)
+            }
 
         }, i * 120)
 
@@ -571,7 +579,11 @@ if(points.length > MAX_POINTS){
 points.splice(0, points.length - MAX_POINTS)
 }
 
-globe.pointsData(points.concat(packets).concat(satellites) || [])
+const allPoints = points.concat(packets).concat(satellites)
+
+if(allPoints.length > 0){
+    globe.pointsData(allPoints)
+}
 
 }
 
@@ -630,7 +642,11 @@ packets.splice(i,1)
 }
 
 // update render layer
-globe.pointsData(points.concat(packets).concat(satellites) || [])
+const allPoints = points.concat(packets).concat(satellites)
+
+if(allPoints.length > 0){
+    globe.pointsData(allPoints)
+}
 
 }
 
@@ -671,7 +687,11 @@ if(shockwaves.length > 50){
 shockwaves.shift()
 }
 
-globe.ringsData(rings.concat(shockwaves))
+const allRings = rings.concat(shockwaves)
+
+if(allRings.length > 0){
+    globe.ringsData(allRings)
+}
 
 }
 
@@ -696,7 +716,11 @@ function createShieldPulse(){
                 rings.shift()
             }
 
-            globe.ringsData(rings.concat(shockwaves))
+            const allRings = rings.concat(shockwaves)
+
+            if(allRings.length > 0){
+                globe.ringsData(allRings)
+            }
 
         }, i * 150)
 
@@ -725,7 +749,11 @@ altitude:0.25
 
 }
 
-globe.pointsData(points.concat(packets).concat(satellites) || [])
+const allPoints = points.concat(packets).concat(satellites)
+
+if(allPoints.length > 0){
+    globe.pointsData(allPoints)
+}
 
 }
 
@@ -747,7 +775,11 @@ s.lng = -180
 
 })
 
-globe.pointsData(points.concat(packets).concat(satellites) || [])
+const allPoints = points.concat(packets).concat(satellites)
+
+if(allPoints.length > 0){
+    globe.pointsData(allPoints)
+}
 
 }
 
@@ -780,7 +812,9 @@ if(arcs.length > MAX_ARCS){
 arcs.splice(0, arcs.length - MAX_ARCS)
 }
 
-globe.arcsData(arcs)
+if(arcs.length > 0){
+    globe.arcsData(arcs)
+}
 
 }
 
