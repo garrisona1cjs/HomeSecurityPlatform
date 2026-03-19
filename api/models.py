@@ -36,11 +36,11 @@ class Alert(Base):
 # INCIDENT MODEL (CLUSTER / CAMPAIGN)
 # ======================================================
 
-from sqlalchemy import Column, String, Integer, DateTime
-from datetime import datetime
+
 
 class Incident(Base):
     __tablename__ = "incidents"
+    __table_args__ = {"extend_existing": True}
     
 
     id = Column(String, primary_key=True)
@@ -158,28 +158,7 @@ class EnrollmentToken(Base):
     organization = relationship("Organization")
 
 
-# =========================================================
-# INCIDENT CORRELATION
-# =========================================================
 
-class Incident(Base):
-
-    __tablename__ = "incidents"
-
-    id = Column(String, primary_key=True)
-
-    source_ip = Column(String)
-    asn = Column(String)
-    country_code = Column(String)
-
-    severity = Column(String)
-
-    alert_count = Column(Integer)
-
-    status = Column(String)
-
-    first_seen = Column(DateTime)
-    last_seen = Column(DateTime)
 
 
 # =========================================================
