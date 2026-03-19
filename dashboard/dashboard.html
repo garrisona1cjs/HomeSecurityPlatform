@@ -293,28 +293,36 @@ ALERT QUEUE PANEL
 <!-- ======================================================
 INCIDENT PANEL
 ====================================================== -->
-<div class="panel-content">
-    <p><strong>ID:</strong> <span id="incId"></span></p>
-    <p><strong>Events:</strong> <span id="incCount"></span></p>
-    <p><strong>Risk:</strong> <span id="incRisk"></span></p>
-    <p><strong>Last Seen:</strong> <span id="incTime"></span></p>
+<div id="incidentPanel" class="attack-panel hidden" style="top: 720px; width: 320px;">
 
-    <hr>
+    <div class="panel-header">
+        <span>🧠 Incident Intelligence</span>
+        <button onclick="closeIncidentPanel()">✖</button>
+    </div>
 
-    <!-- 🔥 SOC WORKFLOW -->
-    <h3 style="margin-top:10px;">Workflow</h3>
+    <div class="panel-content">
+        <p><strong>ID:</strong> <span id="incId"></span></p>
+        <p><strong>Events:</strong> <span id="incCount"></span></p>
+        <p><strong>Risk:</strong> <span id="incRisk"></span></p>
+        <p><strong>Last Seen:</strong> <span id="incTime"></span></p>
 
-    <button onclick="updateIncidentStatus('INVESTIGATING')">Investigate</button>
-    <button onclick="updateIncidentStatus('CONTAINED')">Contain</button>
-    <button onclick="updateIncidentStatus('RESOLVED')">Resolve</button>
+        <hr>
 
-    <br><br>
+        <h3 style="margin-top:10px;">Workflow</h3>
 
-    <input id="analystName" placeholder="Assign analyst" style="width:100%">
-    <button onclick="assignIncident()">Assign</button>
+        <button onclick="updateIncidentStatus('INVESTIGATING')">Investigate</button>
+        <button onclick="updateIncidentStatus('CONTAINED')">Contain</button>
+        <button onclick="updateIncidentStatus('RESOLVED')">Resolve</button>
+
+        <br><br>
+
+        <input id="analystName" placeholder="Assign analyst" style="width:100%">
+        <button onclick="assignIncident()">Assign</button>
+    </div>
+
 </div>
 
-</div>
+
 
 
 <script>
@@ -347,12 +355,12 @@ console.warn = function(...args){
     originalWarn.apply(console, args)
 }
 
-// suppress errors
-console.error = function(...args){
-    const msg = args.join(" ")
-    if (shouldSuppress(msg)) return
-    originalError.apply(console, args)
-}
+// suppress errors (TEMP DISABLED FOR DEBUGGING)
+// console.error = function(...args){
+//     const msg = args.join(" ")
+//     if (shouldSuppress(msg)) return
+//     originalError.apply(console, args)
+// }
 
 
 
@@ -1390,6 +1398,7 @@ function createClusterMarker(cluster){
     globe.pointsData(
         points.concat(packets).concat(satellites).concat(incidents)
     )
+    }
 
 
 // ======================================================
