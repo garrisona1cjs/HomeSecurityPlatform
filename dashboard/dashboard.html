@@ -1024,6 +1024,17 @@ function scrubTimeline(index){
 }
 
 // ======================================================
+// INTELLIGENCE ENGINE
+// ======================================================
+
+let clusters = []
+let CLUSTER_RADIUS = 5      // degrees
+let CLUSTER_TIME_WINDOW = 60000 // 60 seconds
+let CLUSTER_THRESHOLD = 5   // events to trigger cluster
+
+let timelineMarkers = []
+
+// ======================================================
 // TIMELINE EVENT SELECTION (INTELLIGENCE MODE)
 // ======================================================
 
@@ -1133,6 +1144,7 @@ function processAlert(alert){
     }
 
     updateSOCPanel()
+    detectCluster(alert)
 }
 
 // ======================================================
@@ -1165,7 +1177,109 @@ function renderReplayEvent(alert){
     if(alert.severity === "CRITICAL"){
         createShockwave(lat,lng)
     }
+
+    // ✅ ADD THIS LINE RIGHT HERE
+    detectCluster(alert)
+
+    }
+
+// ======================================================
+// CLUSTER DETECTION (CAMPAIGN INTELLIGENCE)
+// ======================================================
+
+function detectCluster(alert){
+
+    const now = new Date(alert.timestamp || Date.now()).getTime()
+
+    let cluster = clusters.find(c =>
+
+        Math.abs(c.lat - alert.latitude) < CLUSTER_RADIUS &&
+        Math.abs(c.lng - alert.longitude) < CLUSTER_RADIUS &&
+        (now - c.lastSeen) < CLUSTER_TIME_WINDOW
+
+    )
+
+    if(!cluster){
+
+        cluster = {
+            lat: alert.latitude,
+            lng: alert.longitude,
+            count: 0,
+            lastSeen: now,
+            events: []
+        }
+
+        clusters.push(cluster)
+    }
+
+    cluster.count++
+    cluster.lastSeen = now
+    cluster.events.push(alert)
+
+    // 🔴 TRIGGER CLUSTER EVENT
+    if(cluster.count >= CLUSTER_THRESHOLD && !cluster.triggered){
+
+        cluster.triggered = true
+
+        console.log("🚨 CLUSTER DETECTED", cluster)
+
+        createClusterMarker(cluster)
+        addTimelineMarker(alert, "CLUSTER")
+
+    }
 }
+
+// ======================================================
+// CLUSTER VISUALIZATION
+// ======================================================
+
+function createClusterMarker(cluster){
+
+    rings.push({
+        lat: cluster.lat,
+        lng: cluster.lng,
+        maxR: 12,
+        color: "#ff00ff"
+    })
+
+    // 🔥 ADD FLASH POINT
+    points.push({
+        lat: cluster.lat,
+        lng: cluster.lng,
+        size: 2,
+        color: "#ff00ff"
+    })
+
+    globe.ringsData(rings.concat(shockwaves))
+    globe.pointsData(points.concat(packets).concat(satellites))
+}
+
+// ======================================================
+// TIMELINE MARKERS
+// ======================================================
+
+function addTimelineMarker(alert, type){
+
+    timelineMarkers.push({
+        index: replayEvents.length - 1,
+        type: type,
+        time: alert.timestamp
+    })
+
+    renderTimelineMarkers()
+}
+
+function renderTimelineMarkers(){
+
+    const slider = document.getElementById("timelineSlider")
+
+    // basic visual indicator (console for now)
+    console.log("Markers:", timelineMarkers)
+
+    // (Phase 4 will add actual UI markers)
+}
+
+
 
 // ======================================================
 // RENDER ALERT QUEUE
