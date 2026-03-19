@@ -385,7 +385,7 @@ globe
 // ATTACK BEAM
 // ======================================================
 
-function createAttackBeam(lat,lng,severity,classifiedColor){
+function createAttackBeam(lat, lng, severity, classifiedColor, alert){
 
 const color = classifiedColor ||
 (
@@ -399,22 +399,23 @@ arcs.push({
 
     startLat:lat,
     startLng:lng,
+
     endLat:SOC_LAT,
     endLng:SOC_LON,
 
     color:[color,color],
 
-    // ✅ ADD THIS DATA
-    severity: severity,
-    technique: "port_scan",   // ← TEMP (we fix later with real data)
-    country: "Unknown",
-    timestamp: Date.now()
+    // ✅ REAL DATA FROM BACKEND
+    severity: alert.severity,
+    technique: alert.technique,
+    country: alert.country_code || "Unknown",
+    timestamp: alert.timestamp || Date.now()
 
 })
 
-// keep arc list bounded
+// limit arcs
 if(arcs.length > MAX_ARCS){
-arcs.shift()
+    arcs.shift()
 }
 
 globe.arcsData(arcs)
@@ -919,7 +920,13 @@ if(!lat || !lng) return
 // visualization
 const classifiedColor = classifyThreat(alert)
 
-createAttackBeam(lat,lng,alert.severity, classifiedColor)
+createAttackBeam(
+    lat,
+    lng,
+    alert.severity,
+    classifiedColor,
+    alert   // ✅ PASS FULL ALERT OBJECT
+)
 createReverseTrace(lat,lng)
 createSwarmBurst(lat,lng)
 createThreatFlash(lat,lng)
@@ -1122,7 +1129,11 @@ function openAttackPanel(attack){
 
     // Basic info
     document.getElementById("panelSeverity").innerText = attack.severity || "N/A"
-    document.getElementById("panelTechnique").innerText = attack.technique || "Unknown"
+    const readableTechnique = (attack.technique || "unknown")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, c => c.toUpperCase())
+
+    document.getElementById("panelTechnique").innerText = readableTechnique
     document.getElementById("panelCountry").innerText = attack.country || "Unknown"
     document.getElementById("panelTime").innerText =
         new Date(attack.timestamp || Date.now()).toLocaleString()
