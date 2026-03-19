@@ -389,6 +389,7 @@ let countryStats = {}
 
 let alertQueue = []
 
+
 // ======================================================
 // SOC ALERT QUEUE (UI TRACKING)
 // ======================================================
@@ -1071,6 +1072,8 @@ function scrubTimeline(index){
     rings = []
     points = []
     heatmap = []
+    clusters = []
+    timelineMarkers = []
 
     globe.arcsData(arcs)
     globe.ringsData([])
@@ -1281,8 +1284,7 @@ function detectCluster(alert){
         Math.abs(c.lat - alert.latitude) < CLUSTER_RADIUS &&
         Math.abs(c.lng - alert.longitude) < CLUSTER_RADIUS &&
         (now - c.lastSeen) < CLUSTER_TIME_WINDOW
-
-    )}
+    )
 
     if(!cluster){
 
@@ -1292,8 +1294,12 @@ function detectCluster(alert){
             count: 0,
             lastSeen: now,
             events: [],
-            risk: 0
+            risk: 0,
+            triggered: false
         }
+
+        clusters.push(cluster)
+    }
 
     cluster.count++
     cluster.lastSeen = now
@@ -1379,7 +1385,7 @@ function renderTimelineMarkers(){
 
     timelineMarkers.forEach(marker => {
 
-        const percent = (marker.index / total) * 100
+        const percent = total > 0 ? (marker.index / total) * 100 : 0
 
         const el = document.createElement("div")
 
@@ -1628,6 +1634,7 @@ function goLive(){
 
 function setSpeed(speed){
     replaySpeed = speed
+    startReplayTimer()
     console.log("Replay speed set:", speed)
 }
 
@@ -1658,7 +1665,15 @@ function replayLoop(){
     replayIndex++
 }
 
-setInterval(replayLoop, replaySpeed)
+let replayTimer = null
+
+function startReplayTimer(){
+    if(replayTimer) clearInterval(replayTimer)
+    replayTimer = setInterval(replayLoop, replaySpeed)
+}
+
+// start initially
+startReplayTimer()
 
 // ======================================================
 // MITRE ATT&CK MAPPING
