@@ -14,6 +14,7 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id = Column(String, primary_key=True)
+    incident_id = Column(String, nullable=True)
 
     agent_id = Column(String)
     organization_id = Column(Integer)
@@ -30,6 +31,53 @@ class Alert(Base):
 
     country_code = Column(String)
     shockwave = Column(String)
+
+# ======================================================
+# INCIDENT MODEL (CLUSTER / CAMPAIGN)
+# ======================================================
+
+from sqlalchemy import Column, String, Integer, DateTime
+from datetime import datetime
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id = Column(String, primary_key=True)
+
+    agent_id = Column(String, index=True)
+    organization_id = Column(String, index=True)
+
+    severity = Column(String)
+    risk_score = Column(Integer)
+
+    # 🔥 SOC WORKFLOW FIELDS
+    status = Column(String, default="NEW")  # NEW → INVESTIGATING → CONTAINED → RESOLVED
+    priority = Column(Integer, default=0)
+    assigned_to = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    class Incident(Base):
+    __tablename__ = "incidents"
+
+    id = Column(String, primary_key=True)
+    lat = Column(Float)
+    lng = Column(Float)
+
+    count = Column(Integer, default=1)
+    risk = Column(Integer, default=0)
+
+    last_seen = Column(DateTime)
+
+    # ======================================================
+    # INCIDENT WORKFLOW FIELDS (PHASE 9)
+    # ======================================================
+    status = Column(String, default="NEW")
+    assigned_to = Column(String, nullable=True)
+    priority = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 # =========================================================
