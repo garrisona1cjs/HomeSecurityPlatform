@@ -565,7 +565,7 @@ arcs.push({
     endLng:SOC_LON,
 
     color:[color,color],
-    
+
 
     severity: alert.severity,
     technique: alert.technique,
@@ -1170,7 +1170,10 @@ function selectTimelineEvent(index){
         severity: event.severity,
         technique: event.technique,
         country: event.country_code,
-        timestamp: event.timestamp
+        timestamp: event.timestamp,
+
+        // 🔥 ADD THIS
+        riskScore: calculateRiskScore(event)
     })
 }
 
@@ -1786,8 +1789,13 @@ function openAttackPanel(attack){
     document.getElementById("panelTime").innerText =
         new Date(attack.timestamp || Date.now()).toLocaleString()
 
-    document.getElementById("panelRisk").innerText =
-        attack.riskScore !== undefined ? attack.riskScore : "N/A"
+    let risk = attack.riskScore
+
+    if(risk === undefined){
+        risk = calculateRiskScore(attack)
+    }
+
+    document.getElementById("panelRisk").innerText = risk
 
     // Normalize technique → key
     const key = (attack.technique || "")
