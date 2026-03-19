@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from .database import engine, Base, get_db
 from .websocket_manager import connections, broadcast, event_queue
-from .models import Alert
+from .models import Alert, Incident
 
 
 
@@ -61,6 +61,12 @@ def update_alert_schema():
         conn.execute(text("""
         ALTER TABLE alerts
         ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'NEW'
+        """))
+
+        # ✅ ADD THIS RIGHT HERE
+        conn.execute(text("""
+        ALTER TABLE alerts
+        ADD COLUMN IF NOT EXISTS incident_id TEXT
         """))
 
         conn.commit()
@@ -328,6 +334,44 @@ def update_alert_status(data: dict, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         return {"error": str(e)}
+    
+# =========================================================
+# INCIDENT ENGINE
+# =========================================================
+
+from datetime import timedelta
+
+def find_or_create_incident(db, lat, lon):
+
+    now = datetime.utcnow()
+
+    incident = db.query(Incident).filter(
+        Incident.latitude.between(lat - 2, lat + 2),
+        Incident.longitude.between(lon - 2, lon + 2),
+        Incident.last_seen >= now - timedelta(seconds=60)
+    ).first()
+
+    if incident:
+        incident.event_count += 1
+        incident.last_seen = now
+        return incident
+
+    # create new incident
+    incident = Incident(
+        id=str(uuid.uuid4()),
+        latitude=lat,
+        longitude=lon,
+        event_count=1,
+        risk_score=0,
+        first_seen=now,
+        last_seen=now
+    )
+
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
+
+    return incident
 
 
 # =========================================================
@@ -398,6 +442,12 @@ def simulate_attack(db: Session = Depends(get_db)):
     # STORE ALERT IN DATABASE
     # -------------------------------------------------
 
+    # ==================================================
+    # INCIDENT LINKING
+    # ==================================================
+
+    incident = find_or_create_incident(db, lat, lon)
+
     try:
 
         from sqlalchemy import text
@@ -406,11 +456,12 @@ def simulate_attack(db: Session = Depends(get_db)):
 
             db.execute(text("""
                     INSERT INTO alerts
-                    (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp)
+                    (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp, incident_id)
                     VALUES
-                    (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp)
+                    (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp, :incident_id)
                 """), {
                     "id": event_id,
+                    "incident_id": incident.id,
                     "severity": severity,
                     "technique": technique,
                     "latitude": lat,
@@ -444,6 +495,29 @@ def simulate_attack(db: Session = Depends(get_db)):
         return {"status":"db_error","error":str(e)}
 
     return {"status":"event generated"}
+
+# =========================================================
+# INCIDENT API
+# =========================================================
+
+@app.get("/incidents")
+def get_incidents(db: Session = Depends(get_db)):
+
+    incidents = db.query(Incident).order_by(
+        Incident.last_seen.desc()
+    ).limit(100).all()
+
+    return [
+        {
+            "id": i.id,
+            "lat": i.latitude,
+            "lng": i.longitude,
+            "count": i.event_count,
+            "risk": i.risk_score,
+            "last_seen": i.last_seen
+        }
+        for i in incidents
+    ]
 
 
 
