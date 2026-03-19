@@ -1282,7 +1282,7 @@ function detectCluster(alert){
         Math.abs(c.lng - alert.longitude) < CLUSTER_RADIUS &&
         (now - c.lastSeen) < CLUSTER_TIME_WINDOW
 
-    )
+    )}
 
     if(!cluster){
 
@@ -1330,7 +1330,7 @@ function createClusterMarker(cluster){
         maxR: 12,
         color: color
     })
-    
+
 
     points.push({
         lat: cluster.lat,
