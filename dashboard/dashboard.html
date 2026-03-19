@@ -308,6 +308,8 @@ let arcs = []
 let rings = []
 let points = []
 
+
+
 // heatmap attack density
 let heatmap = []
 
@@ -998,7 +1000,7 @@ function scrubTimeline(index){
     // rebuild timeline up to selected point
     for(let i = 0; i <= replayIndex; i++){
 
-        processAlert(replayEvents[i])
+        renderReplayEvent(replayEvents[i])
 
     }
 
@@ -1123,6 +1125,38 @@ function processAlert(alert){
     }
 
     updateSOCPanel()
+}
+
+// ======================================================
+// REPLAY RENDER (NO SIDE EFFECTS)
+// ======================================================
+
+function renderReplayEvent(alert){
+
+    const lat = alert.latitude
+    const lng = alert.longitude
+
+    if(!lat || !lng) return
+
+    const classifiedColor = classifyThreat(alert)
+
+    createAttackBeam(lat, lng, alert.severity, classifiedColor, alert)
+    createReverseTrace(lat,lng)
+    createSwarmBurst(lat,lng)
+    createThreatFlash(lat,lng)
+    addHeat(lat,lng)
+    createPacketStream(lat,lng)
+    createStorm(lat,lng)
+    createSatelliteBeam(lat,lng)
+
+    if(alert.severity === "HIGH" || alert.severity === "CRITICAL"){
+        createAttackVolume(lat, lng, alert.severity)
+        createShieldPulse()
+    }
+
+    if(alert.severity === "CRITICAL"){
+        createShockwave(lat,lng)
+    }
 }
 
 // ======================================================
@@ -1459,10 +1493,18 @@ msg.events.forEach(alert=>{
     // STORE FOR REPLAY (ONLY HERE)
     replayEvents.push({
         ...alert,
+        latitude: parseFloat(alert.latitude),
+        longitude: parseFloat(alert.longitude),
         ts: new Date(alert.timestamp || Date.now())
     })
 
-    document.getElementById("timelineSlider").max = replayEvents.length - 1
+    const slider = document.getElementById("timelineSlider")
+
+    slider.max = replayEvents.length - 1
+
+    if(!isScrubbing && !isReplaying){
+        slider.value = replayEvents.length - 1
+    }
 
     if(alertQueue.length>MAX_QUEUE){
         EVENT_DROP_COUNT++
@@ -1499,10 +1541,18 @@ data.forEach(alert=>{
     // STORE FOR REPLAY
     replayEvents.push({
         ...alert,
+        latitude: parseFloat(alert.latitude),
+        longitude: parseFloat(alert.longitude),
         ts: new Date(alert.timestamp || Date.now())
     })
 
-    document.getElementById("timelineSlider").max = replayEvents.length - 1
+    const slider = document.getElementById("timelineSlider")
+
+    slider.max = replayEvents.length - 1
+
+    if(!isScrubbing && !isReplaying){
+        slider.value = replayEvents.length - 1
+    }
 
     processAlert(alert)
 
