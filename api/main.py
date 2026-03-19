@@ -35,6 +35,10 @@ from .models import Alert, Incident
 
 app = FastAPI(title="LayerSeven Security Platform")
 
+from api import incidents
+
+app.include_router(incidents.router)
+
 
 # =========================================================
 # DATABASE INITIALIZATION
@@ -64,6 +68,7 @@ def update_alert_schema():
             conn.execute(text("ALTER TABLE alerts ADD COLUMN status TEXT DEFAULT 'NEW'"))
 
         if "incident_id" not in columns:
+
             conn.execute(text("ALTER TABLE alerts ADD COLUMN incident_id TEXT"))
 
         conn.commit()
@@ -261,14 +266,14 @@ def get_alerts(db: Session = Depends(get_db)):
 
         result = db.execute(text("""
             SELECT severity,
-                technique,
-                latitude,
-                longitude,
-                country_code,
-                origin_label,
-                timestamp
-                status
-            FROM alerts
+            technique,
+            latitude,
+            longitude,
+            country_code,
+            origin_label,
+            timestamp,
+            status
+        FROM alerts
             ORDER BY timestamp DESC
             LIMIT 500
         """))
@@ -349,18 +354,17 @@ def find_or_create_incident(db, lat, lon):
     ).first()
 
     if incident:
-        incident.event_count += 1
+        incident.count += 1
         incident.last_seen = now
         return incident
 
     # create new incident
     incident = Incident(
         id=str(uuid.uuid4()),
-        latitude=lat,
-        longitude=lon,
-        event_count=1,
-        risk_score=0,
-        first_seen=now,
+        lat=lat,
+        lng=lon,
+        count=1,
+        risk=0,
         last_seen=now
     )
 
@@ -384,27 +388,7 @@ def simulate_attack(db: Session = Depends(get_db)):
     # DATABASE SCHEMA FIX (runs safely every time)
     # -------------------------------------------------
 
-    try:
-
-        with engine.connect() as conn:
-
-            conn.execute(text("""
-            ALTER TABLE alerts
-            ALTER COLUMN latitude TYPE DOUBLE PRECISION
-            USING latitude::double precision
-            """))
-
-            conn.execute(text("""
-            ALTER TABLE alerts
-            ALTER COLUMN longitude TYPE DOUBLE PRECISION
-            USING longitude::double precision
-            """))
-
-            conn.commit()
-
-    except Exception as e:
-
-        print("Schema already correct or skipped:", e)
+   
 
 
     # -------------------------------------------------
@@ -507,10 +491,10 @@ def get_incidents(db: Session = Depends(get_db)):
     return [
         {
             "id": i.id,
-            "lat": i.latitude,
-            "lng": i.longitude,
-            "count": i.event_count,
-            "risk": i.risk_score,
+            "lat": i.lat,
+            "lng": i.lng,
+            "count": i.count,
+            "risk": i.risk,
             "last_seen": i.last_seen
         }
         for i in incidents
