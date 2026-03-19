@@ -1951,8 +1951,13 @@ async function loadIncidents(){
 load()
 loadIncidents()
 
-// refresh every 5 seconds
-setInterval(loadIncidents, 5000)
+// ======================================================
+// INCIDENT REFRESH (SAFE - SINGLE INSTANCE)
+// ======================================================
+
+if(!window.incidentInterval){
+    window.incidentInterval = setInterval(loadIncidents, 5000)
+}
 
 // ======================================================
 // GLOBE ROTATION
