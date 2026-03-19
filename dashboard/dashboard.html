@@ -197,6 +197,21 @@ ATTACK DETAILS PANEL
     </div>
 </div>
 
+<!-- ======================================================
+ALERT QUEUE PANEL
+====================================================== -->
+<div id="alertQueuePanel" class="attack-panel" style="top: 400px; width: 320px;">
+
+    <div class="panel-header">
+        <span>📋 Alert Queue</span>
+    </div>
+
+    <div id="alertQueueList" class="panel-content" style="max-height:300px; overflow-y:auto;">
+        <!-- alerts will populate here -->
+    </div>
+
+</div>
+
 
 <script>
 
@@ -292,6 +307,12 @@ MEDIUM:0
 let countryStats = {}
 
 let alertQueue = []
+
+// ======================================================
+// SOC ALERT QUEUE (UI TRACKING)
+// ======================================================
+
+let alertUIQueue = []
 
 // ======================================================
 // REPLAY SYSTEM
@@ -911,65 +932,146 @@ function scrubTimeline(index){
 
 function processAlert(alert){
 
+    const lat = parseFloat(alert.latitude)
+    const lng = parseFloat(alert.longitude)
 
-const lat=parseFloat(alert.latitude)
-const lng=parseFloat(alert.longitude)
+    // ❌ DO NOT PROCESS INVALID DATA
+    if(!lat || !lng) return
 
-if(!lat || !lng) return
+    // ==================================================
+    // ✅ ADD TO UI QUEUE (AFTER VALIDATION)
+    // ==================================================
 
-// visualization
-const classifiedColor = classifyThreat(alert)
+    alertUIQueue.unshift({
+        ...alert,
+        status: "NEW"
+    })
 
-createAttackBeam(
-    lat,
-    lng,
-    alert.severity,
-    classifiedColor,
-    alert   // ✅ PASS FULL ALERT OBJECT
-)
-createReverseTrace(lat,lng)
-createSwarmBurst(lat,lng)
-createThreatFlash(lat,lng)
-addHeat(lat,lng)
-focusAttack(lat,lng)
-createPacketStream(lat,lng)
-createStorm(lat,lng)
-createSatelliteBeam(lat,lng)
+    if(alertUIQueue.length > 50){
+        alertUIQueue.pop()
+    }
 
-// volumetric + shield
-if(alert.severity === "HIGH" || alert.severity === "CRITICAL"){
-    createAttackVolume(lat, lng, alert.severity)
-    createShieldPulse()
+    renderAlertQueue()
+
+    // ==================================================
+    // VISUALIZATION
+    // ==================================================
+
+    const classifiedColor = classifyThreat(alert)
+
+    createAttackBeam(
+        lat,
+        lng,
+        alert.severity,
+        classifiedColor,
+        alert
+    )
+
+    createReverseTrace(lat,lng)
+    createSwarmBurst(lat,lng)
+    createThreatFlash(lat,lng)
+    addHeat(lat,lng)
+    focusAttack(lat,lng)
+    createPacketStream(lat,lng)
+    createStorm(lat,lng)
+    createSatelliteBeam(lat,lng)
+
+    if(alert.severity === "HIGH" || alert.severity === "CRITICAL"){
+        createAttackVolume(lat, lng, alert.severity)
+        createShieldPulse()
+    }
+
+    if(alert.severity === "CRITICAL"){
+        createShockwave(lat,lng)
+    }
+
+    // ==================================================
+    // STATS
+    // ==================================================
+
+    if(alert.severity && severityStats[alert.severity] !== undefined){
+        severityStats[alert.severity]++
+    }
+
+    if(alert.country_code){
+        countryStats[alert.country_code] =
+        (countryStats[alert.country_code] || 0) + 1
+    }
+
+    updateSOCPanel()
 }
 
+// ======================================================
+// RENDER ALERT QUEUE
+// ======================================================
 
+function renderAlertQueue(){
 
-// critical shockwave
-if(alert.severity === "CRITICAL"){
-    createShockwave(lat,lng)
+    const container = document.getElementById("alertQueueList")
+
+    let html = ""
+
+    alertUIQueue.forEach((alert) => {
+
+        const color =
+            alert.severity === "CRITICAL" ? "#ff0033" :
+            alert.severity === "HIGH" ? "#ff5500" :
+            alert.severity === "MEDIUM" ? "#ffaa00" :
+            "#00ffff"
+
+        html += `
+        <div style="border-bottom:1px solid #222; padding:6px;">
+
+            <div style="color:${color}; font-size:12px;">
+                ${alert.severity} - ${alert.technique || "unknown"}
+            </div>
+
+            <div style="font-size:10px; color:#999;">
+                ${alert.status}
+            </div>
+
+            <div style="font-size:11px;">
+                ${alert.country_code || "??"}
+            </div>
+
+            <div style="margin-top:4px;">
+                <button onclick="ackAlert('${alert.id}')">✅</button>
+                <button onclick="escalateAlert('${alert.id}')">🚨</button>
+            </div>
+
+        </div>
+        `
+    })
+
+    container.innerHTML = html
 }
 
-// track severity
+// ======================================================
+// ALERT ACTIONS (ID-BASED)
+// ======================================================
 
-if(alert.severity && severityStats[alert.severity] !== undefined){
+function ackAlert(id){
 
-severityStats[alert.severity]++
+    const alert = alertUIQueue.find(a => a.id === id)
+    if(!alert) return
 
+    alert.status = "ACK"
 
+    console.log("ACK:", alert)
+
+    renderAlertQueue()
 }
 
-// track country
+function escalateAlert(id){
 
-if(alert.country_code){
+    const alert = alertUIQueue.find(a => a.id === id)
+    if(!alert) return
 
-countryStats[alert.country_code] =
+    alert.status = "ESCALATED"
 
-(countryStats[alert.country_code] || 0) + 1
+    console.log("ESCALATED:", alert)
 
-}
-
-updateSOCPanel()
-
+    renderAlertQueue()
 }
 
 // ======================================================
