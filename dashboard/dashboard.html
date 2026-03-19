@@ -152,6 +152,13 @@ SOC PANEL
 <button onclick="startReplay()">▶ Play</button>
 <button onclick="pauseReplay()">⏸ Pause</button>
 <button onclick="resetReplay()">🔄 Reset</button>
+<button onclick="goLive()">📡 LIVE</button>
+
+<br><br>
+
+<button onclick="setSpeed(300)">1x</button>
+<button onclick="setSpeed(80)">5x</button>
+<button onclick="setSpeed(20)">20x</button>
 
 
 
@@ -380,6 +387,7 @@ let isReplaying = false
 let replaySpeed = 300
 
 let isScrubbing = false   // ✅ ADD THIS LINE RIGHT HERE
+let isLiveMode = true   // ✅ NEW
 
 // SOC visual safety limits
 const MAX_ARCS = 500
@@ -981,9 +989,9 @@ globe.heatmapsData([heatmap])
 
 function scrubTimeline(index){
 
+    isLiveMode = false
     isReplaying = false
-
-    isScrubbing = true   // ✅ ADD HERE (VERY TOP, after stopping replay)
+    isScrubbing = true
 
     replayIndex = parseInt(index)
 
@@ -1341,7 +1349,11 @@ function startReplay(){
         return
     }
 
-    // RESET VISUAL STATE
+    isLiveMode = false
+    isReplaying = true
+    isScrubbing = false
+
+    // reset visual state
     arcs = []
     rings = []
     points = []
@@ -1351,8 +1363,7 @@ function startReplay(){
     globe.ringsData([])
     globe.pointsData([])
 
-    isReplaying = true
-    replayIndex = 0
+    replayIndex = parseInt(document.getElementById("timelineSlider").value) || 0
 }
 
 function pauseReplay(){
@@ -1362,6 +1373,25 @@ function pauseReplay(){
 function resetReplay(){
     isReplaying = false
     replayIndex = 0
+}
+
+function goLive(){
+
+    isLiveMode = true
+    isReplaying = false
+    isScrubbing = false
+
+    replayIndex = replayEvents.length - 1
+
+    const slider = document.getElementById("timelineSlider")
+    slider.value = replayIndex
+
+    console.log("Switched to LIVE mode")
+}
+
+function setSpeed(speed){
+    replaySpeed = speed
+    console.log("Replay speed set:", speed)
 }
 
 function replayLoop(){
@@ -1375,20 +1405,21 @@ function replayLoop(){
 
     const event = replayEvents[replayIndex]
 
-    // highlight selected event
+    // render WITHOUT side effects
+    renderReplayEvent(event)
+
+    // subtle highlight
     createThreatFlash(event.latitude, event.longitude)
 
-    processAlert(event)
-
-    // update slider
+    // update UI
     document.getElementById("timelineSlider").value = replayIndex
 
-    // update time display
+
     document.getElementById("timelineTime").innerText =
         `${formatTime(event.ts)} | ${event.technique || "unknown"}`
 
-        replayIndex++
-    }
+    replayIndex++
+}
 
 setInterval(replayLoop, replaySpeed)
 
@@ -1504,6 +1535,14 @@ msg.events.forEach(alert=>{
 
     if(!isScrubbing && !isReplaying){
         slider.value = replayEvents.length - 1
+    }
+
+    // AUTO FOLLOW LIVE
+    if(isLiveMode){
+        replayIndex = replayEvents.length - 1
+
+        const slider = document.getElementById("timelineSlider")
+        slider.value = replayIndex
     }
 
     if(alertQueue.length>MAX_QUEUE){
