@@ -23,53 +23,85 @@ SOC PANEL
 ====================================================== */
 
 #socPanel{
-
-position:absolute;
-top:20px;
-left:20px;
-
-width:220px;
-
-background:rgba(0,0,0,0.7);
-border:1px solid #00ffff;
-
-padding:14px;
-
-color:#00ffff;
-font-size:14px;
-
-backdrop-filter:blur(6px);
-
+  position:absolute;
+  top:20px;
+  left:20px;
+  width:220px;
+  background:rgba(0,0,0,0.7);
+  border:1px solid #00ffff;
+  padding:14px;
+  color:#00ffff;
+  font-size:14px;
+  backdrop-filter:blur(6px);
 }
 
 .panelTitle{
-
-font-weight:bold;
-margin-top:10px;
-margin-bottom:6px;
-
-color:#ffffff;
-
+  font-weight:bold;
+  margin-top:10px;
+  margin-bottom:6px;
+  color:#ffffff;
 }
 
 .metric{
-
-display:flex;
-justify-content:space-between;
-margin-bottom:4px;
-
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:4px;
 }
 
 #countryList{
-
-margin-top:8px;
-font-size:13px;
-
+  margin-top:8px;
+  font-size:13px;
 }
 
 #globeViz{
   width:100vw;
   height:100vh;
+}
+
+/* ======================================================
+ATTACK PANEL STYLE
+====================================================== */
+
+.attack-panel {
+    position: absolute;
+    right: 20px;
+    top: 80px;
+    width: 280px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid #00ffff;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(0,255,255,0.3);
+    color: #00ffff;
+    font-family: monospace;
+    z-index: 9999;
+    backdrop-filter: blur(6px);
+}
+
+.attack-panel.hidden {
+    display: none;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+    border-bottom: 1px solid rgba(0,255,255,0.2);
+    font-weight: bold;
+}
+
+.panel-header button {
+    background: none;
+    border: none;
+    color: #ff4d4d;
+    cursor: pointer;
+}
+
+.panel-content {
+    padding: 10px;
+}
+
+.panel-content p {
+    margin: 5px 0;
 }
 
 </style>
@@ -81,7 +113,7 @@ font-size:13px;
 <div id="globeViz"></div>
 
 <!-- ======================================================
-SOC INTELLIGENCE PANEL
+SOC PANEL
 ====================================================== -->
 
 <div id="socPanel">
@@ -108,9 +140,12 @@ SOC INTELLIGENCE PANEL
 <div id="countryList"></div>
 
 
-<!-- ======================================================
-REPLAY CONTROLS
-====================================================== -->
+
+
+
+
+
+
 
 <div class="panelTitle">REPLAY CONTROLS</div>
 
@@ -119,9 +154,7 @@ REPLAY CONTROLS
 <button onclick="resetReplay()">🔄 Reset</button>
 
 
-<!-- ======================================================
-TIMELINE SLIDER
-====================================================== -->
+
 
 <div class="panelTitle">TIMELINE</div>
 
@@ -137,7 +170,37 @@ TIMELINE SLIDER
 --:--:--
 </div>
 
+</div> <!-- END socPanel -->
+
+
+<!-- ======================================================
+ATTACK DETAILS PANEL
+====================================================== -->
+
+<div id="attackPanel" class="attack-panel hidden">
+    <div class="panel-header">
+        <span>⚠️ Attack Details</span>
+        <button onclick="closeAttackPanel()">✖</button>
+    </div>
+
+    <div class="panel-content">
+        <p><strong>Severity:</strong> <span id="panelSeverity"></span></p>
+        <p><strong>Technique:</strong> <span id="panelTechnique"></span></p>
+
+        <p><strong>MITRE ID:</strong> <span id="panelMitreId"></span></p>
+        <p><strong>Tactic:</strong> <span id="panelMitreTactic"></span></p>
+        <p><strong>Description:</strong></p>
+        <p id="panelMitreDesc" style="font-size:12px;"></p>
+
+        <p><strong>Country:</strong> <span id="panelCountry"></span></p>
+        <p><strong>Timestamp:</strong> <span id="panelTime"></span></p>
+    </div>
+</div>
+
+
 <script>
+
+
 
 
 // ======================================================
@@ -272,6 +335,13 @@ globe
 .arcColor("color")
 .arcAltitude(0.25)
 .arcStroke(0.8)
+.onArcClick(d => {
+
+    if(isScrubbing) return
+
+    openAttackPanel(d)
+
+})
 .arcDashLength(0.4)
 .arcDashGap(4)
 .arcDashAnimateTime(1200)
@@ -327,13 +397,18 @@ severity === "MEDIUM" ? "#ffaa00" :
 
 arcs.push({
 
-startLat:lat,
-startLng:lng,
+    startLat:lat,
+    startLng:lng,
+    endLat:SOC_LAT,
+    endLng:SOC_LON,
 
-endLat:SOC_LAT,
-endLng:SOC_LON,
+    color:[color,color],
 
-color:[color,color]
+    // ✅ ADD THIS DATA
+    severity: severity,
+    technique: "port_scan",   // ← TEMP (we fix later with real data)
+    country: "Unknown",
+    timestamp: Date.now()
 
 })
 
@@ -998,6 +1073,81 @@ function replayLoop(){
 }
 
 setInterval(replayLoop, replaySpeed)
+
+// ======================================================
+// MITRE ATT&CK MAPPING
+// ======================================================
+
+const MITRE_MAP = {
+
+    "brute_force": {
+        id: "T1110",
+        tactic: "Credential Access",
+        description: "Adversaries attempt to guess passwords or credentials."
+    },
+
+    "port_scan": {
+        id: "T1046",
+        tactic: "Discovery",
+        description: "Scanning for open ports and exposed services."
+    },
+
+    "command_and_control": {
+        id: "T1071",
+        tactic: "Command and Control",
+        description: "Application layer protocol used for C2 communication."
+    },
+
+    "data_exfiltration": {
+        id: "T1041",
+        tactic: "Exfiltration",
+        description: "Data exfiltration over command channels."
+    },
+
+    "lateral_movement": {
+        id: "T1021",
+        tactic: "Lateral Movement",
+        description: "Moving through the network to access other systems."
+    }
+
+}
+
+// ======================================================
+// ATTACK PANEL LOGIC (MITRE ENABLED)
+// ======================================================
+
+function openAttackPanel(attack){
+
+    document.getElementById("attackPanel").classList.remove("hidden")
+
+    // Basic info
+    document.getElementById("panelSeverity").innerText = attack.severity || "N/A"
+    document.getElementById("panelTechnique").innerText = attack.technique || "Unknown"
+    document.getElementById("panelCountry").innerText = attack.country || "Unknown"
+    document.getElementById("panelTime").innerText =
+        new Date(attack.timestamp || Date.now()).toLocaleString()
+
+    // Normalize technique → key
+    const key = (attack.technique || "")
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+
+    const mitre = MITRE_MAP[key]
+
+    if(mitre){
+        document.getElementById("panelMitreId").innerText = mitre.id
+        document.getElementById("panelMitreTactic").innerText = mitre.tactic
+        document.getElementById("panelMitreDesc").innerText = mitre.description
+    } else {
+        document.getElementById("panelMitreId").innerText = "N/A"
+        document.getElementById("panelMitreTactic").innerText = "Unknown"
+        document.getElementById("panelMitreDesc").innerText = "No mapping available"
+    }
+}
+
+function closeAttackPanel(){
+    document.getElementById("attackPanel").classList.add("hidden")
+}
 
 
 // ======================================================
