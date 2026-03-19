@@ -1136,7 +1136,7 @@ function scrubTimeline(index){
 let clusters = []
 let CLUSTER_RADIUS = 5      // degrees
 let CLUSTER_TIME_WINDOW = 60000 // 60 seconds
-let CLUSTER_THRESHOLD = 5   // events to trigger cluster
+let CLUSTER_THRESHOLD = 3  // events to trigger cluster
 
 let timelineMarkers = []
 
@@ -1802,7 +1802,7 @@ function openIncidentPanel(inc){
 
     document.getElementById("incTime").innerText =
         new Date(inc.last_seen).toLocaleString()
-        
+
 
     createShockwave(inc.lat, inc.lng)
 }
