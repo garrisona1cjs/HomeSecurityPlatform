@@ -48,26 +48,23 @@ def update_alert_schema():
 
     with engine.connect() as conn:
 
-        conn.execute(text("""
-        ALTER TABLE alerts
-        ADD COLUMN IF NOT EXISTS organization_id INTEGER
-        """))
+        # get existing columns
+        result = conn.execute(text("PRAGMA table_info(alerts)"))
+        columns = [row[1] for row in result.fetchall()]
 
-        conn.execute(text("""
-        ALTER TABLE alerts
-        ADD COLUMN IF NOT EXISTS risk_score INTEGER
-        """))
+        # add missing columns safely (SQLite compatible)
 
-        conn.execute(text("""
-        ALTER TABLE alerts
-        ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'NEW'
-        """))
+        if "organization_id" not in columns:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN organization_id INTEGER"))
 
-        # ✅ ADD THIS RIGHT HERE
-        conn.execute(text("""
-        ALTER TABLE alerts
-        ADD COLUMN IF NOT EXISTS incident_id TEXT
-        """))
+        if "risk_score" not in columns:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN risk_score INTEGER"))
+
+        if "status" not in columns:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN status TEXT DEFAULT 'NEW'"))
+
+        if "incident_id" not in columns:
+            conn.execute(text("ALTER TABLE alerts ADD COLUMN incident_id TEXT"))
 
         conn.commit()
 
