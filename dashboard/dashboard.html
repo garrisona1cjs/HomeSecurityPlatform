@@ -304,6 +304,7 @@ INCIDENT PANEL
         <p><strong>ID:</strong> <span id="incId"></span></p>
         <p><strong>Events:</strong> <span id="incCount"></span></p>
         <p><strong>Risk:</strong> <span id="incRisk"></span></p>
+        <p><strong>Priority:</strong> <span id="incPriority"></span></p>
         <p><strong>Last Seen:</strong> <span id="incTime"></span></p>
 
         <hr>
@@ -1825,11 +1826,11 @@ function openIncidentPanel(inc){
     selectedIncidentId = inc.incident_id
 
     document.getElementById("incidentPanel").classList.remove("hidden")
-
+    
     document.getElementById("incId").innerText = inc.incident_id
     document.getElementById("incCount").innerText = inc.count
     document.getElementById("incRisk").innerText = inc.risk
-
+    document.getElementById("incPriority").innerText = inc.priority || 0
     document.getElementById("incTime").innerText =
         new Date(inc.last_seen).toLocaleString()
 
@@ -1960,6 +1961,7 @@ async function loadIncidents(){
             incident_id: i.id,
             count: i.count,
             risk: i.risk,
+            priority: i.priority,
             last_seen: i.last_seen
 
         }))
