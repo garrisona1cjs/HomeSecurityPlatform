@@ -71,7 +71,19 @@ def update_alert_schema():
 
             conn.execute(text("ALTER TABLE alerts ADD COLUMN incident_id TEXT"))
 
-        conn.commit()
+            # ======================================================
+            # INCIDENT TABLE UPDATE (SLA ESCALATION SUPPORT)
+            # ======================================================
+
+            result_inc = conn.execute(text("PRAGMA table_info(incidents)"))
+            inc_columns = [row[1] for row in result_inc.fetchall()]
+
+            if "escalation_level" not in inc_columns:
+                conn.execute(text(
+                    "ALTER TABLE incidents ADD COLUMN escalation_level INTEGER DEFAULT 0"
+                ))
+
+                conn.commit()
 
 update_alert_schema()
 
@@ -208,17 +220,36 @@ async def escalation_engine():
 
                 if inc.sla_deadline and now > inc.sla_deadline:
 
-                    if inc.status == "NEW":
+                    # MAX ESCALATION GUARD
+                    if inc.escalation_level >= 3:
+                        continue
+
+                    inc.escalation_level += 1
+
+                    # STATUS PROGRESSION
+                    if inc.escalation_level == 1:
                         inc.status = "INVESTIGATING"
 
-                    elif inc.status == "INVESTIGATING":
+                    elif inc.escalation_level == 2:
                         inc.status = "CONTAINED"
 
-                    inc.priority = min((inc.priority or 0) + 20, 100)
+                    elif inc.escalation_level == 3:
+                        inc.status = "CRITICAL_RESPONSE"
 
-                    inc.sla_deadline = now + timedelta(seconds=60)
+                    # PRIORITY BOOST
+                    inc.priority = min((inc.priority or 0) + 25, 100)
 
-                    print(f"🚨 AUTO-ESCALATED: {inc.id} → {inc.status}")
+                    # NEW SLA WINDOW (SHORTER EACH LEVEL)
+                    if inc.escalation_level == 1:
+                        inc.sla_deadline = now + timedelta(seconds=60)
+
+                    elif inc.escalation_level == 2:
+                        inc.sla_deadline = now + timedelta(seconds=45)
+
+                    else:
+                        inc.sla_deadline = now + timedelta(seconds=30)
+
+                    print(f"🚨 ESCALATED L{inc.escalation_level}: {inc.id} → {inc.status}")
 
             db.commit()
 
@@ -447,6 +478,7 @@ def find_or_create_incident(db, lat, lon):
         last_seen=now,
         status="NEW",
         priority=0,
+        escalation_level=0,
         created_at=now,
         updated_at=now,
         sla_deadline=now + timedelta(seconds=60)
