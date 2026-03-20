@@ -9,7 +9,7 @@ import asyncio
 
 import random
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, WebSocket, Depends
 from fastapi.responses import HTMLResponse
@@ -183,6 +183,52 @@ async def attack_generator():
         # cooldown between storms
         await asyncio.sleep(random.uniform(6,12))
 
+# =========================================================
+# AUTO ESCALATION ENGINE (SLA ENFORCEMENT)
+# =========================================================
+
+async def escalation_engine():
+
+    while True:
+
+        await asyncio.sleep(5)
+
+        db = next(get_db())
+
+        try:
+
+            now = datetime.utcnow()
+
+            incidents = db.query(Incident).all()
+
+            for inc in incidents:
+
+                if inc.status == "RESOLVED":
+                    continue
+
+                if inc.sla_deadline and now > inc.sla_deadline:
+
+                    if inc.status == "NEW":
+                        inc.status = "INVESTIGATING"
+
+                    elif inc.status == "INVESTIGATING":
+                        inc.status = "CONTAINED"
+
+                    inc.priority = min((inc.priority or 0) + 20, 100)
+
+                    inc.sla_deadline = now + timedelta(seconds=60)
+
+                    print(f"🚨 AUTO-ESCALATED: {inc.id} → {inc.status}")
+
+            db.commit()
+
+        except Exception as e:
+            db.rollback()
+            print("ESCALATION ERROR:", e)
+
+        finally:
+            db.close()
+
 
 # =========================================================
 # STARTUP EVENTS
@@ -194,6 +240,8 @@ async def start_engines():
     asyncio.create_task(event_dispatcher())
 
     asyncio.create_task(attack_generator())
+
+    asyncio.create_task(escalation_engine())
 
 
 # =========================================================
@@ -341,7 +389,7 @@ def update_alert_status(data: dict, db: Session = Depends(get_db)):
 # INCIDENT ENGINE
 # =========================================================
 
-from datetime import timedelta
+
 
 def calculate_incident_priority(incident):
     """
@@ -397,7 +445,11 @@ def find_or_create_incident(db, lat, lon):
         count=1,
         risk=0,
         last_seen=now,
-        priority=10
+        status="NEW",
+        priority=0,
+        created_at=now,
+        updated_at=now,
+        sla_deadline=now + timedelta(seconds=60)
     )
 
     db.add(incident)
@@ -528,7 +580,8 @@ def get_incidents(db: Session = Depends(get_db)):
             "count": i.count,
             "risk": i.risk,
             "priority": i.priority,
-            "status": i.status,   # ✅ ADD THIS
+            "status": i.status,
+            "sla_deadline": i.sla_deadline,
             "last_seen": i.last_seen
         }
         for i in incidents
