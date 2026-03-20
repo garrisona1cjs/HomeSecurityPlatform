@@ -155,6 +155,20 @@ ATTACK PANEL STYLE
     gap:6px;
 }
 
+/* ======================================================
+SLA CRITICAL PULSE
+====================================================== */
+
+.slaCritical {
+    animation: pulseRed 1s infinite;
+}
+
+@keyframes pulseRed {
+    0% { text-shadow: 0 0 5px #ff0033; }
+    50% { text-shadow: 0 0 20px #ff0033; }
+    100% { text-shadow: 0 0 5px #ff0033; }
+}
+
 </style>
 
 </head>
@@ -2015,11 +2029,18 @@ async function loadIncidents(){
                 i.risk > 100 ? "#ff5500" :
                 "#ff00ff",
 
-            // 🔥 NEW (IMPORTANT)
+
             incident_id: i.id,
+            id: i.id,
+
             count: i.count,
             risk: i.risk,
             priority: i.priority,
+
+            status: i.status,                 // ✅ REQUIRED
+            sla_deadline: i.sla_deadline,     // ✅ REQUIRED
+            escalation_level: i.escalation_level || 0,  // ✅ REQUIRED
+
             last_seen: i.last_seen
 
         }))
@@ -2046,6 +2067,57 @@ function renderWorkflowBoard(){
         document.getElementById("col"+status).innerHTML = ""
     })
 
+    // ======================================================
+    // SLA TIMER
+    // ======================================================
+
+    let now = new Date()
+
+    let deadline = inc.sla_deadline ? new Date(inc.sla_deadline) : null
+
+    let secondsLeft = deadline
+        ? Math.max(0, Math.floor((deadline - now) / 1000))
+        : null
+
+    let slaText = secondsLeft !== null ? `${secondsLeft}s` : "--"
+
+    // ======================================================
+    // SLA COLOR
+    // ======================================================
+
+    let slaColor = "#00ffcc"
+
+    if(secondsLeft !== null){
+        if(secondsLeft < 10){
+            slaColor = "#ff0033"
+        }
+        else if(secondsLeft < 30){
+            slaColor = "#ff9900"
+        }
+    }
+
+    // ======================================================
+    // ESCALATION LEVEL
+    // ======================================================
+
+    let esc = inc.escalation_level || 0
+
+    let escLabel = ""
+    let escColor = "#00ffff"
+
+    if(esc === 1){
+        escLabel = "L1"
+        escColor = "#00bfff"
+    }
+    else if(esc === 2){
+        escLabel = "L2"
+        escColor = "#ff9900"
+    }
+    else if(esc >= 3){
+        escLabel = "L3"
+        escColor = "#ff0033"
+    }
+
     incidents.forEach(inc => {
 
         const status = inc.status || "NEW"
@@ -2062,20 +2134,30 @@ function renderWorkflowBoard(){
             "#00ffff"
 
         el.innerHTML = `
+
             <div style="color:${color}">
                 ID: ${inc.incident_id || inc.id}
             </div>
 
             <div>Events: ${inc.count}</div>
             <div>Risk: ${inc.risk}</div>
+
             <div>Priority: ${inc.priority || 0}</div>
-            <div>SLA: ${inc.sla_deadline ? new Date(inc.sla_deadline).toLocaleTimeString() : "--"}</div>
+
+            <div style="color:${escColor}">
+                Escalation: ${escLabel || "—"}
+            </div>
+
+            <div style="color:${slaColor}">
+                SLA: ${slaText}
+            </div>
 
             <div style="margin-top:4px;">
                 <button onclick="moveIncident('${inc.id}','INVESTIGATING')">🔍</button>
                 <button onclick="moveIncident('${inc.id}','CONTAINED')">🛡</button>
                 <button onclick="moveIncident('${inc.id}','RESOLVED')">✅</button>
             </div>
+
         `
 
         const column = document.getElementById("col"+status)
@@ -2115,7 +2197,7 @@ loadIncidents()
 // ======================================================
 
 if(!window.incidentInterval){
-    window.incidentInterval = setInterval(loadIncidents, 5000)
+    window.incidentInterval = setInterval(loadIncidents, 1000)
 }
 
 // ======================================================
