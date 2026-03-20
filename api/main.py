@@ -343,19 +343,50 @@ def update_alert_status(data: dict, db: Session = Depends(get_db)):
 
 from datetime import timedelta
 
+def calculate_incident_priority(incident):
+    """
+    Priority scoring logic (0–100+)
+    """
+
+    score = 0
+
+    # base risk
+    score += incident.risk or 0
+
+    # volume boost
+    score += min(incident.count * 5, 50)
+
+    # recency boost (fresh attacks = higher priority)
+    if incident.last_seen:
+        delta = datetime.utcnow() - incident.last_seen
+        seconds = delta.total_seconds()
+
+        if seconds < 60:
+            score += 30
+        elif seconds < 300:
+            score += 15
+
+    return score
+
+
 def find_or_create_incident(db, lat, lon):
 
     now = datetime.utcnow()
 
     incident = db.query(Incident).filter(
-        Incident.latitude.between(lat - 2, lat + 2),
-        Incident.longitude.between(lon - 2, lon + 2),
+        Incident.lat.between(lat - 2, lat + 2),
+        Incident.lng.between(lon - 2, lon + 2),
         Incident.last_seen >= now - timedelta(seconds=60)
     ).first()
 
     if incident:
         incident.count += 1
         incident.last_seen = now
+
+        # 🔥 UPDATE PRIORITY
+        incident.priority = calculate_incident_priority(incident)
+
+        db.commit()
         return incident
 
     # create new incident
@@ -365,7 +396,8 @@ def find_or_create_incident(db, lat, lon):
         lng=lon,
         count=1,
         risk=0,
-        last_seen=now
+        last_seen=now,
+        priority=10
     )
 
     db.add(incident)
@@ -485,7 +517,7 @@ def simulate_attack(db: Session = Depends(get_db)):
 def get_incidents(db: Session = Depends(get_db)):
 
     incidents = db.query(Incident).order_by(
-        Incident.last_seen.desc()
+        Incident.priority.desc()
     ).limit(100).all()
 
     return [
@@ -495,6 +527,8 @@ def get_incidents(db: Session = Depends(get_db)):
             "lng": i.lng,
             "count": i.count,
             "risk": i.risk,
+            "priority": i.priority,
+            "status": i.status,   # ✅ ADD THIS
             "last_seen": i.last_seen
         }
         for i in incidents
