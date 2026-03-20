@@ -132,6 +132,29 @@ ATTACK PANEL STYLE
     margin: 5px 0;
 }
 
+.workflowColumn{
+    flex:1;
+    background:rgba(0,0,0,0.85);
+    border:1px solid #00ffff;
+    border-radius:10px;
+    padding:8px;
+    color:#00ffff;
+    overflow-y:auto;
+    font-size:12px;
+}
+
+.workflowColumn h3{
+    margin:0 0 6px 0;
+    font-size:13px;
+    text-align:center;
+}
+
+.columnContent{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+
 </style>
 
 </head>
@@ -319,6 +342,41 @@ INCIDENT PANEL
 
         <input id="analystName" placeholder="Assign analyst" style="width:100%">
         <button onclick="assignIncident()">Assign</button>
+    </div>
+
+<!-- ======================================================
+SOC WORKFLOW BOARD (KANBAN)
+====================================================== -->
+<div id="workflowBoard" style="
+    position:absolute;
+    bottom:20px;
+    left:20px;
+    right:20px;
+    height:220px;
+    display:flex;
+    gap:10px;
+    z-index:9999;
+">
+
+    <!-- COLUMN TEMPLATE -->
+    <div class="workflowColumn" data-status="NEW">
+        <h3>🆕 NEW</h3>
+        <div class="columnContent" id="colNEW"></div>
+    </div>
+
+    <div class="workflowColumn" data-status="INVESTIGATING">
+        <h3>🔍 INVESTIGATING</h3>
+        <div class="columnContent" id="colINVESTIGATING"></div>
+    </div>
+
+    <div class="workflowColumn" data-status="CONTAINED">
+        <h3>🛡 CONTAINED</h3>
+        <div class="columnContent" id="colCONTAINED"></div>
+    </div>
+
+    <div class="workflowColumn" data-status="RESOLVED">
+        <h3>✅ RESOLVED</h3>
+        <div class="columnContent" id="colRESOLVED"></div>
     </div>
 
 </div>
@@ -1970,9 +2028,78 @@ async function loadIncidents(){
             points.concat(packets).concat(satellites).concat(incidents)
         )
 
+        renderWorkflowBoard()
+
     }catch(err){
         console.error("Incident load failed", err)
     }
+}
+
+// ======================================================
+// WORKFLOW BOARD RENDER
+// ======================================================
+
+function renderWorkflowBoard(){
+
+    // clear columns
+    ["NEW","INVESTIGATING","CONTAINED","RESOLVED"].forEach(status => {
+        document.getElementById("col"+status).innerHTML = ""
+    })
+
+    incidents.forEach(inc => {
+
+        const status = inc.status || "NEW"
+
+        const el = document.createElement("div")
+
+        el.style.border = "1px solid #222"
+        el.style.padding = "6px"
+        el.style.cursor = "pointer"
+
+        const color =
+            inc.priority > 80 ? "#ff0033" :
+            inc.priority > 40 ? "#ff5500" :
+            "#00ffff"
+
+        el.innerHTML = `
+            <div style="color:${color}">
+                ID: ${inc.incident_id || inc.id}
+            </div>
+
+            <div>Events: ${inc.count}</div>
+            <div>Risk: ${inc.risk}</div>
+            <div>Priority: ${inc.priority || 0}</div>
+            <div>SLA: ${inc.sla_deadline ? new Date(inc.sla_deadline).toLocaleTimeString() : "--"}</div>
+
+            <div style="margin-top:4px;">
+                <button onclick="moveIncident('${inc.id}','INVESTIGATING')">🔍</button>
+                <button onclick="moveIncident('${inc.id}','CONTAINED')">🛡</button>
+                <button onclick="moveIncident('${inc.id}','RESOLVED')">✅</button>
+            </div>
+        `
+
+        const column = document.getElementById("col"+status)
+
+        if(column){
+            column.appendChild(el)
+        }
+
+    })
+}
+
+// ======================================================
+// MOVE INCIDENT (STATUS UPDATE)
+// ======================================================
+
+function moveIncident(id, status){
+
+    fetch(`/incidents/${id}/status?status=${status}`, {
+        method: "POST"
+    })
+    .then(res => res.json())
+    .then(() => {
+        loadIncidents()   // refresh UI
+    })
 }
 
 
