@@ -1897,7 +1897,7 @@ function openAttackPanel(attack){
     document.getElementById("panelTime").innerText =
         new Date(attack.timestamp || Date.now()).toLocaleString()
 
-    let risk = attack.riskScore
+    let risk = attack.riskScore ?? attack.risk ?? 0
 
     if(risk === undefined){
         risk = calculateRiskScore(attack)
@@ -2104,6 +2104,7 @@ async function loadIncidents(){
 
             count: i.count,
             risk: i.risk,
+            riskScore: i.risk,   // ✅ THIS FIXES YOUR BUG
             priority: i.priority,
 
             status: i.status,                 // ✅ REQUIRED
