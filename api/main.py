@@ -319,35 +319,7 @@ async def escalation_engine():
 
                             print(f"⏱️ INACTIVE ANALYST: {inc.assigned_to} on {inc.id}")
 
-                    # =========================================================
-                    # INTELLIGENCE ENGINE
-                    # =========================================================
-
-                    def analyze_incident(inc):
-
-                        threat = "unknown"
-                        action = "Monitor"
-                        confidence = 0.3
-
-                        # HIGH RISK = ACTIVE THREAT
-                        if inc.risk and inc.risk > 150:
-                            threat = "active_intrusion"
-                            action = "Isolate affected systems immediately"
-                            confidence = 0.9
-
-                        # HIGH VOLUME = SCAN / RECON
-                        elif inc.count and inc.count > 20:
-                            threat = "reconnaissance"
-                            action = "Block source IP / enable firewall rules"
-                            confidence = 0.75
-
-                        # MEDIUM PATTERN
-                        elif inc.risk and inc.risk > 50:
-                            threat = "suspicious_activity"
-                            action = "Investigate logs and endpoint behavior"
-                            confidence = 0.6
-
-                        return threat, action, confidence
+                   
 
             db.commit()
 
@@ -558,23 +530,40 @@ def find_or_create_incident(db, lat, lon):
         Incident.last_seen >= now - timedelta(seconds=60)
     ).first()
 
+    # ======================================================
+    # EXISTING INCIDENT
+    # ======================================================
+
     if incident:
         incident.count += 1
         incident.last_seen = now
 
+        # 🔥 UPDATE RISK SCORE
+        incident.risk = (incident.risk or 0) + random.randint(5, 20)
+
         # 🔥 UPDATE PRIORITY
         incident.priority = calculate_incident_priority(incident)
+
+        # 🔥 APPLY INTELLIGENCE
+        threat, action, confidence = analyze_incident(incident)
+
+        incident.threat_type = threat
+        incident.recommended_action = action
+        incident.confidence = confidence
 
         db.commit()
         return incident
 
-    # create new incident
+    # ======================================================
+    # NEW INCIDENT
+    # ======================================================
+
     incident = Incident(
         id=str(uuid.uuid4()),
         lat=lat,
         lng=lon,
         count=1,
-        risk=0,
+        risk=random.randint(10, 30),
         last_seen=now,
         status="NEW",
         priority=0,
@@ -588,7 +577,7 @@ def find_or_create_incident(db, lat, lon):
     db.commit()
     db.refresh(incident)
 
-    # apply intelligence immediately
+    # 🔥 APPLY INTELLIGENCE
     threat, action, confidence = analyze_incident(incident)
 
     incident.threat_type = threat
@@ -598,6 +587,8 @@ def find_or_create_incident(db, lat, lon):
     db.commit()
 
     return incident
+
+
 
 
 # =========================================================
@@ -723,7 +714,14 @@ def get_incidents(db: Session = Depends(get_db)):
             "priority": i.priority,
             "status": i.status,
             "sla_deadline": i.sla_deadline,
-            "last_seen": i.last_seen
+            "last_seen": i.last_seen,
+
+            # 🔥 ADD THESE
+            "threat_type": i.threat_type,
+            "recommended_action": i.recommended_action,
+            "confidence": i.confidence,
+            "escalation_level": i.escalation_level,
+            "assigned_to": i.assigned_to
         }
         for i in incidents
     ]
