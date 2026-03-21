@@ -196,6 +196,33 @@ async def attack_generator():
         await asyncio.sleep(random.uniform(6,12))
 
 # =========================================================
+# INTELLIGENCE ENGINE (GLOBAL)
+# =========================================================
+
+def analyze_incident(inc):
+
+    threat = "unknown"
+    action = "Monitor"
+    confidence = 0.3
+
+    if inc.risk and inc.risk > 150:
+        threat = "active_intrusion"
+        action = "Isolate affected systems immediately"
+        confidence = 0.9
+
+    elif inc.count and inc.count > 20:
+        threat = "reconnaissance"
+        action = "Block source IP / enable firewall rules"
+        confidence = 0.75
+
+    elif inc.risk and inc.risk > 50:
+        threat = "suspicious_activity"
+        action = "Investigate logs and endpoint behavior"
+        confidence = 0.6
+
+    return threat, action, confidence
+
+# =========================================================
 # AUTO ESCALATION ENGINE (SLA ENFORCEMENT)
 # =========================================================
 
@@ -217,6 +244,18 @@ async def escalation_engine():
 
                 if inc.status == "RESOLVED":
                     continue
+
+                # (existing SLA logic...)
+
+                # ======================================================
+                # APPLY INTELLIGENCE
+                # ======================================================
+
+                threat, action, confidence = analyze_incident(inc)
+
+                inc.threat_type = threat
+                inc.recommended_action = action
+                inc.confidence = confidence
 
                 if inc.sla_deadline and now > inc.sla_deadline:
 
@@ -249,9 +288,70 @@ async def escalation_engine():
                     else:
                         inc.sla_deadline = now + timedelta(seconds=30)
 
-                    print(f"🚨 ESCALATED L{inc.escalation_level}: {inc.id} → {inc.status}")
+                    # ======================================================
+                    # AUTO REASSIGN (SOC FAILSAFE)
+                    # ======================================================
+
+                    if inc.escalation_level >= 3:
+
+                        # if nobody owns it → assign SOC
+                        if not inc.assigned_to:
+                            inc.assigned_to = "SOC-AUTO"
+
+                        # if already owned but not resolved → mark as overdue
+                        if inc.status != "RESOLVED":
+                            inc.priority = min((inc.priority or 0) + 10, 100)
+
+                            print(f"⚠️ SOC AUTO-INTERVENTION: {inc.id}")
+
+                        print(f"🚨 ESCALATED L{inc.escalation_level}: {inc.id} → {inc.status}")
+                    # ======================================================
+                    # ANALYST INACTIVITY DETECTION
+                    # ======================================================
+
+                    if inc.assigned_to and inc.updated_at:
+
+                        idle_time = (now - inc.updated_at).total_seconds()
+
+                        if idle_time > 120:  # 2 minutes idle
+
+                            inc.priority = min((inc.priority or 0) + 15, 100)
+
+                            print(f"⏱️ INACTIVE ANALYST: {inc.assigned_to} on {inc.id}")
+
+                    # =========================================================
+                    # INTELLIGENCE ENGINE
+                    # =========================================================
+
+                    def analyze_incident(inc):
+
+                        threat = "unknown"
+                        action = "Monitor"
+                        confidence = 0.3
+
+                        # HIGH RISK = ACTIVE THREAT
+                        if inc.risk and inc.risk > 150:
+                            threat = "active_intrusion"
+                            action = "Isolate affected systems immediately"
+                            confidence = 0.9
+
+                        # HIGH VOLUME = SCAN / RECON
+                        elif inc.count and inc.count > 20:
+                            threat = "reconnaissance"
+                            action = "Block source IP / enable firewall rules"
+                            confidence = 0.75
+
+                        # MEDIUM PATTERN
+                        elif inc.risk and inc.risk > 50:
+                            threat = "suspicious_activity"
+                            action = "Investigate logs and endpoint behavior"
+                            confidence = 0.6
+
+                        return threat, action, confidence
 
             db.commit()
+
+        
 
         except Exception as e:
             db.rollback()
@@ -487,6 +587,15 @@ def find_or_create_incident(db, lat, lon):
     db.add(incident)
     db.commit()
     db.refresh(incident)
+
+    # apply intelligence immediately
+    threat, action, confidence = analyze_incident(incident)
+
+    incident.threat_type = threat
+    incident.recommended_action = action
+    incident.confidence = confidence
+
+    db.commit()
 
     return incident
 
