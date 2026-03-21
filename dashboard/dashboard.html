@@ -169,6 +169,20 @@ SLA CRITICAL PULSE
     100% { text-shadow: 0 0 5px #ff0033; }
 }
 
+/* ======================================================
+CRITICAL INCIDENT FLASH
+====================================================== */
+
+.criticalFlash {
+    animation: flashRed 1s infinite;
+}
+
+@keyframes flashRed {
+    0% { background: rgba(255,0,0,0.1); }
+    50% { background: rgba(255,0,0,0.4); }
+    100% { background: rgba(255,0,0,0.1); }
+}
+
 </style>
 
 </head>
@@ -2176,12 +2190,45 @@ async function loadIncidents(){
         }
 
         // ======================================================
+        // 🔥 DISTRESS SIGNAL (DEFINE FIRST)
+        // ======================================================
+
+        let isCritical =
+            (secondsLeft !== null && secondsLeft < 5) ||
+            (inc.escalation_level >= 3)
+
+        // ======================================================
+        // 🔥 SLA BREACH ALERT (SAFE VERSION)
+        // ======================================================
+
+        if(secondsLeft !== null && secondsLeft === 0){
+
+            if(!inc._breachNotified){   // ✅ prevents spam
+
+                console.warn("🚨 SLA BREACH:", inc.id)
+
+                new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg").play()
+
+                inc._breachNotified = true
+            }
+        }
+
+        // ======================================================
         // CARD
         // ======================================================
 
         const status = inc.status || "NEW"
 
         const el = document.createElement("div")
+
+        // ======================================================
+        // APPLY VISUAL ALERTS
+        // ======================================================
+
+        if(isCritical){
+            el.classList.add("criticalFlash")
+            el.style.boxShadow = "0 0 12px #ff0033"
+        }
 
         el.style.border = "1px solid #222"
         el.style.padding = "6px"
@@ -2195,6 +2242,10 @@ async function loadIncidents(){
         if(inc.assigned_to && inc.assigned_to !== currentAnalyst){
             el.style.opacity = "0.5"
         }
+
+        // ======================================================
+        // HTML
+        // ======================================================
 
         el.innerHTML = `
 
@@ -2213,6 +2264,10 @@ async function loadIncidents(){
 
             <div style="color:#888; font-size:10px;">
                 Owner: ${inc.assigned_to || "UNASSIGNED"}
+            </div>
+
+            <div style="color:${slaColor}">
+                SLA: ${slaText}
             </div>
 
             <div style="margin-top:4px;">
