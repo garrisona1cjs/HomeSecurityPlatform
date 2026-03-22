@@ -48,42 +48,71 @@ Base.metadata.create_all(bind=engine)
 
 from sqlalchemy import text
 
-def update_alert_schema():
+def update_incident_schema():
 
     with engine.connect() as conn:
 
-        # get existing columns
-        result = conn.execute(text("PRAGMA table_info(alerts)"))
+        result = conn.execute(text("PRAGMA table_info(incidents)"))
         columns = [row[1] for row in result.fetchall()]
 
-        # add missing columns safely (SQLite compatible)
+        # =========================
+        # CORE FIELDS
+        # =========================
 
-        if "organization_id" not in columns:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN organization_id INTEGER"))
+        if "lat" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN lat FLOAT"))
 
-        if "risk_score" not in columns:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN risk_score INTEGER"))
+        if "lng" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN lng FLOAT"))
+
+        if "count" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN count INTEGER DEFAULT 1"))
+
+        if "risk" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN risk INTEGER DEFAULT 0"))
+
+        if "last_seen" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN last_seen DATETIME"))
+
+        # =========================
+        # WORKFLOW
+        # =========================
 
         if "status" not in columns:
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN status TEXT DEFAULT 'NEW'"))
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN status TEXT DEFAULT 'NEW'"))
 
-        if "incident_id" not in columns:
+        if "assigned_to" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN assigned_to TEXT"))
 
-            conn.execute(text("ALTER TABLE alerts ADD COLUMN incident_id TEXT"))
+        if "priority" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN priority INTEGER DEFAULT 0"))
 
-            # ======================================================
-            # INCIDENT TABLE UPDATE (SLA ESCALATION SUPPORT)
-            # ======================================================
+        if "created_at" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN created_at DATETIME"))
 
-            result_inc = conn.execute(text("PRAGMA table_info(incidents)"))
-            inc_columns = [row[1] for row in result_inc.fetchall()]
+        if "updated_at" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN updated_at DATETIME"))
 
-            if "escalation_level" not in inc_columns:
-                conn.execute(text(
-                    "ALTER TABLE incidents ADD COLUMN escalation_level INTEGER DEFAULT 0"
-                ))
+        if "sla_deadline" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN sla_deadline DATETIME"))
 
-                conn.commit()
+        # =========================
+        # PHASE 9/10 FIELDS
+        # =========================
+
+        if "escalation_level" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN escalation_level INTEGER DEFAULT 0"))
+
+        if "threat_type" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN threat_type TEXT"))
+
+        if "recommended_action" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN recommended_action TEXT"))
+
+        if "confidence" not in columns:
+            conn.execute(text("ALTER TABLE incidents ADD COLUMN confidence FLOAT"))
+
+        conn.commit()
 
 update_alert_schema()
 
