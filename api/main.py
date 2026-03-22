@@ -52,43 +52,53 @@ def update_incident_schema():
 
     with engine.connect() as conn:
 
-        # 🔥 Postgres compatible column check
-        result = conn.execute(text("""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_name = 'incidents'
-        """))
+        db_url = str(engine.url)
 
-        columns = [row[0] for row in result.fetchall()]
+        # ======================================================
+        # SQLITE MODE
+        # ======================================================
+        if "sqlite" in db_url:
 
-        def add_column(name, sql):
-            if name not in columns:
-                conn.execute(text(sql))
+            result = conn.execute(text("PRAGMA table_info(incidents)"))
+            columns = [row[1] for row in result.fetchall()]
 
-        # =========================
-        # CORE FIELDS
-        # =========================
+            def add_column(name, sql):
+                if name not in columns:
+                    conn.execute(text(sql))
+
+        # ======================================================
+        # POSTGRES MODE
+        # ======================================================
+        else:
+
+            result = conn.execute(text("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'incidents'
+            """))
+
+            columns = [row[0] for row in result.fetchall()]
+
+            def add_column(name, sql):
+                if name not in columns:
+                    conn.execute(text(sql))
+
+        # ======================================================
+        # COMMON COLUMN CREATION
+        # ======================================================
 
         add_column("lat", "ALTER TABLE incidents ADD COLUMN lat FLOAT")
         add_column("lng", "ALTER TABLE incidents ADD COLUMN lng FLOAT")
         add_column("count", "ALTER TABLE incidents ADD COLUMN count INTEGER DEFAULT 1")
         add_column("risk", "ALTER TABLE incidents ADD COLUMN risk INTEGER DEFAULT 0")
-        add_column("last_seen", "ALTER TABLE incidents ADD COLUMN last_seen TIMESTAMP")
-
-        # =========================
-        # WORKFLOW
-        # =========================
+        add_column("last_seen", "ALTER TABLE incidents ADD COLUMN last_seen DATETIME")
 
         add_column("status", "ALTER TABLE incidents ADD COLUMN status TEXT DEFAULT 'NEW'")
         add_column("assigned_to", "ALTER TABLE incidents ADD COLUMN assigned_to TEXT")
         add_column("priority", "ALTER TABLE incidents ADD COLUMN priority INTEGER DEFAULT 0")
-        add_column("created_at", "ALTER TABLE incidents ADD COLUMN created_at TIMESTAMP")
-        add_column("updated_at", "ALTER TABLE incidents ADD COLUMN updated_at TIMESTAMP")
-        add_column("sla_deadline", "ALTER TABLE incidents ADD COLUMN sla_deadline TIMESTAMP")
-
-        # =========================
-        # PHASE 9/10
-        # =========================
+        add_column("created_at", "ALTER TABLE incidents ADD COLUMN created_at DATETIME")
+        add_column("updated_at", "ALTER TABLE incidents ADD COLUMN updated_at DATETIME")
+        add_column("sla_deadline", "ALTER TABLE incidents ADD COLUMN sla_deadline DATETIME")
 
         add_column("escalation_level", "ALTER TABLE incidents ADD COLUMN escalation_level INTEGER DEFAULT 0")
         add_column("threat_type", "ALTER TABLE incidents ADD COLUMN threat_type TEXT")
@@ -359,7 +369,7 @@ async def start_engines():
     asyncio.create_task(event_dispatcher())
 
     asyncio.create_task(attack_generator())
-    
+
     asyncio.create_task(escalation_engine())
 
 
