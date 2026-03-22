@@ -370,7 +370,7 @@ async def start_engines():
 
     asyncio.create_task(attack_generator())
 
-    asyncio.create_task(escalation_engine())
+   # asyncio.create_task(escalation_engine())
 
 
 # =========================================================
