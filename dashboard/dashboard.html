@@ -352,25 +352,41 @@ INCIDENT PANEL
     </div>
 
     <div class="panel-content">
-        <p><strong>ID:</strong> <span id="incId"></span></p>
-        <p><strong>Events:</strong> <span id="incCount"></span></p>
-        <p><strong>Risk:</strong> <span id="incRisk"></span></p>
-        <p><strong>Priority:</strong> <span id="incPriority"></span></p>
-        <p><strong>Last Seen:</strong> <span id="incTime"></span></p>
 
-        <hr>
+    <p><strong>ID:</strong> <span id="incId"></span></p>
+    <p><strong>Events:</strong> <span id="incCount"></span></p>
+    <p><strong>Risk:</strong> <span id="incRisk"></span></p>
+    <p><strong>Priority:</strong> <span id="incPriority"></span></p>
+    <p><strong>Last Seen:</strong> <span id="incTime"></span></p>
 
-        <h3 style="margin-top:10px;">Workflow</h3>
+    <hr>
 
-        <button onclick="updateIncidentStatus('INVESTIGATING')">Investigate</button>
-        <button onclick="updateIncidentStatus('CONTAINED')">Contain</button>
-        <button onclick="updateIncidentStatus('RESOLVED')">Resolve</button>
+    <h3>🧠 Threat Intelligence</h3>
 
-        <br><br>
+    <p><strong>Threat Type:</strong> <span id="incThreat"></span></p>
+    <p><strong>Confidence:</strong> <span id="incConfidence"></span></p>
+    <p><strong>Recommended Action:</strong></p>
+    <p id="incAction" style="font-size:12px;"></p>
 
-        <input id="analystName" placeholder="Assign analyst" style="width:100%">
-        <button onclick="assignIncident()">Assign</button>
-    </div>
+    <hr>
+
+    <h3>📡 Incident Timeline</h3>
+    <div id="incidentAlerts" style="max-height:150px; overflow-y:auto;"></div>
+
+    <hr>
+
+    <h3>Workflow</h3>
+
+    <button onclick="updateIncidentStatus('INVESTIGATING')">Investigate</button>
+    <button onclick="updateIncidentStatus('CONTAINED')">Contain</button>
+    <button onclick="updateIncidentStatus('RESOLVED')">Resolve</button>
+
+    <br><br>
+
+    <input id="analystName" placeholder="Assign analyst" style="width:100%">
+    <button onclick="assignIncident()">Assign</button>
+
+</div>
 
 <div id="auditPanel" class="attack-panel hidden" style="top: 500px; width: 320px;">
     <div class="panel-header">
@@ -1940,8 +1956,15 @@ function openIncidentPanel(inc){
     document.getElementById("incPriority").innerText = inc.priority || 0
     document.getElementById("incTime").innerText =
         new Date(inc.last_seen).toLocaleString()
+    document.getElementById("incThreat").innerText = inc.threat_type || "unknown"
+    document.getElementById("incConfidence").innerText =
+        (inc.confidence || 0).toFixed(2)
+
+    document.getElementById("incAction").innerText =
+        inc.recommended_action || "Monitor"
 
     loadIncidentAudit(inc.incident_id)
+    loadIncidentAlerts(inc.incident_id)
 
 
     createShockwave(inc.lat, inc.lng)
