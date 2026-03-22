@@ -52,69 +52,52 @@ def update_incident_schema():
 
     with engine.connect() as conn:
 
-        result = conn.execute(text("PRAGMA table_info(incidents)"))
-        columns = [row[1] for row in result.fetchall()]
+        # 🔥 Postgres compatible column check
+        result = conn.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'incidents'
+        """))
+
+        columns = [row[0] for row in result.fetchall()]
+
+        def add_column(name, sql):
+            if name not in columns:
+                conn.execute(text(sql))
 
         # =========================
         # CORE FIELDS
         # =========================
 
-        if "lat" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN lat FLOAT"))
-
-        if "lng" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN lng FLOAT"))
-
-        if "count" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN count INTEGER DEFAULT 1"))
-
-        if "risk" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN risk INTEGER DEFAULT 0"))
-
-        if "last_seen" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN last_seen DATETIME"))
+        add_column("lat", "ALTER TABLE incidents ADD COLUMN lat FLOAT")
+        add_column("lng", "ALTER TABLE incidents ADD COLUMN lng FLOAT")
+        add_column("count", "ALTER TABLE incidents ADD COLUMN count INTEGER DEFAULT 1")
+        add_column("risk", "ALTER TABLE incidents ADD COLUMN risk INTEGER DEFAULT 0")
+        add_column("last_seen", "ALTER TABLE incidents ADD COLUMN last_seen TIMESTAMP")
 
         # =========================
         # WORKFLOW
         # =========================
 
-        if "status" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN status TEXT DEFAULT 'NEW'"))
-
-        if "assigned_to" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN assigned_to TEXT"))
-
-        if "priority" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN priority INTEGER DEFAULT 0"))
-
-        if "created_at" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN created_at DATETIME"))
-
-        if "updated_at" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN updated_at DATETIME"))
-
-        if "sla_deadline" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN sla_deadline DATETIME"))
+        add_column("status", "ALTER TABLE incidents ADD COLUMN status TEXT DEFAULT 'NEW'")
+        add_column("assigned_to", "ALTER TABLE incidents ADD COLUMN assigned_to TEXT")
+        add_column("priority", "ALTER TABLE incidents ADD COLUMN priority INTEGER DEFAULT 0")
+        add_column("created_at", "ALTER TABLE incidents ADD COLUMN created_at TIMESTAMP")
+        add_column("updated_at", "ALTER TABLE incidents ADD COLUMN updated_at TIMESTAMP")
+        add_column("sla_deadline", "ALTER TABLE incidents ADD COLUMN sla_deadline TIMESTAMP")
 
         # =========================
-        # PHASE 9/10 FIELDS
+        # PHASE 9/10
         # =========================
 
-        if "escalation_level" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN escalation_level INTEGER DEFAULT 0"))
-
-        if "threat_type" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN threat_type TEXT"))
-
-        if "recommended_action" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN recommended_action TEXT"))
-
-        if "confidence" not in columns:
-            conn.execute(text("ALTER TABLE incidents ADD COLUMN confidence FLOAT"))
+        add_column("escalation_level", "ALTER TABLE incidents ADD COLUMN escalation_level INTEGER DEFAULT 0")
+        add_column("threat_type", "ALTER TABLE incidents ADD COLUMN threat_type TEXT")
+        add_column("recommended_action", "ALTER TABLE incidents ADD COLUMN recommended_action TEXT")
+        add_column("confidence", "ALTER TABLE incidents ADD COLUMN confidence FLOAT")
 
         conn.commit()
 
-update_alert_schema()
+
 
 
 # =========================================================
@@ -369,10 +352,14 @@ async def escalation_engine():
 @app.on_event("startup")
 async def start_engines():
 
+    update_incident_schema()   # only this
+
+    await asyncio.sleep(1)
+
     asyncio.create_task(event_dispatcher())
 
     asyncio.create_task(attack_generator())
-
+    
     asyncio.create_task(escalation_engine())
 
 
