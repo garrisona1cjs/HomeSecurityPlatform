@@ -60,6 +60,16 @@ class Incident(Base):
     priority = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    sla_deadline = Column(DateTime, nullable=True)
+    escalation_level = Column(Integer, default=0)
+
+    # ======================================================
+    # INTELLIGENCE ENGINE (PHASE 9 PART 9)
+    # ======================================================
+
+    threat_type = Column(String, nullable=True)
+    recommended_action = Column(String, nullable=True)
+    confidence = Column(Float, default=0.0)
 
    
 
@@ -228,3 +238,24 @@ class ThreatInfrastructure(Base):
     avg_threat_score = Column(Float)
 
     campaign = Column(String)
+
+# =========================================================
+# INCIDENT AUDIT LOG (PHASE 9)
+# =========================================================
+
+class IncidentAudit(Base):
+
+    __tablename__ = "incident_audit"
+
+    id = Column(String, primary_key=True)
+
+    incident_id = Column(String)
+
+    action = Column(String)          # ASSIGNED / STATUS_CHANGE
+    actor = Column(String)           # analyst name
+
+    old_value = Column(String, nullable=True)
+    new_value = Column(String, nullable=True)
+
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
