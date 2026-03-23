@@ -387,6 +387,7 @@ async def escalation_engine():
 async def start_engines():
 
     update_incident_schema()   # only this
+    update_incident_schema()
 
     await asyncio.sleep(1)
 
