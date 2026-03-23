@@ -608,6 +608,7 @@ def find_or_create_incident(db, lat, lon):
         incident.mitre_tactic = tactic
 
         db.commit()
+        db.refresh(incident)   # 🔥 ADD THIS LINE
         return incident
 
     # ======================================================
@@ -643,6 +644,7 @@ def find_or_create_incident(db, lat, lon):
     incident.mitre_tactic = tactic
 
     db.commit()
+    db.refresh(incident)   # 🔥 ADD THIS TOO
 
     print("✅ INCIDENT CREATED:", incident.id)
 
@@ -778,8 +780,8 @@ def get_incidents(db: Session = Depends(get_db)):
                    recommended_action,
                    confidence,
                    escalation_level,
-                   assigned_to
-                   mitre_id
+                   assigned_to,
+                   mitre_id,
                    mitre_tactic
             FROM incidents
             ORDER BY priority DESC
