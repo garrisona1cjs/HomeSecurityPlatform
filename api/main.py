@@ -550,7 +550,10 @@ def find_or_create_incident(db, lat, lon):
 
     now = datetime.utcnow()
 
+    # 🔥 SAFE QUERY (IGNORE NULL COORDS)
     incident = db.query(Incident).filter(
+        Incident.lat != None,
+        Incident.lng != None,
         Incident.lat.between(lat - 2, lat + 2),
         Incident.lng.between(lon - 2, lon + 2),
         Incident.last_seen >= now - timedelta(seconds=60)
@@ -564,15 +567,15 @@ def find_or_create_incident(db, lat, lon):
         incident.count += 1
         incident.last_seen = now
 
-        # 🔥 UPDATE RISK SCORE
+
         incident.risk = (incident.risk or 0) + random.randint(5, 20)
 
-        # 🔥 UPDATE PRIORITY
+
         incident.priority = calculate_incident_priority(incident)
 
-        # 🔥 APPLY INTELLIGENCE
-        threat, action, confidence = analyze_incident(incident)
 
+        threat, action, confidence = analyze_incident(incident)
+        
         incident.threat_type = threat
         incident.recommended_action = action
         incident.confidence = confidence
@@ -581,7 +584,7 @@ def find_or_create_incident(db, lat, lon):
         return incident
 
     # ======================================================
-    # NEW INCIDENT
+    # NEW INCIDENT (FORCED)
     # ======================================================
 
     incident = Incident(
@@ -611,6 +614,8 @@ def find_or_create_incident(db, lat, lon):
     incident.confidence = confidence
 
     db.commit()
+
+    print("✅ INCIDENT CREATED:", incident.id)
 
     return incident
 
