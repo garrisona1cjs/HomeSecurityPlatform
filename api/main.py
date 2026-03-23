@@ -806,7 +806,7 @@ def get_incidents(db: Session = Depends(get_db)):
                 "recommended_action": r[10],
                 "confidence": r[11],
                 "escalation_level": r[12],
-                "assigned_to": r[13]
+                "assigned_to": r[13],
                 "mitre_id": r[14],
                 "mitre_tactic": r[15],
 
