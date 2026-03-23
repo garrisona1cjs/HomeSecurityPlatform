@@ -105,6 +105,9 @@ def update_incident_schema():
         add_column("recommended_action", "ALTER TABLE incidents ADD COLUMN recommended_action TEXT")
         add_column("confidence", "ALTER TABLE incidents ADD COLUMN confidence FLOAT")
 
+        add_column("mitre_id", "ALTER TABLE incidents ADD COLUMN mitre_id TEXT")
+        add_column("mitre_tactic", "ALTER TABLE incidents ADD COLUMN mitre_tactic TEXT")
+
         conn.commit()
 
 
@@ -226,23 +229,40 @@ def analyze_incident(inc):
     threat = "unknown"
     action = "Monitor"
     confidence = 0.3
+    mitre = "N/A"
+    tactic = "Unknown"
 
+    # =========================================
+    # HIGH RISK = ACTIVE ATTACK
+    # =========================================
     if inc.risk and inc.risk > 150:
         threat = "active_intrusion"
         action = "Isolate affected systems immediately"
         confidence = 0.9
+        mitre = "T1041"
+        tactic = "Exfiltration"
 
+    # =========================================
+    # HIGH VOLUME = RECON
+    # =========================================
     elif inc.count and inc.count > 20:
         threat = "reconnaissance"
         action = "Block source IP / enable firewall rules"
         confidence = 0.75
+        mitre = "T1046"
+        tactic = "Discovery"
 
+    # =========================================
+    # MID RISK
+    # =========================================
     elif inc.risk and inc.risk > 50:
         threat = "suspicious_activity"
         action = "Investigate logs and endpoint behavior"
         confidence = 0.6
+        mitre = "T1071"
+        tactic = "Command and Control"
 
-    return threat, action, confidence
+    return threat, action, confidence, mitre, tactic
 
 # =========================================================
 # AUTO ESCALATION ENGINE (SLA ENFORCEMENT)
@@ -273,11 +293,13 @@ async def escalation_engine():
                 # APPLY INTELLIGENCE
                 # ======================================================
 
-                threat, action, confidence = analyze_incident(inc)
+                threat, action, confidence, mitre, tactic = analyze_incident(inc)
 
                 inc.threat_type = threat
                 inc.recommended_action = action
                 inc.confidence = confidence
+                inc.mitre_id = mitre
+                inc.mitre_tactic = tactic
 
                 if inc.sla_deadline and now > inc.sla_deadline:
 
