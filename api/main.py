@@ -260,7 +260,7 @@ async def escalation_engine():
 
             now = datetime.utcnow()
 
-            incidents = db.query(Incident).all()
+            incidents = db.query(Incident).limit(50).all()
 
             for inc in incidents:
 
@@ -341,6 +341,8 @@ async def escalation_engine():
 
                             print(f"⏱️ INACTIVE ANALYST: {inc.assigned_to} on {inc.id}")
 
+                    await asyncio.sleep(0.05)
+
                    
 
             db.commit()
@@ -370,7 +372,7 @@ async def start_engines():
 
     asyncio.create_task(attack_generator())
 
-   # asyncio.create_task(escalation_engine())
+    asyncio.create_task(escalation_engine())
 
 
 # =========================================================
@@ -575,7 +577,7 @@ def find_or_create_incident(db, lat, lon):
 
 
         threat, action, confidence = analyze_incident(incident)
-        
+
         incident.threat_type = threat
         incident.recommended_action = action
         incident.confidence = confidence
