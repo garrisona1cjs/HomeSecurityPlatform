@@ -599,11 +599,13 @@ def find_or_create_incident(db, lat, lon):
         incident.priority = calculate_incident_priority(incident)
 
 
-        threat, action, confidence = analyze_incident(incident)
+        threat, action, confidence, mitre, tactic = analyze_incident(incident)
 
         incident.threat_type = threat
         incident.recommended_action = action
         incident.confidence = confidence
+        incident.mitre_id = mitre
+        incident.mitre_tactic = tactic
 
         db.commit()
         return incident
@@ -632,11 +634,13 @@ def find_or_create_incident(db, lat, lon):
     db.refresh(incident)
 
     # 🔥 APPLY INTELLIGENCE
-    threat, action, confidence = analyze_incident(incident)
+    threat, action, confidence, mitre, tactic = analyze_incident(incident)
 
     incident.threat_type = threat
     incident.recommended_action = action
     incident.confidence = confidence
+    incident.mitre_id = mitre
+    incident.mitre_tactic = tactic
 
     db.commit()
 
@@ -775,6 +779,8 @@ def get_incidents(db: Session = Depends(get_db)):
                    confidence,
                    escalation_level,
                    assigned_to
+                   mitre_id
+                   mitre_tactic
             FROM incidents
             ORDER BY priority DESC
             LIMIT 100
@@ -801,6 +807,9 @@ def get_incidents(db: Session = Depends(get_db)):
                 "confidence": r[11],
                 "escalation_level": r[12],
                 "assigned_to": r[13]
+                "mitre_id": r[14],
+                "mitre_tactic": r[15],
+
             })
 
         return incidents
