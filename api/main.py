@@ -707,6 +707,13 @@ def simulate_attack(db: Session = Depends(get_db)):
 
     incident = find_or_create_incident(db, lat, lon)
 
+    # 🔥 ADD RIGHT HERE (DIRECTLY UNDER THE LINE ABOVE)
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
+
+    print("🔥 INCIDENT SAVED:", incident.id)
+
     try:
 
         from sqlalchemy import text
@@ -730,7 +737,7 @@ def simulate_attack(db: Session = Depends(get_db)):
                     "timestamp": datetime.utcnow()
                 })
 
-            db.commit()
+            
 
             print("ALERT STORED:", event_id)
 
