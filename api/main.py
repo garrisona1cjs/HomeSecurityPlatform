@@ -769,59 +769,33 @@ def simulate_attack(db: Session = Depends(get_db)):
 @app.get("/incidents")
 def get_incidents(db: Session = Depends(get_db)):
 
-    from sqlalchemy import text
-
     try:
 
-        result = db.execute(text("""
-            SELECT id,
-                   lat,
-                   lng,
-                   count,
-                   risk,
-                   priority,
-                   status,
-                   sla_deadline,
-                   last_seen,
-                   threat_type,
-                   recommended_action,
-                   confidence,
-                   escalation_level,
-                   assigned_to,
-                   mitre_id,
-                   mitre_tactic
-            FROM incidents
-            ORDER BY priority DESC
-            LIMIT 100
-        """))
+        incidents = db.query(Incident).order_by(
+            Incident.priority.desc()
+        ).limit(100).all()
 
-        rows = result.fetchall()
-
-        incidents = []
-
-        for r in rows:
-
-            incidents.append({
-                "id": r[0],
-                "lat": r[1],
-                "lng": r[2],
-                "count": r[3],
-                "risk": r[4],
-                "priority": r[5],
-                "status": r[6],
-                "sla_deadline": r[7],
-                "last_seen": r[8],
-                "threat_type": r[9],
-                "recommended_action": r[10],
-                "confidence": r[11],
-                "escalation_level": r[12],
-                "assigned_to": r[13],
-                "mitre_id": r[14],
-                "mitre_tactic": r[15],
-
-            })
-
-        return incidents
+        return [
+            {
+                "id": i.id,
+                "lat": i.lat,
+                "lng": i.lng,
+                "count": i.count,
+                "risk": i.risk,
+                "priority": i.priority,
+                "status": i.status,
+                "sla_deadline": i.sla_deadline,
+                "last_seen": i.last_seen,
+                "threat_type": i.threat_type,
+                "recommended_action": i.recommended_action,
+                "confidence": i.confidence,
+                "escalation_level": i.escalation_level,
+                "assigned_to": i.assigned_to,
+                "mitre_id": i.mitre_id,
+                "mitre_tactic": i.mitre_tactic
+            }
+            for i in incidents
+        ]
 
     except Exception as e:
         print("INCIDENT API ERROR:", e)
