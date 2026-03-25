@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from .database import engine, Base, get_db
 from .websocket_manager import connections, broadcast, event_queue
 from .models import Alert, Incident
+from .database import SessionLocal
 
 
 
@@ -274,7 +275,7 @@ async def escalation_engine():
 
         await asyncio.sleep(5)
 
-        db = next(get_db())
+        db = SessionLocal() 
 
         try:
 
@@ -387,7 +388,7 @@ async def escalation_engine():
 async def start_engines():
 
     update_incident_schema()   # only this
-    update_incident_schema()
+    
 
     await asyncio.sleep(1)
 
