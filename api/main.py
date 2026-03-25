@@ -819,6 +819,16 @@ def get_incidents(db: Session = Depends(get_db)):
     except Exception as e:
         print("INCIDENT API ERROR:", e)
         return []
+    
+@app.get("/debug-incidents")
+def debug_incidents(db: Session = Depends(get_db)):
+
+    from sqlalchemy import text
+
+    result = db.execute(text("SELECT COUNT(*) FROM incidents"))
+    count = result.fetchone()[0]
+
+    return {"count": count}
 
 
 
