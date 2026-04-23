@@ -478,7 +478,8 @@ def get_alerts(db: Session = Depends(get_db)):
             FROM alerts
             ORDER BY timestamp DESC
             LIMIT 500
-        """))
+        """)).mappings().all()
+        alerts =[dict(row)for row in rows]
 
         rows = result.fetchall()
 
@@ -493,8 +494,7 @@ def get_alerts(db: Session = Depends(get_db)):
                 "longitude": float(r[3]) if r[3] else 0,
                 "country_code": r[4],
                 "origin_label": r[5],
-                "timestamp": str(r[6]),
-                "status": r[7] or "NEW"
+                "timestamp": str(r[6])
             })
 
         return alerts
