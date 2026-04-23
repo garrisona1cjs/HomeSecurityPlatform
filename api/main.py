@@ -741,6 +741,10 @@ def simulate_attack(db: Session = Depends(get_db)):
             # ✅ ADD THIS LINE
             db.commit()
 
+            # 🔥 DEBUG: check what’s actually in DB
+            result = db.execute(text("SELECT COUNT(*) FROM alerts")).fetchone()
+            print("ALERT COUNT:", result[0])
+
             print("ALERT STORED:", event_id)
 
         except Exception as e:
