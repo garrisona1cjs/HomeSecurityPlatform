@@ -467,37 +467,20 @@ def get_alerts(db: Session = Depends(get_db)):
 
     try:
 
-        result = db.execute(text("""
-                SELECT severity,
-                technique,
-                latitude,
-                longitude,
-                country_code,
-                origin_label,
-                timestamp
+        rows = db.execute(text("""
+            SELECT severity,
+                   technique,
+                   latitude,
+                   longitude,
+                   country_code,
+                   origin_label,
+                   timestamp
             FROM alerts
             ORDER BY timestamp DESC
             LIMIT 500
         """)).mappings().all()
-        alerts =[dict(row)for row in rows]
 
-        rows = result.fetchall()
-
-        alerts = []
-
-        for r in rows:
-
-            alerts.append({
-                "severity": r[0],
-                "technique": r[1],
-                "latitude": float(r[2]) if r[2] else 0,
-                "longitude": float(r[3]) if r[3] else 0,
-                "country_code": r[4],
-                "origin_label": r[5],
-                "timestamp": str(r[6])
-            })
-
-        return alerts
+        return [dict(row) for row in rows]
 
     except Exception as e:
 
@@ -662,150 +645,92 @@ def simulate_attack(db: Session = Depends(get_db)):
 
     from sqlalchemy import text
 
-    # -------------------------------------------------
-    # DATABASE SCHEMA FIX (runs safely every time)
-    # -------------------------------------------------
-
-   
-
-
-    # -------------------------------------------------
-    # GENERATE SIMULATION EVENT
-    # -------------------------------------------------
-
-    severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
-
-    lat = random.uniform(-60, 60)
-    lon = random.uniform(-180, 180)
-
-    event_id = str(uuid.uuid4())
-
-    technique = classify_technique(severity, "US")
-
-    event = {
-        "id": event_id,
-        "severity": severity,
-        "technique": technique,
-        "latitude": lat,
-        "longitude": lon,
-        "country_code": "US",
-        "origin_label": "Simulation",
-        "timestamp": datetime.utcnow().isoformat()
-    }
-
-    # push event to websocket queue
-    event_queue.append(event)
-
-
-    # -------------------------------------------------
-    # STORE ALERT IN DATABASE
-    # -------------------------------------------------
-
-    # ==================================================
-    # INCIDENT LINKING
-    # ==================================================
-
-    incident = find_or_create_incident(db, lat, lon)
-
-    # 🔥 ADD THIS RIGHT HERE
-    cols = db.execute(text("""
-        SELECT column_name FROM information_schema.columns
-        WHERE table_name='alerts'
-    """)).fetchall()
-
-    print("COLUMNS:", cols)
-
-    # 🔥 ADD RIGHT HERE (DIRECTLY UNDER THE LINE ABOVE)
-    db.add(incident)
-    db.commit()
-    db.refresh(incident)
-
-    print("🔥 INCIDENT SAVED:", incident.id)
-
     try:
+        # -------------------------------------------------
+        # GENERATE SIMULATION EVENT
+        # -------------------------------------------------
 
-        from sqlalchemy import text
+        severity = random.choice(["LOW","MEDIUM","HIGH","CRITICAL"])
 
-        try:
+        lat = random.uniform(-60, 60)
+        lon = random.uniform(-180, 180)
 
-            db.execute(text("""
-                INSERT INTO alerts (id, severity)
-                VALUES (:id, :severity)
-            """), {
-                "id": event_id,
-                "severity": severity
-            })
+        event_id = str(uuid.uuid4())
 
-            db.commit()
+        technique = classify_technique(severity, "US")
 
-            result = db.execute(text("SELECT COUNT(*) FROM alerts")).fetchone()
-            print("ALERT COUNT:", result[0])
+        event = {
+            "id": event_id,
+            "severity": severity,
+            "technique": technique,
+            "latitude": lat,
+            "longitude": lon,
+            "country_code": "US",
+            "origin_label": "Simulation",
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
-            # 🔥 DEBUG: check what’s actually in DB
-            result = db.execute(text("SELECT COUNT(*) FROM alerts")).fetchone()
-            print("ALERT COUNT:", result[0])
+        # push event to websocket queue
+        event_queue.append(event)
 
-            print("ALERT STORED:", event_id)
+        # -------------------------------------------------
+        # INCIDENT LINKING
+        # -------------------------------------------------
 
-        except Exception as e:
+        incident = find_or_create_incident(db, lat, lon)
+        print("🔥 INCIDENT SAVED:", incident.id)
 
-            db.rollback()
+        # -------------------------------------------------
+        # INSERT ALERT
+        # -------------------------------------------------
 
-            print("DATABASE ERROR:", e)
+        db.execute(text("""
+            INSERT INTO alerts (
+                id,
+                severity,
+                technique,
+                latitude,
+                longitude,
+                country_code,
+                origin_label,
+                timestamp
+            )
+            VALUES (
+                :id,
+                :severity,
+                :technique,
+                :latitude,
+                :longitude,
+                :country_code,
+                :origin_label,
+                :timestamp
+            )
+        """), {
+            "id": event_id,
+            "severity": severity,
+            "technique": technique,
+            "latitude": lat,
+            "longitude": lon,
+            "country_code": "US",
+            "origin_label": "Simulation",
+            "timestamp": datetime.utcnow()
+        })
 
-            return {"status":"db_error","error":str(e)}
+        db.commit()
 
+        result = db.execute(text("SELECT COUNT(*) FROM alerts")).fetchone()
+        print("ALERT COUNT:", result[0])
 
         print("ALERT STORED:", event_id)
+
+        return {"status": "event generated"}
 
     except Exception as e:
 
         db.rollback()
-
+        
         print("DATABASE ERROR:", e)
-
-        return {"status":"db_error","error":str(e)}
-
-    return {"status":"event generated"}
-
-# =========================================================
-# INCIDENT API
-# =========================================================
-
-@app.get("/incidents")
-def get_incidents(db: Session = Depends(get_db)):
-
-    try:
-
-        incidents = db.query(Incident).order_by(
-            Incident.priority.desc()
-        ).limit(100).all()
-
-        return [
-            {
-                "id": i.id,
-                "lat": i.lat,
-                "lng": i.lng,
-                "count": i.count,
-                "risk": i.risk,
-                "priority": i.priority,
-                "status": i.status,
-                "sla_deadline": i.sla_deadline,
-                "last_seen": i.last_seen,
-                "threat_type": i.threat_type,
-                "recommended_action": i.recommended_action,
-                "confidence": i.confidence,
-                "escalation_level": i.escalation_level,
-                "assigned_to": i.assigned_to,
-                "mitre_id": i.mitre_id,
-                "mitre_tactic": i.mitre_tactic
-            }
-            for i in incidents
-        ]
-
-    except Exception as e:
-        print("INCIDENT API ERROR:", e)
-        return []
+        return {"status": "db_error", "error": str(e)}
     
 @app.get("/debug-incidents")
 def debug_incidents(db: Session = Depends(get_db)):
