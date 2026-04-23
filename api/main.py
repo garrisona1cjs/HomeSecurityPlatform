@@ -708,6 +708,14 @@ def simulate_attack(db: Session = Depends(get_db)):
 
     incident = find_or_create_incident(db, lat, lon)
 
+    # 🔥 ADD THIS RIGHT HERE
+    cols = db.execute(text("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name='alerts'
+    """)).fetchall()
+
+    print("COLUMNS:", cols)
+
     # 🔥 ADD RIGHT HERE (DIRECTLY UNDER THE LINE ABOVE)
     db.add(incident)
     db.commit()
@@ -722,23 +730,13 @@ def simulate_attack(db: Session = Depends(get_db)):
         try:
 
             db.execute(text("""
-                INSERT INTO alerts
-                (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp, incident_id)
-                VALUES
-                (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp, :incident_id)
+                INSERT INTO alerts (id, severity)
+                VALUES (:id, :severity)
             """), {
                 "id": event_id,
-                "incident_id": incident.id,
-                "severity": severity,
-                "technique": technique,
-                "latitude": lat,
-                "longitude": lon,
-                "country_code": "US",
-                "origin_label": "Simulation",
-                "timestamp": datetime.utcnow()
+                "severity": severity
             })
 
-            # ✅ ADD THIS LINE
             db.commit()
 
             # 🔥 DEBUG: check what’s actually in DB
