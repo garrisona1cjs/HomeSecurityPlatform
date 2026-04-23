@@ -488,6 +488,15 @@ def get_alerts(db: Session = Depends(get_db)):
 
         return []
     
+@app.get("/clear-alerts")
+def clear_alerts(db: Session = Depends(get_db)):
+    from sqlalchemy import text
+
+    db.execute(text("DELETE FROM alerts"))
+    db.commit()
+
+    return {"status": "alerts cleared"}
+    
 # =========================================================
 # UPDATE ALERT STATUS (ACK / ESCALATE)
 # =========================================================
@@ -728,7 +737,7 @@ def simulate_attack(db: Session = Depends(get_db)):
     except Exception as e:
 
         db.rollback()
-        
+
         print("DATABASE ERROR:", e)
         return {"status": "db_error", "error": str(e)}
     
