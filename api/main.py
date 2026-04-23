@@ -468,15 +468,14 @@ def get_alerts(db: Session = Depends(get_db)):
     try:
 
         result = db.execute(text("""
-            SELECT severity,
-            technique,
-            latitude,
-            longitude,
-            country_code,
-            origin_label,
-            timestamp,
-            status
-        FROM alerts
+                SELECT severity,
+                technique,
+                latitude,
+                longitude,
+                country_code,
+                origin_label,
+                timestamp
+            FROM alerts
             ORDER BY timestamp DESC
             LIMIT 500
         """))
