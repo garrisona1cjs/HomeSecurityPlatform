@@ -722,23 +722,24 @@ def simulate_attack(db: Session = Depends(get_db)):
         try:
 
             db.execute(text("""
-                    INSERT INTO alerts
-                    (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp, incident_id)
-                    VALUES
-                    (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp, :incident_id)
-                """), {
-                    "id": event_id,
-                    "incident_id": incident.id,
-                    "severity": severity,
-                    "technique": technique,
-                    "latitude": lat,
-                    "longitude": lon,
-                    "country_code": "US",
-                    "origin_label": "Simulation",
-                    "timestamp": datetime.utcnow()
-                })
+                INSERT INTO alerts
+                (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp, incident_id)
+                VALUES
+                (:id, :severity, :technique, :latitude, :longitude, :country_code, :origin_label, :timestamp, :incident_id)
+            """), {
+                "id": event_id,
+                "incident_id": incident.id,
+                "severity": severity,
+                "technique": technique,
+                "latitude": lat,
+                "longitude": lon,
+                "country_code": "US",
+                "origin_label": "Simulation",
+                "timestamp": datetime.utcnow()
+            })
 
-            
+            # ✅ ADD THIS LINE
+            db.commit()
 
             print("ALERT STORED:", event_id)
 
