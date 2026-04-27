@@ -19,16 +19,33 @@ from fastapi.responses import HTMLResponse
 
 from sqlalchemy.orm import Session
 
-from .database import engine, Base, get_db
-# from .websocket_manager import connections, broadcast, event_queue
+# =========================================================
+# SAFE IMPORTS (DO NOT REMOVE — DEBUG MODE)
+# =========================================================
 
-connections = set()
-event_queue = []
+try:
+    from .database import engine, Base, get_db, SessionLocal
+    print("✅ Database import OK")
+except Exception as e:
+    print("❌ Database import failed:", e)
+    engine = None
+    Base = None
 
-async def broadcast(data):
-    pass
-from .models import Alert, Incident
-from .database import SessionLocal
+try:
+    from .websocket_manager import connections, broadcast, event_queue
+    print("✅ Websocket import OK")
+except Exception as e:
+    print("❌ Websocket import failed:", e)
+    connections = set()
+    event_queue = []
+    async def broadcast(data): pass
+
+try:
+    from .models import Alert, Incident
+    print("✅ Models import OK")
+except Exception as e:
+    print("❌ Models import failed:", e)
+
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
@@ -44,6 +61,8 @@ print("🔥 THIS IS THE CORRECT MAIN.PY LOADED 🔥")
 # =========================================================
 
 app = FastAPI(title="LayerSeven Security Platform")
+
+print("🚀 FASTAPI APP CREATED")
 
 from fastapi import Body
 
@@ -69,10 +88,11 @@ app.include_router(incidents.router)
 # =========================================================
 
 try:
-    Base.metadata.create_all(bind=engine)
-    print("✅ DB OK")
+    if engine and Base:
+        Base.metadata.create_all(bind=engine)
+        print("✅ Database initialized")
 except Exception as e:
-    print("❌ DB ERROR:", e)
+    print("❌ Database init failed:", e)
 
 from sqlalchemy import text
 
