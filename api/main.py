@@ -36,6 +36,20 @@ from .database import SessionLocal
 
 app = FastAPI(title="LayerSeven Security Platform")
 
+from fastapi import Body
+
+@app.post("/isolate")
+def isolate_device(data: dict = Body(...)):
+    ip = data.get("ip")
+
+    if not ip:
+        return {"status": "error", "message": "No IP provided"}
+
+    # 🔥 Simulated isolation (safe for now)
+    print(f"[SECURITY] Blocking IP: {ip}")
+
+    return {"status": "success", "ip": ip}
+
 from . import incidents
 
 app.include_router(incidents.router)
@@ -459,6 +473,58 @@ def root():
 # =========================================================
 # ALERTS API
 # =========================================================
+
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+import uuid
+from docx import Document
+
+class ResumeRequest(BaseModel):
+    resume_text: str
+    job_title: str
+
+@app.post("/rewrite-resume")
+def rewrite_resume(req: ResumeRequest):
+    try:
+        # 🔹 VERY SIMPLE REWRITE (we can upgrade to AI later)
+        rewritten = f"""
+{req.job_title} Candidate Resume
+
+{req.resume_text}
+
+--- Tailored for {req.job_title} ---
+Focus: Security monitoring, incident response, threat detection, SIEM tools.
+"""
+
+        # 🔹 Create DOCX file
+        doc = Document()
+        for line in rewritten.split("\n"):
+            doc.add_paragraph(line)
+
+        output_dir = "generated_resumes"
+        os.makedirs(output_dir, exist_ok=True)
+
+        filename = f"resume_{uuid.uuid4()}.docx"
+        filepath = os.path.join(output_dir, filename)
+
+        doc.save(filepath)
+
+        return {
+            "download_url": f"http://127.0.0.1:8000/download/{filename}"
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/download/{filename}")
+def download_file(filename: str):
+    filepath = os.path.join("generated_resumes", filename)
+
+    if not os.path.exists(filepath):
+        return {"error": "file not found"}
+
+    return FileResponse(path=filepath, filename=filename)
 
 @app.get("/alerts")
 def get_alerts(db: Session = Depends(get_db)):
