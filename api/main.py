@@ -25,7 +25,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 # FORCE DEPLOY SYNC FIX
-
+print("🔥 THIS IS THE CORRECT MAIN.PY LOADED 🔥")
 
 
 
