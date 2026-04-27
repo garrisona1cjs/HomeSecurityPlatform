@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse
 
 from sqlalchemy.orm import Session
 
-"download_url": f"{BASE_URL}/download/{filename}"
+
 
 # =========================================================
 # SAFE IMPORTS (DO NOT REMOVE — DEBUG MODE)
