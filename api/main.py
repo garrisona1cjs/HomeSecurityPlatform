@@ -2,7 +2,7 @@
 # IMPORTS
 # =========================================================
 
-raise Exception("🚨 IF YOU SEE THIS, THIS IS THE REAL FILE 🚨")
+
 
 import os
 import asyncio
