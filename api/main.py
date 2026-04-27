@@ -21,7 +21,8 @@ from .database import engine, Base, get_db
 from .websocket_manager import connections, broadcast, event_queue
 from .models import Alert, Incident
 from .database import SessionLocal
-
+from fastapi import Depends
+from sqlalchemy.orm import Session
 
 
 
@@ -476,8 +477,7 @@ def root():
 
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import uuid
-from docx import Document
+# from docx import Document
 
 class ResumeRequest(BaseModel):
     resume_text: str
@@ -496,18 +496,15 @@ def rewrite_resume(req: ResumeRequest):
 Focus: Security monitoring, incident response, threat detection, SIEM tools.
 """
 
-        # 🔹 Create DOCX file
-        doc = Document()
-        for line in rewritten.split("\n"):
-            doc.add_paragraph(line)
-
+        # 🔹 Create TXT file instead (safe for Render)
         output_dir = "generated_resumes"
         os.makedirs(output_dir, exist_ok=True)
 
-        filename = f"resume_{uuid.uuid4()}.docx"
+        filename = f"resume_{uuid.uuid4()}.txt"
         filepath = os.path.join(output_dir, filename)
 
-        doc.save(filepath)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(rewritten)
 
         return {
             "download_url": f"http://127.0.0.1:8000/download/{filename}"
