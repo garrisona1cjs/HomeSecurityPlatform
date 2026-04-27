@@ -20,7 +20,13 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from .database import engine, Base, get_db
-from .websocket_manager import connections, broadcast, event_queue
+# from .websocket_manager import connections, broadcast, event_queue
+
+connections = set()
+event_queue = []
+
+async def broadcast(data):
+    pass
 from .models import Alert, Incident
 from .database import SessionLocal
 from fastapi import Depends
@@ -62,7 +68,11 @@ app.include_router(incidents.router)
 # DATABASE INITIALIZATION
 # =========================================================
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+    print("✅ DB OK")
+except Exception as e:
+    print("❌ DB ERROR:", e)
 
 from sqlalchemy import text
 
