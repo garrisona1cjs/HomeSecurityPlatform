@@ -501,6 +501,35 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 # from docx import Document
 
+class AlertCreate(BaseModel):
+    type: str
+    severity: str
+    ip: str
+
+
+@app.post("/report")
+def create_alert(alert: AlertCreate, db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    from datetime import datetime
+
+    try:
+        db.execute(text("""
+            INSERT INTO alerts (severity, technique, latitude, longitude, country_code, origin_label, timestamp)
+            VALUES (:severity, :technique, 0, 0, 'US', :ip, :timestamp)
+        """), {
+            "severity": alert.severity,
+            "technique": alert.type,
+            "ip": alert.ip,
+            "timestamp": datetime.utcnow()
+        })
+
+        db.commit()
+
+        return {"status": "alert created"}
+
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
 class ResumeRequest(BaseModel):
     resume_text: str
     job_title: str
