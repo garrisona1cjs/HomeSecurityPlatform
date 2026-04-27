@@ -19,6 +19,8 @@ from fastapi.responses import HTMLResponse
 
 from sqlalchemy.orm import Session
 
+"download_url": f"{BASE_URL}/download/{filename}"
+
 # =========================================================
 # SAFE IMPORTS (DO NOT REMOVE — DEBUG MODE)
 # =========================================================
@@ -507,16 +509,25 @@ class AlertCreate(BaseModel):
     ip: str
 
 
+class ResumeRequest(BaseModel):
+    resume_text: str
+    job_title: str
+
+
 @app.post("/report")
 def create_alert(alert: AlertCreate, db: Session = Depends(get_db)):
     from sqlalchemy import text
     from datetime import datetime
+    import uuid
 
     try:
+        alert_id = str(uuid.uuid4())
+
         db.execute(text("""
-            INSERT INTO alerts (severity, technique, latitude, longitude, country_code, origin_label, timestamp)
-            VALUES (:severity, :technique, 0, 0, 'US', :ip, :timestamp)
+            INSERT INTO alerts (id, severity, technique, latitude, longitude, country_code, origin_label, timestamp)
+            VALUES (:id, :severity, :technique, 0, 0, 'US', :ip, :timestamp)
         """), {
+            "id": alert_id,
             "severity": alert.severity,
             "technique": alert.type,
             "ip": alert.ip,
@@ -530,9 +541,7 @@ def create_alert(alert: AlertCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         return {"error": str(e)}
-class ResumeRequest(BaseModel):
-    resume_text: str
-    job_title: str
+    
 
 @app.post("/rewrite-resume")
 def rewrite_resume(req: ResumeRequest):
@@ -558,7 +567,7 @@ Focus: Security monitoring, incident response, threat detection, SIEM tools.
             f.write(rewritten)
 
         return {
-            "download_url": f"http://127.0.0.1:8000/download/{filename}"
+            "download_url": f"{BASE_URL}/download/{filename}"
         }
 
     except Exception as e:
