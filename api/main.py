@@ -401,17 +401,7 @@ async def escalation_engine():
 
 @app.on_event("startup")
 async def start_engines():
-
-    update_incident_schema()   # only this
-    
-
-    await asyncio.sleep(1)
-
-    asyncio.create_task(event_dispatcher())
-
-    asyncio.create_task(attack_generator())
-
-    asyncio.create_task(escalation_engine())
+    print("✅ Startup reached successfully")
 
 
 # =========================================================
