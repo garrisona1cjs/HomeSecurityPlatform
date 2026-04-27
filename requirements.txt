@@ -13,4 +13,4 @@ websockets
 
 passlib[bcrypt]
 python-jose[cryptography]
-python-docx   ← ADD THIS
+python-docx
